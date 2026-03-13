@@ -1,6 +1,6 @@
-const API_HOST = 'http://3.111.157.12';
-// const API_HOST = 'http://localhost:8080';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${API_HOST}/api/grc`;
+// Use relative paths to allow Netlify Proxy to handle HTTP/HTTPS issues
+const API_BASE_URL = '/api/grc';
+const API_USER_URL = '/api/users';
 
 export const apiClient = {
     async getDetails() {
@@ -84,7 +84,7 @@ export const apiClient = {
 
     // User Management
     async loginUser(identifier, password) {
-        const response = await fetch(`${API_HOST}/api/users/login`, {
+        const response = await fetch(`${API_USER_URL}/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifier, password })
@@ -97,13 +97,13 @@ export const apiClient = {
     },
 
     async getUsers() {
-        const response = await fetch(`${API_HOST}/api/users`);
+        const response = await fetch(API_USER_URL);
         if (!response.ok) throw new Error('Failed to fetch users');
         return response.json();
     },
 
     async createUser(request, creatorRole) {
-        const response = await fetch(`${API_HOST}/api/users/create`, {
+        const response = await fetch(`${API_USER_URL}/create`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -119,7 +119,7 @@ export const apiClient = {
     },
 
     async changePassword(userId, currentPassword, newPassword) {
-        const response = await fetch(`${API_HOST}/api/users/${userId}/password`, {
+        const response = await fetch(`${API_USER_URL}/${userId}/password`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ currentPassword, newPassword })
