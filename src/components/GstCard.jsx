@@ -22,7 +22,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch }) => {
                     </div>
                     <div className="gst-subtitle">{gst.tradeName || gst.legalName || 'N/A'}</div>
                 </div>
-                <div className={`score-badge ${getScoreColor(gst.grcScore)}`} title={`Version: ${gst.scoreVersion}`}>
+                <div className={`score-badge ${getScoreColor(gst.grcScore)}`}>
                     {gst.grcScore !== null ? gst.grcScore : '-'}
                 </div>
             </div>

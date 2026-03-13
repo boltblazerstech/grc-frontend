@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, List, LayoutGrid, Trash2, X, AlertCircle } from 'lucide-react';
+import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 import GstCard from './GstCard';
 import GstDetailsModal from './GstDetailsModal';
+import GstQuickEditRow from './GstQuickEditRow';
 
 const getScoreColor = (score) => {
     if (score === null || score === undefined) return '';
-    if (score > 80) return 'score-red';
-    if (score > 50) return 'score-yellow';
+    if (score > 30) return 'score-red';
+    if (score > 20) return 'score-yellow';
     return 'score-green';
 };
 
@@ -15,7 +16,7 @@ const Dashboard = ({ forceRefreshFlag }) => {
     const [gstList, setGstList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+    const [viewMode, setViewMode] = useState('edit'); // 'edit', 'list', or 'grid'
 
     // Search state
     const [searchTerm, setSearchTerm] = useState('');
@@ -85,11 +86,29 @@ const Dashboard = ({ forceRefreshFlag }) => {
 
     const handleUpdateItemInList = (updatedItem) => {
         setGstList(prev => prev.map(item => item.gstin === updatedItem.gstin ? updatedItem : item));
-        setSelectedGst(updatedItem);
+        // If modal should be opened or if it is already open for this item, update it
+        if (updatedItem._openModal || (selectedGst && selectedGst.gstin === updatedItem.gstin)) {
+            const { _openModal, ...cleanItem } = updatedItem;
+            setSelectedGst(cleanItem);
+        }
     };
 
     const handleDeleteGstin = (deletedGstin) => {
         setGstList(prev => prev.filter(item => item.gstin !== deletedGstin));
+    };
+
+    const handleRecalculateAll = async () => {
+        if (!window.confirm('Recalculate all GRC scores? This may take a moment.')) return;
+
+        setLoading(true);
+        try {
+            await apiClient.recalculateAll();
+            await fetchDashboardData();
+        } catch (err) {
+            setError(err.message || 'Failed to recalculate all scores');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const processedList = useMemo(() => {
@@ -105,23 +124,16 @@ const Dashboard = ({ forceRefreshFlag }) => {
         }
 
         return list.sort((a, b) => {
-            const aIsFirstFetch = a.scoreVersion === 1;
-            const bIsFirstFetch = b.scoreVersion === 1;
-
-            if (aIsFirstFetch && !bIsFirstFetch) return -1;
-            if (!aIsFirstFetch && bIsFirstFetch) return 1;
-
-            const aIsNew = recentlyAdded.has(a.gstin);
-            const bIsNew = recentlyAdded.has(b.gstin);
-            if (aIsNew && !bIsNew) return -1;
-            if (!aIsNew && bIsNew) return 1;
-
             if (a.scoreCalculatedAt && b.scoreCalculatedAt) {
                 return new Date(b.scoreCalculatedAt) - new Date(a.scoreCalculatedAt);
             }
             return a.gstin.localeCompare(b.gstin);
         });
-    }, [gstList, searchTerm, recentlyAdded]);
+    }, [gstList, searchTerm]);
+
+    // Filter the list into Dummy (15 score) and Normal
+    const dummyList = useMemo(() => processedList.filter(g => g.updatedBy === 'Dummy'), [processedList]);
+    const normalList = useMemo(() => processedList.filter(g => g.updatedBy !== 'Dummy'), [processedList]);
 
     if (loading && gstList.length === 0) {
         return (
@@ -136,13 +148,23 @@ const Dashboard = ({ forceRefreshFlag }) => {
             {error && <div className="card" style={{ backgroundColor: 'var(--danger-color)', color: 'white', marginBottom: '2rem' }}>{error}</div>}
 
             <div className="dashboard-header card">
-                <button className="btn btn-primary" onClick={() => { setShowFetchModal(true); setFetchError(''); setNewGstInput(''); }} style={{ whiteSpace: 'nowrap' }}>
-                    <Plus size={18} /> Fetch New GST
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button className="btn btn-primary" onClick={() => { setShowFetchModal(true); setFetchError(''); setNewGstInput(''); }} style={{ whiteSpace: 'nowrap' }}>
+                        <Plus size={18} /> Fetch New GST
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={handleRecalculateAll}
+                        style={{ whiteSpace: 'nowrap' }}
+                        disabled={loading}
+                    >
+                        <RefreshCw size={16} className={loading ? 'spin' : ''} /> Recalculate All
+                    </button>
+                </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <div className="search-bar">
-                        <div style={{ position: 'relative', width: '100%' }}>
+                        <div style={{ position: 'relative', width: '100% ' }}>
                             <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)' }} />
                             <input
                                 type="text"
@@ -155,6 +177,13 @@ const Dashboard = ({ forceRefreshFlag }) => {
                         </div>
                     </div>
                     <div className="view-toggle">
+                        <button
+                            className={`view-toggle-btn ${viewMode === 'edit' ? 'active' : ''}`}
+                            onClick={() => setViewMode('edit')}
+                            title="Quick Edit View"
+                        >
+                            <Edit3 size={18} />
+                        </button>
                         <button
                             className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
                             onClick={() => setViewMode('list')}
@@ -173,60 +202,178 @@ const Dashboard = ({ forceRefreshFlag }) => {
                 </div>
             </div>
 
+            {/* Dummy Score Section */}
+            {dummyList.length > 0 && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                        background: 'linear-gradient(135deg, #7c3a00 0%, #3d1f00 100%)',
+                        border: '1px solid #f97316',
+                        borderRadius: '8px 8px 0 0',
+                        padding: '0.65rem 1rem',
+                    }}>
+                        <AlertCircle size={18} style={{ color: '#f97316', flexShrink: 0 }} />
+                        <span style={{ color: '#fed7aa', fontWeight: 600, fontSize: '0.95rem' }}>
+                            Dummy Score GSTs ({dummyList.length}) - Details pending
+                        </span>
+                    </div>
+
+                    {viewMode === 'list' ? (
+                        <div className="gst-table-wrapper card" style={{ padding: 0, overflowX: 'auto', borderRadius: '0 0 8px 8px', border: '1px solid #f97316', borderTop: 'none' }}>
+                            <table className="gst-table" style={{ minWidth: '700px' }}>
+                                <thead style={{ background: 'rgba(249,115,22,0.12)' }}>
+                                    <tr>
+                                        <th>GSTIN</th>
+                                        <th>Trade Name</th>
+                                        <th style={{ textAlign: 'center', width: '100px' }}>Score</th>
+                                        <th>Last Updated On</th>
+                                        <th>Last Updated By</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dummyList.map(gst => (
+                                        <tr key={gst.gstin}
+                                            style={{ background: 'rgba(249,115,22,0.05)', cursor: 'pointer' }}
+                                            onClick={() => setSelectedGst(gst)}
+                                        >
+                                            <td className="gstin-cell" style={{ whiteSpace: 'nowrap' }}>
+                                                {gst.gstin}
+                                            </td>
+                                            <td>
+                                                {gst.tradeName || gst.legalName || 'N/A'}
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <span className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore)}`} style={{ margin: '0 auto' }}>
+                                                    {gst.grcScore ?? '-'}
+                                                </span>
+                                            </td>
+                                            <td style={{ color: 'var(--text-light)' }}>
+                                                {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString() : 'Never'}
+                                            </td>
+                                            <td style={{ color: 'var(--primary-color)', fontWeight: 500 }}>
+                                                {gst.updatedBy || '-'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : viewMode === 'grid' ? (
+                        <div className="gst-grid" style={{ border: '1px solid #f97316', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '1rem' }}>
+                            {dummyList.map(gst => (
+                                <div key={gst.gstin}
+                                    onClick={() => setSelectedGst(gst)}
+                                    style={{
+                                        background: 'rgba(249,115,22,0.08)',
+                                        border: '1px solid #f97316',
+                                        borderRadius: '8px', padding: '1rem',
+                                        cursor: 'pointer', display: 'flex',
+                                        flexDirection: 'column', gap: '0.5rem'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fed7aa' }}>{gst.gstin}</span>
+                                        <span className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore)}`}>{gst.grcScore ?? '-'}</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.8rem', color: '#fdba74', fontStyle: 'italic' }}>Click to fill details & recalculate</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div style={{ border: '1px solid #f97316', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '1rem' }}>
+                            {dummyList.map(gst => (
+                                <GstQuickEditRow
+                                    key={gst.gstin}
+                                    gst={gst}
+                                    getScoreColor={getScoreColor}
+                                    onUpdate={handleUpdateItemInList}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {viewMode === 'list' ? (
                 <div className="gst-table-wrapper card" style={{ padding: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
                     <table className="gst-table" style={{ minWidth: '700px' }}>
                         <thead>
                             <tr>
                                 <th>GSTIN</th>
-                                <th style={{ textAlign: 'center', width: '100px' }}>GRC Score</th>
-                                <th>Name</th>
+                                <th>Trade Name</th>
+                                <th style={{ textAlign: 'center' }}>GRC Score</th>
+                                <th>Last Updated On</th>
+                                <th>Last Updated By</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {processedList.length > 0 ? (
-                                processedList.map((gst, index) => (
+                            {normalList.length > 0 ? (
+                                normalList.map((gst) => (
                                     <tr
                                         key={gst.gstin}
-                                        className={`gst-table-row ${gst.scoreVersion === 1 ? 'first-fetch-item' : recentlyAdded.has(gst.gstin) ? 'new-item' : ''}`}
+                                        className={`gst-table-row ${recentlyAdded.has(gst.gstin) ? 'new-item' : ''}`}
                                         onClick={() => setSelectedGst(gst)}
                                     >
                                         <td className="gstin-cell" style={{ whiteSpace: 'nowrap' }}>
                                             {gst.gstin}
-                                            {gst.scoreVersion === 1 && <span className="first-fetch-badge">NEW API DATA</span>}
+                                        </td>
+                                        <td>
+                                            {gst.tradeName || gst.legalName || 'N/A'}
                                         </td>
                                         <td style={{ textAlign: 'center' }}>
                                             <span className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore)}`} style={{ margin: '0 auto' }}>
                                                 {gst.grcScore !== null ? gst.grcScore : '-'}
                                             </span>
                                         </td>
-                                        <td style={{ minWidth: '250px' }}>{gst.tradeName || gst.legalName || 'N/A'}</td>
+                                        <td>
+                                            {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString() : 'Never'}
+                                        </td>
+                                        <td>
+                                            {gst.updatedBy || '-'}
+                                        </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="3" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-light)' }}>
-                                        No GST numbers found matching your criteria.
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-light)' }}>
+                                        {processedList.length === 0 ? 'No GST numbers found matching your criteria.' : 'All entries have dummy scores - fill in details using "Quick Edit" or the modal.'}
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
-            ) : (
+            ) : viewMode === 'grid' ? (
                 <div className="gst-grid">
-                    {processedList.length > 0 ? (
-                        processedList.map(gst => (
+                    {normalList.length > 0 ? (
+                        normalList.map(gst => (
                             <GstCard
                                 key={gst.gstin}
                                 gst={gst}
                                 isNew={recentlyAdded.has(gst.gstin)}
-                                isFirstFetch={gst.scoreVersion === 1}
+                                isFirstFetch={false}
                                 onClick={setSelectedGst}
                             />
                         ))
                     ) : (
                         <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-light)' }}>
+                            <p>No GST numbers found matching your criteria.</p>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="gst-quick-edit-list">
+                    {normalList.length > 0 ? (
+                        normalList.map(gst => (
+                            <GstQuickEditRow
+                                key={gst.gstin}
+                                gst={gst}
+                                getScoreColor={getScoreColor}
+                                onUpdate={handleUpdateItemInList}
+                            />
+                        ))
+                    ) : (
+                        <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-light)' }}>
                             <p>No GST numbers found matching your criteria.</p>
                         </div>
                     )}

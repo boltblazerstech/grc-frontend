@@ -1,4 +1,5 @@
 const API_HOST = 'http://3.111.157.12';
+// const API_HOST = 'http://localhost:8080';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${API_HOST}/api/grc`;
 
 export const apiClient = {
@@ -24,6 +25,14 @@ export const apiClient = {
         return response.json();
     },
 
+    async recalculateDetail(gstin) {
+        const response = await fetch(`${API_BASE_URL}/recalculate/${gstin}`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to recalculate score');
+        return response.json();
+    },
+
     async recalculateAll() {
         const response = await fetch(`${API_BASE_URL}/recalculate-all`, {
             method: 'POST'
@@ -33,10 +42,13 @@ export const apiClient = {
     },
 
     async updateDetails(gstin, data) {
+        const savedUser = localStorage.getItem('grc_user');
+        const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
+
         const response = await fetch(`${API_BASE_URL}/details/${gstin}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify({ ...data, updatedBy: userName })
         });
         if (!response.ok) throw new Error('Failed to update details');
         return response.json();
@@ -93,9 +105,9 @@ export const apiClient = {
     async createUser(request, creatorRole) {
         const response = await fetch(`${API_HOST}/api/users/create`, {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
-                'Role': creatorRole 
+                'Role': creatorRole
             },
             body: JSON.stringify(request)
         });
@@ -117,5 +129,21 @@ export const apiClient = {
             throw new Error(err || 'Failed to change password');
         }
         return response.text();
+    },
+
+    async getRuleConfig() {
+        const response = await fetch(`${API_BASE_URL}/rule-config`);
+        if (!response.ok) throw new Error('Failed to fetch rule config');
+        return response.json();
+    },
+
+    async updateRuleConfig(payload) {
+        const response = await fetch(`${API_BASE_URL}/rule-config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error('Failed to update rule config');
+        return response.json();
     }
 };

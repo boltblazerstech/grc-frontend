@@ -82,6 +82,39 @@ input, select, textarea {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.navbar-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.btn-text {
+  display: inline;
+}
+
+@media (max-width: 600px) {
+  .navbar {
+    padding: 1rem;
+  }
+  
+  .navbar h1 {
+    font-size: 1.1rem;
+  }
+
+  .btn-text {
+    display: none;
+  }
+
+  .btn {
+    padding: 0.5rem;
+  }
+  
+  .navbar-actions {
+    gap: 0.5rem;
+  }
 }
 
 /* Main Content */
@@ -346,9 +379,9 @@ input, select, textarea {
 .modal-content {
   background-color: var(--surface-color);
   border-radius: var(--border-radius);
-  width: 100%;
-  max-width: 600px;
-  max-height: 90vh;
+  width: 95%;
+  max-width: 95%;
+  max-height: 95vh;
   overflow-y: auto;
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
 }
@@ -632,3 +665,4 @@ input, select, textarea {
   border-top: 1px dashed var(--border-color);
 }
 
+.spin { animation: spin 1s linear infinite; }
