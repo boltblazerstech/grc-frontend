@@ -13,6 +13,7 @@
   --transition-speed: 0.3s;
   --border-radius: 8px;
   --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  --bg-alt-color: #dfebea;
 }
 
 * {
@@ -30,7 +31,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 600;
   color: var(--primary-color);
 }
@@ -51,7 +57,9 @@ button {
   transition: all var(--transition-speed) ease;
 }
 
-input, select, textarea {
+input,
+select,
+textarea {
   font-family: inherit;
 }
 
@@ -65,8 +73,8 @@ input, select, textarea {
 /* Navbar */
 .navbar {
   background-color: var(--surface-color);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -99,7 +107,7 @@ input, select, textarea {
   .navbar {
     padding: 1rem;
   }
-  
+
   .navbar h1 {
     font-size: 1.1rem;
   }
@@ -111,7 +119,7 @@ input, select, textarea {
   .btn {
     padding: 0.5rem;
   }
-  
+
   .navbar-actions {
     gap: 0.5rem;
   }
@@ -120,7 +128,7 @@ input, select, textarea {
 /* Main Content */
 .main-content {
   flex: 1;
-  padding: 2rem;
+  padding: 1rem 2rem;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
@@ -171,7 +179,7 @@ input, select, textarea {
   background-color: var(--surface-color);
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
-  padding: 1.5rem;
+  padding: 1rem 1.25rem;
   transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
   border: 1px solid var(--border-color);
 }
@@ -208,7 +216,7 @@ input, select, textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
   flex-wrap: wrap;
   gap: 1rem;
 }
@@ -237,7 +245,7 @@ input, select, textarea {
 
 .gst-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
   border-color: var(--primary-color);
 }
 
@@ -383,7 +391,7 @@ input, select, textarea {
   max-width: 95%;
   max-height: 95vh;
   overflow-y: auto;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
 .modal-header {
@@ -426,7 +434,7 @@ input, select, textarea {
 
 /* Spinner */
 .spinner {
-  border: 3px solid rgba(0,0,0,0.1);
+  border: 3px solid rgba(0, 0, 0, 0.1);
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -436,8 +444,13 @@ input, select, textarea {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */
@@ -447,21 +460,21 @@ input, select, textarea {
     align-items: stretch;
     gap: 1rem;
   }
-  
+
   .dashboard-header form,
-  .dashboard-header > div {
+  .dashboard-header>div {
     width: 100%;
   }
 
   .dashboard-header form {
     flex-direction: column;
   }
-  
+
   .search-bar {
     max-width: none;
     flex: 1;
   }
-  
+
   .gst-grid {
     grid-template-columns: 1fr;
   }
@@ -473,7 +486,8 @@ input, select, textarea {
   }
 
   .gst-table {
-    min-width: 500px; /* force horizontal scroll on mobile instead of squishing */
+    min-width: 500px;
+    /* force horizontal scroll on mobile instead of squishing */
   }
 
   .gst-edit-form .edit-grid {
@@ -535,9 +549,22 @@ input, select, textarea {
 }
 
 .gst-table td {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   font-size: 0.9rem;
   border-bottom: 1px solid var(--border-color);
+}
+
+/* Alternating Background Colors */
+.gst-table-row:nth-child(even) {
+  background-color: var(--bg-alt-color);
+}
+
+.quick-edit-card:nth-child(even) {
+  background-color: var(--bg-alt-color) !important;
+}
+
+.quick-edit-card:nth-child(even)>div:first-child {
+  background-color: rgba(0, 0, 0, 0.03) !important;
 }
 
 .gst-table-row {
@@ -665,4 +692,6 @@ input, select, textarea {
   border-top: 1px dashed var(--border-color);
 }
 
-.spin { animation: spin 1s linear infinite; }
+.spin {
+  animation: spin 1s linear infinite;
+}

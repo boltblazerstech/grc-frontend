@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 
 const UserProfileModal = ({ user, onClose, onLogout }) => {
@@ -8,6 +8,8 @@ const UserProfileModal = ({ user, onClose, onLogout }) => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState({ text: '', type: '' });
     const [isChanging, setIsChanging] = useState(false);
+    const [showPlainPassword, setShowPlainPassword] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     if (!user) return null;
 
@@ -71,8 +73,34 @@ const UserProfileModal = ({ user, onClose, onLogout }) => {
                             </>
                         )}
 
-                        <p style={{ margin: '0.25rem 0', color: 'var(--text-light)' }}>Current Password:</p>
-                        <p style={{ margin: '0 0 1rem 0', fontWeight: 'bold', fontFamily: 'monospace' }}>{user.password}</p>
+                        <p style={{ margin: '0.25rem 0', color: 'var(--text-light)' }}>Password:</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <p style={{ margin: 0, fontWeight: 'bold', fontFamily: 'monospace', fontSize: '1.1rem' }}>
+                                {showPlainPassword ? user.password : '••••••••'}
+                            </p>
+                            <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                <button 
+                                    className="ghost-btn" 
+                                    onClick={() => setShowPlainPassword(!showPlainPassword)}
+                                    title={showPlainPassword ? "Hide Password" : "Show Password"}
+                                    style={{ padding: '0.2rem', color: 'var(--text-light)' }}
+                                >
+                                    {showPlainPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                                <button 
+                                    className="ghost-btn" 
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(user.password);
+                                        setCopied(true);
+                                        setTimeout(() => setCopied(false), 2000);
+                                    }}
+                                    title="Copy Password"
+                                    style={{ padding: '0.2rem', color: copied ? 'var(--success-color)' : 'var(--text-light)' }}
+                                >
+                                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <hr style={{ margin: '1rem 0', borderColor: 'var(--border-color)' }} />

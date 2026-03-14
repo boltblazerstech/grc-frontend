@@ -24,7 +24,7 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                         </button>
                     )}
 
-                    {!showSuperAdmin && (
+                    {!showSuperAdmin && currentUser?.role === 'SUPER_ADMIN' && (
                         <button
                             className="btn btn-secondary"
                             onClick={() => setShowSettings(true)}

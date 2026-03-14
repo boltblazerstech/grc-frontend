@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Edit2, AlertCircle, ChevronDown, ChevronUp, Trash2, RefreshCw } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 
-const getScoreColor = (score) => {
+const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
-    if (score > 30) return 'score-red';
-    if (score > 20) return 'score-yellow';
+    const red = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+    const yellow = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
+    if (score > red) return 'score-red';
+    if (score > yellow) return 'score-yellow';
     return 'score-green';
 };
 
@@ -37,7 +39,7 @@ const getConditionLabel = (ruleName, gst) => {
 
 const REQUIRED_LABEL_STYLE = { color: 'var(--danger-color)', marginLeft: '2px' };
 
-const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete }) => {
+const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresholds }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({ ...gst });
     const [loading, setLoading] = useState(false);
@@ -166,15 +168,17 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete }) => {
                 <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2>{gst.gstin} Details</h2>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button
-                            className="btn btn-sm"
-                            style={{ padding: '0.4rem', color: 'var(--danger-color)', background: 'transparent', border: '1px solid var(--danger-color)' }}
-                            onClick={handleDelete}
-                            title="Delete GST Record"
-                            disabled={loading}
-                        >
-                            <Trash2 size={18} />
-                        </button>
+                        {currentUser?.role === 'SUPER_ADMIN' && (
+                            <button
+                                className="btn btn-sm"
+                                style={{ padding: '0.4rem', color: 'var(--danger-color)', background: 'transparent', border: '1px solid var(--danger-color)' }}
+                                onClick={handleDelete}
+                                title="Delete GST Record"
+                                disabled={loading}
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        )}
                         <button className="close-btn" onClick={onClose}><X size={24} /></button>
                     </div>
                 </div>
@@ -189,13 +193,13 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete }) => {
                     <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
                         <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>GRC Score</h3>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span className={`score-badge ${getScoreColor(gst.grcScore)}`} style={{ fontSize: '2rem', minWidth: '80px' }}>
+                            <span className={`score-badge ${getScoreColor(gst.grcScore, thresholds)}`} style={{ fontSize: '2rem', minWidth: '80px' }}>
                                 {gst.grcScore !== null && gst.grcScore !== undefined ? gst.grcScore : 'N/A'}
                             </span>
                             <div style={{ textAlign: 'right' }}>
                                 {gst.updatedBy && <div style={{ fontSize: '0.9rem', color: 'var(--primary-color)', fontWeight: 500 }}>Updated By: {gst.updatedBy}</div>}
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>
-                                    {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString() : 'Never'}
+                                    {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never'}
                                 </div>
                             </div>
                         </div>
@@ -233,7 +237,9 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete }) => {
                                             <option value="">— Select —</option>
                                             <option value="Private Limited Company">Private</option>
                                             <option value="Public Limited Company">Public</option>
+                                            <option value="Partnership">Partnership</option>
                                             <option value="Proprietorship">Proprietorship</option>
+                                            <option value="Other">Other</option>
                                         </select>
                                     </div>
                                     <div className="input-group">

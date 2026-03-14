@@ -96,6 +96,15 @@ export const apiClient = {
         return response.json();
     },
 
+    async getUserById(userId) {
+        const response = await fetch(`${API_USER_URL}/${userId}`);
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Failed to fetch user');
+        }
+        return response.json();
+    },
+
     async getUsers() {
         const response = await fetch(API_USER_URL);
         if (!response.ok) throw new Error('Failed to fetch users');
@@ -127,6 +136,36 @@ export const apiClient = {
         if (!response.ok) {
             const err = await response.text();
             throw new Error(err || 'Failed to change password');
+        }
+        return response.text();
+    },
+
+    async updateUser(userId, request, creatorRole) {
+        const response = await fetch(`${API_USER_URL}/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Role': creatorRole
+            },
+            body: JSON.stringify(request)
+        });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Failed to update user');
+        }
+        return response.json();
+    },
+
+    async deleteUser(userId, creatorRole) {
+        const response = await fetch(`${API_USER_URL}/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'Role': creatorRole
+            }
+        });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Failed to delete user');
         }
         return response.text();
     },

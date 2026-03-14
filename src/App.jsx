@@ -16,7 +16,31 @@ function App() {
   useEffect(() => {
     const savedUser = localStorage.getItem('grc_user');
     if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
+      const parsedUser = JSON.parse(savedUser);
+      setCurrentUser(parsedUser);
+      
+      // Verify user still exists and is active
+      const checkUserStatus = () => {
+        apiClient.getUserById(parsedUser.id)
+          .then(user => {
+            if (!user.active) {
+              handleLogout();
+              alert("Your account has been deactivated. Please contact administrator.");
+            } else {
+              // Update local user data in case name/role changed
+              localStorage.setItem('grc_user', JSON.stringify(user));
+              setCurrentUser(user);
+            }
+          })
+          .catch(() => {
+            // User likely deleted
+            handleLogout();
+          });
+      };
+
+      checkUserStatus();
+      const interval = setInterval(checkUserStatus, 5 * 60 * 1000); // Check every 5 minutes
+      return () => clearInterval(interval);
     }
   }, []);
 
@@ -68,7 +92,7 @@ function App() {
         {showSuperAdmin && currentUser.role === 'SUPER_ADMIN' ? (
           <SuperAdmin currentUser={currentUser} />
         ) : (
-          <Dashboard forceRefreshFlag={forceRefreshFlag} />
+          <Dashboard forceRefreshFlag={forceRefreshFlag} currentUser={currentUser} />
         )}
       </main>
     </div>
