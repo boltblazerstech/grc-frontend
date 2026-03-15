@@ -4,11 +4,12 @@ import { apiClient } from '../api/apiClient';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
-    const red = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+    const green = thresholds?.COLOR_RED_THRESHOLD ?? 30;
     const yellow = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
-    if (score > red) return 'score-red';
-    if (score > yellow) return 'score-yellow';
-    return 'score-green';
+    
+    if (score > green) return 'score-green';
+    if (score >= yellow) return 'score-yellow';
+    return 'score-red';
 };
 
 // Mappings for max score config keys based on rule names
@@ -285,7 +286,14 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                 <div className="detail-row"><span className="detail-label">Status:</span><span className="detail-value">{gst.gstStatus || 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">Type:</span><span className="detail-value">{gst.gstType || 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">Reg. Date:</span><span className="detail-value">{gst.registrationDate || 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">Turnover:</span><span className="detail-value">{(gst.aggregateTurnover && gst.aggregateTurnover !== "0" && gst.aggregateTurnover !== 0) ? `${gst.aggregateTurnover} Cr` : 'N/A'}</span></div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Turnover:</span>
+                                    <span className="detail-value">
+                                        {(gst.aggregateTurnover && gst.aggregateTurnover !== "0" && gst.aggregateTurnover !== 0) 
+                                            ? `${gst.aggregateTurnover} Cr+` 
+                                            : 'N/A'}
+                                    </span>
+                                </div>
                                 <div className="detail-row"><span className="detail-label">GSTR-1 Delays:</span><span className="detail-value">{gst.delayCountGstr1 ?? 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">GSTR-3B Delays:</span><span className="detail-value">{gst.delayCountGstr3b ?? 'N/A'}</span></div>
                             </div>

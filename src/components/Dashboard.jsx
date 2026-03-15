@@ -7,11 +7,11 @@ import GstQuickEditRow from './GstQuickEditRow';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
-    const red = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+    const green = thresholds?.COLOR_RED_THRESHOLD ?? 30;
     const yellow = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
-    if (score > red) return 'score-red';
-    if (score > yellow) return 'score-yellow';
-    return 'score-green';
+    if (score > green) return 'score-green';
+    if (score >= yellow) return 'score-yellow';
+    return 'score-red';
 };
 
 const Dashboard = ({ forceRefreshFlag, currentUser }) => {
@@ -21,8 +21,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     const [viewMode, setViewMode] = useState(currentUser ? 'edit' : 'grid'); // 'edit', 'list', or 'grid' (Guest defaults to grid)
     const [thresholds, setThresholds] = useState({});
 
-    // Search state
+    // Search and Filter state
     const [searchTerm, setSearchTerm] = useState('');
+    const [scoreFilter, setScoreFilter] = useState('all'); // 'all', 'good', 'okay', 'watch'
 
     // New GST Feature
     const [showFetchModal, setShowFetchModal] = useState(false);
@@ -145,13 +146,26 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
             );
         }
 
+        if (scoreFilter !== 'all') {
+            const greenThreshold = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+            const yellowThreshold = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
+
+            list = list.filter(g => {
+                if (g.grcScore === null || g.grcScore === undefined) return false;
+                if (scoreFilter === 'good') return g.grcScore > greenThreshold;
+                if (scoreFilter === 'okay') return g.grcScore >= yellowThreshold && g.grcScore <= greenThreshold;
+                if (scoreFilter === 'watch') return g.grcScore < yellowThreshold;
+                return true;
+            });
+        }
+
         return list.sort((a, b) => {
             if (a.scoreCalculatedAt && b.scoreCalculatedAt) {
                 return new Date(b.scoreCalculatedAt) - new Date(a.scoreCalculatedAt);
             }
             return a.gstin.localeCompare(b.gstin);
         });
-    }, [gstList, searchTerm]);
+    }, [gstList, searchTerm, scoreFilter, thresholds]);
 
     // Filter the list into Dummy (15 score) and Normal
     const dummyList = useMemo(() => processedList.filter(g => g.updatedBy === 'Dummy'), [processedList]);
@@ -226,6 +240,68 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Score Filter Buttons */}
+            <div style={{ 
+                display: 'flex', 
+                gap: '1rem', 
+                marginBottom: '1rem', 
+                flexWrap: 'wrap',
+                alignItems: 'center'
+            }}>
+                <button 
+                    onClick={() => setScoreFilter('all')}
+                    className={`btn ${scoreFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                >
+                    All
+                </button>
+                <button 
+                    onClick={() => setScoreFilter(scoreFilter === 'good' ? 'all' : 'good')}
+                    style={{ 
+                        display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                        padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                        border: scoreFilter === 'good' ? '2px solid var(--success-color)' : '1px solid var(--border-color)',
+                        backgroundColor: scoreFilter === 'good' ? 'rgba(34, 197, 94, 0.1)' : 'white',
+                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                    }}
+                >
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--success-color)' }}></span>
+                    <span>{'>'}30 Good</span>
+                </button>
+                <button 
+                    onClick={() => setScoreFilter(scoreFilter === 'okay' ? 'all' : 'okay')}
+                    style={{ 
+                        display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                        padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                        border: scoreFilter === 'okay' ? '2px solid var(--warning-color)' : '1px solid var(--border-color)',
+                        backgroundColor: scoreFilter === 'okay' ? 'rgba(234, 179, 8, 0.1)' : 'white',
+                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                    }}
+                >
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--warning-color)' }}></span>
+                    <span>20-30 Okay</span>
+                </button>
+                <button 
+                    onClick={() => setScoreFilter(scoreFilter === 'watch' ? 'all' : 'watch')}
+                    style={{ 
+                        display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                        padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                        border: scoreFilter === 'watch' ? '2px solid var(--danger-color)' : '1px solid var(--border-color)',
+                        backgroundColor: scoreFilter === 'watch' ? 'rgba(239, 68, 68, 0.1)' : 'white',
+                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                    }}
+                >
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--danger-color)' }}></span>
+                    <span>{'<'}20 Under WatchList</span>
+                </button>
+                
+                {scoreFilter !== 'all' && (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
+                        Filtering: <strong>{processedList.length}</strong> items found
+                    </span>
+                )}
             </div>
 
             {/* Dummy Score Section */}
@@ -322,10 +398,10 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                         background: 'rgba(249,115,22,0.05)',
                                         border: '1px solid rgba(249,115,22,0.3)',
                                         borderRadius: '12px', 
-                                        padding: '1.25rem',
+                                        padding: '0.85rem 1rem',
                                         display: 'flex',
                                         flexDirection: 'column', 
-                                        gap: '0.75rem',
+                                        gap: '0.6rem',
                                         boxShadow: '0 2px 4px rgba(249,115,22,0.1)'
                                     }}
                                 >
@@ -350,8 +426,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                     <div style={{ 
                                         display: 'grid', 
                                         gridTemplateColumns: '1.2fr 1fr', 
-                                        gap: '0.6rem 0.5rem', 
-                                        fontSize: '0.85rem'
+                                        gap: '0.4rem 0.5rem', 
+                                        fontSize: '0.8rem'
                                     }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
                                             <span style={{ color: '#fdba74', opacity: 0.9 }}>Status:</span>
@@ -360,7 +436,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                             <span style={{ color: '#fdba74', opacity: 0.9 }}>Turnover:</span>
                                             <span style={{ color: '#fed7aa', fontWeight: 600 }}>
-                                                {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) ? 'N/A' : `${gst.aggregateTurnover} Cr`}
+                                                {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) 
+                                                    ? 'N/A' 
+                                                    : `${gst.aggregateTurnover} Cr+`}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
@@ -371,6 +449,11 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                             <span style={{ color: '#fdba74', opacity: 0.9 }}>Type:</span>
                                             <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.gstType ? gst.gstType.split(' ')[0] : 'N/A'}</span>
                                         </div>
+                                    </div>
+
+                                    <div style={{ marginTop: '0.4rem', borderTop: '1px dashed rgba(249,115,22,0.3)', paddingTop: '0.4rem', fontSize: '0.7rem', color: '#fed7aa', opacity: 0.8, display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>Updated:</span>
+                                        <span>{gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
                                     </div>
 
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem' }}>

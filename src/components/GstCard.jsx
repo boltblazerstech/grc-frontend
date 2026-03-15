@@ -34,11 +34,12 @@ const calculateAge = (dateString) => {
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
-    const red = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+    const green = thresholds?.COLOR_RED_THRESHOLD ?? 30;   // Renaming for clarity in logic
     const yellow = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
-    if (score > red) return 'score-red';
-    if (score > yellow) return 'score-yellow';
-    return 'score-green';
+    
+    if (score > green) return 'score-green';
+    if (score >= yellow) return 'score-yellow';
+    return 'score-red';
 };
 
 const formatGstType = (type) => {
@@ -62,12 +63,12 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
             className={`card gst-card ${isFirstFetch ? 'first-fetch-item' : isNew ? 'new-item' : ''}`}
             style={{ 
                 position: 'relative',
-                padding: '1.25rem',
+                padding: '0.85rem 1rem',
                 transition: 'transform 0.2s, box-shadow 0.2s',
                 border: '1px solid var(--border-color)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '1rem'
+                gap: '0.6rem'
             }}
         >
             <div className="gst-card-header" style={{ padding: 0, border: 0, marginBottom: 0 }}>
@@ -100,28 +101,28 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                     </div>
                 </div>
                 <div className={`score-badge ${getScoreColor(gst.grcScore, thresholds)}`} style={{ 
-                    fontSize: '1.1rem', 
+                    fontSize: '1rem', 
                     fontWeight: 700,
-                    minWidth: '42px', 
-                    height: '42px',
+                    minWidth: '34px', 
+                    height: '34px',
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     padding: 0,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
                 }}>
                     {gst.grcScore !== null ? gst.grcScore : '-'}
                 </div>
             </div>
 
-            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.5 }}></div>
+            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.3 }}></div>
 
             <div className="gst-details-preview" style={{ 
                 display: 'grid', 
                 gridTemplateColumns: '1.2fr 1fr', 
-                gap: '0.75rem 0.5rem',
-                fontSize: '0.85rem'
+                gap: '0.4rem 0.5rem',
+                fontSize: '0.8rem'
             }}>
                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '1rem' }}>
                     <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>Status:</span>
@@ -135,7 +136,9 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>Turnover:</span>
                     <span className="detail-value" style={{ fontWeight: 600 }}>
-                        {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) ? 'N/A' : `${gst.aggregateTurnover} Cr`}
+                        {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) 
+                            ? 'N/A' 
+                            : `${gst.aggregateTurnover} Cr+`}
                     </span>
                 </div>
                 
@@ -158,6 +161,11 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                     <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>GSTR-3B:</span>
                     <span className="detail-value" style={{ fontWeight: 600 }}>{gst.delayCountGstr3b !== null ? gst.delayCountGstr3b : 'N/A'}</span>
                 </div>
+            </div>
+
+            <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px dashed var(--border-color)', fontSize: '0.7rem', color: 'var(--text-light)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Updated:</span>
+                <span>{gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
             </div>
         </div>
     );
