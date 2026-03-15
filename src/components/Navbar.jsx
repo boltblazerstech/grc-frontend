@@ -3,14 +3,14 @@ import { RefreshCw, User, ShieldAlert, Settings } from 'lucide-react';
 import UserProfileModal from './UserProfileModal';
 import SettingsModal from './SettingsModal';
 
-const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, showSuperAdmin, setShowSuperAdmin, onLoginClick }) => {
+const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, showSuperAdmin, setShowSuperAdmin, onLoginClick, onHomeClick }) => {
     const [showProfile, setShowProfile] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
 
     return (
         <>
             <nav className="navbar">
-                <h1>GRC Score Manager</h1>
+                <h1 onClick={onHomeClick} style={{ cursor: 'pointer' }}>GRC Score Manager</h1>
 
                 <div className="navbar-actions">
                     {currentUser ? (

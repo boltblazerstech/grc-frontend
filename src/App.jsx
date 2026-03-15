@@ -76,11 +76,16 @@ function App() {
     }
   };
 
+  const handleHomeClick = () => {
+    setShowSuperAdmin(false);
+    setShowLogin(false);
+  };
+
   if (showLogin && !currentUser) {
     return (
       <div className="app-container">
         <nav className="navbar">
-          <h1>GRC Score Manager</h1>
+          <h1 onClick={handleHomeClick} style={{ cursor: 'pointer' }}>GRC Score Manager</h1>
           <button className="btn btn-secondary" onClick={() => setShowLogin(false)}>Back to Dashboard</button>
         </nav>
         <Login onLogin={handleLogin} />
@@ -98,6 +103,7 @@ function App() {
         showSuperAdmin={showSuperAdmin}
         setShowSuperAdmin={setShowSuperAdmin}
         onLoginClick={() => setShowLogin(true)}
+        onHomeClick={handleHomeClick}
       />
 
       <main className="main-content">
