@@ -285,7 +285,7 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                 <div className="detail-row"><span className="detail-label">Status:</span><span className="detail-value">{gst.gstStatus || 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">Type:</span><span className="detail-value">{gst.gstType || 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">Reg. Date:</span><span className="detail-value">{gst.registrationDate || 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">Turnover:</span><span className="detail-value">{gst.aggregateTurnover ? `${gst.aggregateTurnover} Cr` : 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">Turnover:</span><span className="detail-value">{(gst.aggregateTurnover && gst.aggregateTurnover !== "0" && gst.aggregateTurnover !== 0) ? `${gst.aggregateTurnover} Cr` : 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">GSTR-1 Delays:</span><span className="detail-value">{gst.delayCountGstr1 ?? 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">GSTR-3B Delays:</span><span className="detail-value">{gst.delayCountGstr3b ?? 'N/A'}</span></div>
                             </div>

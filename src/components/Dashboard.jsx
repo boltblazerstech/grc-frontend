@@ -18,7 +18,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     const [gstList, setGstList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [viewMode, setViewMode] = useState('edit'); // 'edit', 'list', or 'grid'
+    const [viewMode, setViewMode] = useState(currentUser ? 'edit' : 'grid'); // 'edit', 'list', or 'grid' (Guest defaults to grid)
     const [thresholds, setThresholds] = useState({});
 
     // Search state
@@ -64,7 +64,11 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
 
     useEffect(() => {
         fetchDashboardData();
-    }, [forceRefreshFlag]);
+        // If logged out, force grid view
+        if (!currentUser) {
+            setViewMode('grid');
+        }
+    }, [forceRefreshFlag, currentUser]);
 
     const handleFetchNewGst = async (e) => {
         e.preventDefault();
@@ -166,19 +170,21 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
             {error && <div className="card" style={{ backgroundColor: 'var(--danger-color)', color: 'white', marginBottom: '2rem' }}>{error}</div>}
 
             <div className="dashboard-header card" style={{ padding: '0.6rem 1rem', marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button className="btn btn-primary" onClick={() => { setShowFetchModal(true); setFetchError(''); setNewGstInput(''); }} style={{ whiteSpace: 'nowrap' }}>
-                        <Plus size={18} /> Fetch New GST
-                    </button>
-                    <button
-                        className="btn btn-secondary"
-                        onClick={handleRecalculateAll}
-                        style={{ whiteSpace: 'nowrap' }}
-                        disabled={loading}
-                    >
-                        <RefreshCw size={16} className={loading ? 'spin' : ''} /> Recalculate All
-                    </button>
-                </div>
+                {currentUser && (
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <button className="btn btn-primary" onClick={() => { setShowFetchModal(true); setFetchError(''); setNewGstInput(''); }} style={{ whiteSpace: 'nowrap' }}>
+                            <Plus size={18} /> Fetch New GST
+                        </button>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={handleRecalculateAll}
+                            style={{ whiteSpace: 'nowrap' }}
+                            disabled={loading}
+                        >
+                            <RefreshCw size={16} className={loading ? 'spin' : ''} /> Recalculate All
+                        </button>
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <div className="search-bar">
@@ -194,34 +200,36 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                             />
                         </div>
                     </div>
-                    <div className="view-toggle">
-                        <button
-                            className={`view-toggle-btn ${viewMode === 'edit' ? 'active' : ''}`}
-                            onClick={() => setViewMode('edit')}
-                            title="Quick Edit View"
-                        >
-                            <Edit3 size={18} />
-                        </button>
-                        <button
-                            className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
-                            onClick={() => setViewMode('list')}
-                            title="List View"
-                        >
-                            <List size={18} />
-                        </button>
-                        <button
-                            className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                            onClick={() => setViewMode('grid')}
-                            title="Card View"
-                        >
-                            <LayoutGrid size={18} />
-                        </button>
-                    </div>
+                    {currentUser && (
+                        <div className="view-toggle">
+                            <button
+                                className={`view-toggle-btn ${viewMode === 'edit' ? 'active' : ''}`}
+                                onClick={() => setViewMode('edit')}
+                                title="Quick Edit View"
+                            >
+                                <Edit3 size={18} />
+                            </button>
+                            <button
+                                className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                                onClick={() => setViewMode('list')}
+                                title="List View"
+                            >
+                                <List size={18} />
+                            </button>
+                            <button
+                                className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                                onClick={() => setViewMode('grid')}
+                                title="Card View"
+                            >
+                                <LayoutGrid size={18} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Dummy Score Section */}
-            {dummyList.length > 0 && (
+            {dummyList.length > 0 && viewMode !== 'grid' && (
                 <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{
                         display: 'flex', alignItems: 'center', gap: '0.6rem',
@@ -317,14 +325,36 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                         </div>
                                         <span className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore, thresholds)}`}>{gst.grcScore ?? '-'}</span>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                                        <span style={{ fontSize: '0.8rem', color: '#fdba74', fontStyle: 'italic' }}>Pending Details</span>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem 1rem', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                                        <div className="detail-row" style={{ marginBottom: 0 }}>
+                                            <span className="detail-label">Status:</span>
+                                            <span className="detail-value">{gst.gstStatus || 'N/A'}</span>
+                                        </div>
+                                        <div className="detail-row" style={{ marginBottom: 0 }}>
+                                            <span className="detail-label">Turnover:</span>
+                                            <span className="detail-value">
+                                                {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) ? 'N/A' : `${gst.aggregateTurnover} Cr`}
+                                            </span>
+                                        </div>
+                                        <div className="detail-row" style={{ marginBottom: 0 }}>
+                                            <span className="detail-label">Foundation:</span>
+                                            <span className="detail-value">{gst.registrationDate || 'N/A'}</span>
+                                        </div>
+                                        <div className="detail-row" style={{ marginBottom: 0 }}>
+                                            <span className="detail-label">Type:</span>
+                                            <span className="detail-value">{gst.gstType || 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+                                        <span style={{ fontSize: '0.75rem', color: '#fdba74', opacity: 0.8 }}>
+                                            {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleDateString('en-IN') : 'Pending Details'}
+                                        </span>
                                         <button 
                                             className="btn btn-sm btn-secondary" 
                                             onClick={() => setSelectedGst(gst)}
-                                            style={{ padding: '0.3rem', borderRadius: '50%' }}
+                                            style={{ padding: '0.2rem', borderRadius: '50%', color: '#fed7aa', borderColor: '#f97316' }}
                                         >
-                                            <Eye size={16} />
+                                            <Eye size={14} />
                                         </button>
                                     </div>
                                 </div>

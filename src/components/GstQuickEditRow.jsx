@@ -11,7 +11,7 @@ const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index }) => {
         gstStatus: gst.gstStatus || '',
         gstType: gst.gstType || '',
         registrationDate: gst.registrationDate || '',
-        aggregateTurnover: gst.aggregateTurnover || 0,
+        aggregateTurnover: gst.aggregateTurnover || '',
         delayCountGstr1: gst.delayCountGstr1 || 0,
         delayCountGstr3b: gst.delayCountGstr3b || 0
     });

@@ -11,6 +11,7 @@ function App() {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [forceRefreshFlag, setForceRefreshFlag] = useState(0);
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   // Check simple local storage on mount
   useEffect(() => {
@@ -48,12 +49,14 @@ function App() {
     localStorage.setItem('grc_user', JSON.stringify(user));
     setCurrentUser(user);
     setShowSuperAdmin(false);
+    setShowLogin(false);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('grc_user');
     setCurrentUser(null);
     setShowSuperAdmin(false);
+    setShowLogin(false);
   };
 
   const handleRecalculateAll = async () => {
@@ -73,8 +76,16 @@ function App() {
     }
   };
 
-  if (!currentUser) {
-    return <Login onLogin={handleLogin} />;
+  if (showLogin && !currentUser) {
+    return (
+      <div className="app-container">
+        <nav className="navbar">
+          <h1>GRC Score Manager</h1>
+          <button className="btn btn-secondary" onClick={() => setShowLogin(false)}>Back to Dashboard</button>
+        </nav>
+        <Login onLogin={handleLogin} />
+      </div>
+    );
   }
 
   return (
@@ -86,10 +97,11 @@ function App() {
         onLogout={handleLogout}
         showSuperAdmin={showSuperAdmin}
         setShowSuperAdmin={setShowSuperAdmin}
+        onLoginClick={() => setShowLogin(true)}
       />
 
       <main className="main-content">
-        {showSuperAdmin && currentUser.role === 'SUPER_ADMIN' ? (
+        {showSuperAdmin && currentUser?.role === 'SUPER_ADMIN' ? (
           <SuperAdmin currentUser={currentUser} />
         ) : (
           <Dashboard forceRefreshFlag={forceRefreshFlag} currentUser={currentUser} />
