@@ -12,7 +12,7 @@ const SuperAdmin = ({ currentUser }) => {
         mobileNo: '',
         email: '',
         password: '',
-        role: 'USER'
+        role: 'user'
     });
 
     const [editingUserId, setEditingUserId] = useState(null);
@@ -122,7 +122,7 @@ const SuperAdmin = ({ currentUser }) => {
         }
     };
 
-    if (currentUser?.role !== 'SUPER_ADMIN') {
+    if (currentUser?.role !== 'super_admin') {
         return (
             <div style={{ textAlign: 'center', padding: '3rem' }}>
                 <h2 style={{ color: 'var(--danger-color)' }}>Access Denied</h2>
@@ -187,8 +187,8 @@ const SuperAdmin = ({ currentUser }) => {
                                 value={newUserDef.role}
                                 onChange={e => setNewUserDef({ ...newUserDef, role: e.target.value })}
                             >
-                                <option value="USER">USER</option>
-                                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                                <option value="user">user</option>
+                                <option value="super_admin">super_admin</option>
                             </select>
                         </div>
                     </div>
@@ -269,22 +269,22 @@ const SuperAdmin = ({ currentUser }) => {
                                                         onChange={e => setEditUserData({ ...editUserData, role: e.target.value })}
                                                         style={{ padding: '0.2rem' }}
                                                     >
-                                                        <option value="USER">USER</option>
-                                                        <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                                                        <option value="user">user</option>
+                                                        <option value="super_admin">super_admin</option>
                                                     </select>
                                                 </td>
                                                 <td>
                                                     <select
                                                         className="form-control"
-                                                        value={editUserData.role === 'SUPER_ADMIN' ? 'true' : editUserData.active}
+                                                        value={editUserData.role === 'super_admin' ? 'true' : editUserData.active}
                                                         onChange={e => setEditUserData({ ...editUserData, active: e.target.value === 'true' })}
                                                         style={{ padding: '0.2rem' }}
-                                                        disabled={editUserData.role === 'SUPER_ADMIN'}
+                                                        disabled={editUserData.role === 'super_admin'}
                                                     >
                                                         <option value="true">Active</option>
                                                         <option value="false">Inactive</option>
                                                     </select>
-                                                    {editUserData.role === 'SUPER_ADMIN' && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', marginTop: '2px' }}>Required for Admins</div>}
+                                                    {editUserData.role === 'super_admin' && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', marginTop: '2px' }}>Required for Admins</div>}
                                                 </td>
                                                 <td style={{ display: 'flex', gap: '0.5rem' }}>
                                                     <button className="btn btn-primary" onClick={handleUpdateUser} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>Save</button>
@@ -299,7 +299,7 @@ const SuperAdmin = ({ currentUser }) => {
                                                 <td style={{ fontFamily: 'monospace' }}>{user.password}</td>
                                                 <td>
                                                     <span style={{
-                                                        backgroundColor: user.role === 'SUPER_ADMIN' ? 'var(--warning-color)' : 'var(--success-color)',
+                                                        backgroundColor: user.role === 'super_admin' ? 'var(--warning-color)' : 'var(--success-color)',
                                                         color: 'white',
                                                         padding: '0.2rem 0.5rem',
                                                         borderRadius: '4px',
@@ -323,7 +323,7 @@ const SuperAdmin = ({ currentUser }) => {
                                                     <button className="btn btn-secondary" onClick={() => handleEditStart(user)} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>Edit</button>
                                                     {user.id !== currentUser.id && (
                                                         <>
-                                                            {user.role !== 'SUPER_ADMIN' && (
+                                                            {user.role !== 'super_admin' && (
                                                                 <button 
                                                                     className="btn btn-secondary" 
                                                                     onClick={() => handleToggleStatus(user)} 

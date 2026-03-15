@@ -107,7 +107,7 @@ function App() {
       />
 
       <main className="main-content">
-        {showSuperAdmin && currentUser?.role === 'SUPER_ADMIN' ? (
+        {showSuperAdmin && currentUser?.role === 'super_admin' ? (
           <SuperAdmin currentUser={currentUser} />
         ) : (
           <Dashboard forceRefreshFlag={forceRefreshFlag} currentUser={currentUser} />

@@ -168,7 +168,7 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                 <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2>{gst.gstin} Details</h2>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {currentUser?.role === 'SUPER_ADMIN' && (
+                        {currentUser?.role === 'super_admin' && (
                             <button
                                 className="btn btn-sm"
                                 style={{ padding: '0.4rem', color: 'var(--danger-color)', background: 'transparent', border: '1px solid var(--danger-color)' }}
