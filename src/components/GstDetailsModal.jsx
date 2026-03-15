@@ -4,12 +4,12 @@ import { apiClient } from '../api/apiClient';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
-    const green = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+    const red = thresholds?.COLOR_RED_THRESHOLD ?? 30;
     const yellow = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
     
-    if (score > green) return 'score-green';
+    if (score > red) return 'score-red';
     if (score >= yellow) return 'score-yellow';
-    return 'score-red';
+    return 'score-green';
 };
 
 // Mappings for max score config keys based on rule names

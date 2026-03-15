@@ -7,11 +7,12 @@ import GstQuickEditRow from './GstQuickEditRow';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
-    const green = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+    const red = thresholds?.COLOR_RED_THRESHOLD ?? 30;
     const yellow = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
-    if (score > green) return 'score-green';
+    
+    if (score > red) return 'score-red';
     if (score >= yellow) return 'score-yellow';
-    return 'score-red';
+    return 'score-green';
 };
 
 const Dashboard = ({ forceRefreshFlag, currentUser }) => {
@@ -147,14 +148,14 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
         }
 
         if (scoreFilter !== 'all') {
-            const greenThreshold = thresholds?.COLOR_RED_THRESHOLD ?? 30;
+            const redThreshold = thresholds?.COLOR_RED_THRESHOLD ?? 30;
             const yellowThreshold = thresholds?.COLOR_YELLOW_THRESHOLD ?? 20;
 
             list = list.filter(g => {
                 if (g.grcScore === null || g.grcScore === undefined) return false;
-                if (scoreFilter === 'good') return g.grcScore > greenThreshold;
-                if (scoreFilter === 'okay') return g.grcScore >= yellowThreshold && g.grcScore <= greenThreshold;
-                if (scoreFilter === 'watch') return g.grcScore < yellowThreshold;
+                if (scoreFilter === 'watch') return g.grcScore > redThreshold;
+                if (scoreFilter === 'okay') return g.grcScore >= yellowThreshold && g.grcScore <= redThreshold;
+                if (scoreFilter === 'good') return g.grcScore < yellowThreshold;
                 return true;
             });
         }
@@ -258,17 +259,17 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     All
                 </button>
                 <button 
-                    onClick={() => setScoreFilter(scoreFilter === 'good' ? 'all' : 'good')}
+                    onClick={() => setScoreFilter(scoreFilter === 'watch' ? 'all' : 'watch')}
                     style={{ 
                         display: 'flex', alignItems: 'center', gap: '0.5rem', 
                         padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                        border: scoreFilter === 'good' ? '2px solid var(--success-color)' : '1px solid var(--border-color)',
-                        backgroundColor: scoreFilter === 'good' ? 'rgba(34, 197, 94, 0.1)' : 'white',
+                        border: scoreFilter === 'watch' ? '2px solid var(--danger-color)' : '1px solid var(--border-color)',
+                        backgroundColor: scoreFilter === 'watch' ? 'rgba(239, 68, 68, 0.1)' : 'white',
                         fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
                     }}
                 >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--success-color)' }}></span>
-                    <span>{'>'}30 Good</span>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--danger-color)' }}></span>
+                    <span>{'>'}30 Under WatchList</span>
                 </button>
                 <button 
                     onClick={() => setScoreFilter(scoreFilter === 'okay' ? 'all' : 'okay')}
@@ -284,17 +285,17 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     <span>20-30 Okay</span>
                 </button>
                 <button 
-                    onClick={() => setScoreFilter(scoreFilter === 'watch' ? 'all' : 'watch')}
+                    onClick={() => setScoreFilter(scoreFilter === 'good' ? 'all' : 'good')}
                     style={{ 
                         display: 'flex', alignItems: 'center', gap: '0.5rem', 
                         padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                        border: scoreFilter === 'watch' ? '2px solid var(--danger-color)' : '1px solid var(--border-color)',
-                        backgroundColor: scoreFilter === 'watch' ? 'rgba(239, 68, 68, 0.1)' : 'white',
+                        border: scoreFilter === 'good' ? '2px solid var(--success-color)' : '1px solid var(--border-color)',
+                        backgroundColor: scoreFilter === 'good' ? 'rgba(34, 197, 94, 0.1)' : 'white',
                         fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
                     }}
                 >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--danger-color)' }}></span>
-                    <span>{'<'}20 Under WatchList</span>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--success-color)' }}></span>
+                    <span>{'<'}20 Good</span>
                 </button>
                 
                 {scoreFilter !== 'all' && (
