@@ -113,6 +113,22 @@ function App() {
           <Dashboard forceRefreshFlag={forceRefreshFlag} currentUser={currentUser} />
         )}
       </main>
+
+      <footer style={{ 
+        textAlign: 'center', 
+        padding: '1.5rem 1rem 3rem', 
+        fontSize: '0.75rem', 
+        color: 'var(--text-light)', 
+        opacity: 0.8,
+        lineHeight: 1.5,
+        borderTop: '1px solid var(--border-color)',
+        marginTop: '2rem'
+      }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          All figures and data on this website are for reference purposes only; 
+          some information may be approximate or subject to change and should be independently verified.
+        </div>
+      </footer>
     </div>
   );
 }
