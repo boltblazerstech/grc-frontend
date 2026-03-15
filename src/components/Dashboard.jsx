@@ -307,60 +307,96 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                             </table>
                         </div>
                     ) : viewMode === 'grid' ? (
-                        <div className="gst-grid" style={{ border: '1px solid #f97316', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '1rem' }}>
+                        <div className="gst-grid" style={{ 
+                            border: '1px solid #f97316', 
+                            borderTop: 'none', 
+                            borderRadius: '0 0 8px 8px', 
+                            padding: '1.25rem',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                            gap: '1rem'
+                        }}>
                             {dummyList.map((gst, index) => (
                                 <div key={gst.gstin}
                                     style={{
-                                        background: 'rgba(249,115,22,0.08)',
-                                        border: '1px solid #f97316',
-                                        borderRadius: '8px', padding: '1rem',
+                                        background: 'rgba(249,115,22,0.05)',
+                                        border: '1px solid rgba(249,115,22,0.3)',
+                                        borderRadius: '12px', 
+                                        padding: '1.25rem',
                                         display: 'flex',
-                                        flexDirection: 'column', gap: '0.5rem'
+                                        flexDirection: 'column', 
+                                        gap: '0.75rem',
+                                        boxShadow: '0 2px 4px rgba(249,115,22,0.1)'
                                     }}
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                                             <span style={{ color: '#f97316', fontWeight: 600, fontSize: '0.8rem' }}>#{index + 1}</span>
-                                            <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fed7aa' }}>{gst.gstin}</span>
+                                            <span style={{ fontWeight: 700, fontSize: '1.05rem', color: '#fed7aa', letterSpacing: '0.5px' }}>{gst.gstin}</span>
                                         </div>
-                                        <span className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore, thresholds)}`}>{gst.grcScore ?? '-'}</span>
+                                        <div className={`score-badge ${getScoreColor(gst.grcScore, thresholds)}`} style={{ 
+                                            fontSize: '1rem', 
+                                            fontWeight: 700,
+                                            padding: '0.2rem 0.6rem',
+                                            minWidth: '36px',
+                                            textAlign: 'center'
+                                        }}>
+                                            {gst.grcScore ?? '-'}
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem 1rem', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                                        <div className="detail-row" style={{ marginBottom: 0 }}>
-                                            <span className="detail-label">Status:</span>
-                                            <span className="detail-value">{gst.gstStatus || 'N/A'}</span>
+                                    
+                                    <div style={{ height: '1px', background: 'rgba(249,115,22,0.2)' }}></div>
+
+                                    <div style={{ 
+                                        display: 'grid', 
+                                        gridTemplateColumns: '1.2fr 1fr', 
+                                        gap: '0.6rem 0.5rem', 
+                                        fontSize: '0.85rem'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Status:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.gstStatus || 'N/A'}</span>
                                         </div>
-                                        <div className="detail-row" style={{ marginBottom: 0 }}>
-                                            <span className="detail-label">Turnover:</span>
-                                            <span className="detail-value">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Turnover:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>
                                                 {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) ? 'N/A' : `${gst.aggregateTurnover} Cr`}
                                             </span>
                                         </div>
-                                        <div className="detail-row" style={{ marginBottom: 0 }}>
-                                            <span className="detail-label">Foundation:</span>
-                                            <span className="detail-value">{gst.registrationDate || 'N/A'}</span>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Age:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.registrationDate ? 'Pending' : 'N/A'}</span>
                                         </div>
-                                        <div className="detail-row" style={{ marginBottom: 0 }}>
-                                            <span className="detail-label">Type:</span>
-                                            <span className="detail-value">{gst.gstType || 'N/A'}</span>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Type:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.gstType ? gst.gstType.split(' ')[0] : 'N/A'}</span>
                                         </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                                        <span style={{ fontSize: '0.75rem', color: '#fdba74', opacity: 0.8 }}>
-                                            {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleDateString('en-IN') : 'Pending Details'}
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem' }}>
+                                        <span style={{ fontSize: '0.75rem', color: '#fdba74', opacity: 0.7, fontStyle: 'italic' }}>
+                                            Details Pending
                                         </span>
                                         <button 
-                                            className="btn btn-sm btn-secondary" 
+                                            className="btn btn-sm" 
                                             onClick={() => setSelectedGst(gst)}
-                                            style={{ padding: '0.2rem', borderRadius: '50%', color: '#fed7aa', borderColor: '#f97316' }}
+                                            style={{ 
+                                                padding: '0.25rem 0.5rem', 
+                                                background: 'transparent', 
+                                                border: '1px solid rgba(249,115,22,0.4)',
+                                                color: '#fed7aa',
+                                                fontSize: '0.75rem',
+                                                borderRadius: '4px'
+                                            }}
                                         >
-                                            <Eye size={14} />
+                                            <Eye size={14} style={{ marginRight: '4px' }} /> View
                                         </button>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                    ) : (
+                    ) : ( 
+
                         <div style={{ border: '1px solid #f97316', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '1rem' }}>
                             {dummyList.map((gst, index) => (
                                 <GstQuickEditRow
