@@ -23,11 +23,13 @@ const calculateAge = (dateString) => {
         }
     }
 
-    const yearPart = years > 0 ? `${years} yr${years > 1 ? 's' : ''}` : '';
-    const monthPart = months > 0 ? `${months} mo${months > 1 ? 's' : ''}` : '';
+    // If 6 months or more, round up to next year
+    if (months >= 6) {
+        years++;
+    }
     
-    if (!yearPart && !monthPart) return 'New';
-    return `${yearPart}${yearPart && monthPart ? ' ' : ''}${monthPart}`.trim();
+    if (years <= 0) return 'New';
+    return `${years} yr${years > 1 ? 's' : ''}`;
 };
 
 const getScoreColor = (score, thresholds) => {
