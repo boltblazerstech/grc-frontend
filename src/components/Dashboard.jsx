@@ -80,7 +80,11 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
             return;
         }
 
-        const gstins = newGstInput.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+        const gstins = newGstInput
+  .split(',')
+  .map(s => s.trim().toUpperCase())
+  // Remove empty strings and obvious placeholders like "0"
+  .filter(s => s && s !== '0');
         if (gstins.length === 0) return;
 
         // GST Validation Regex
