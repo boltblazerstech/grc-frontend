@@ -82,6 +82,7 @@ const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index }) => {
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                     <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-light)' }}>
                          {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Never'}
+                         {gst.source && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', marginTop: '1px' }}>Source: <span style={{ fontWeight: 500 }}>{gst.source}</span></div>}
                          {gst.updatedBy && <div style={{ fontSize: '0.7rem', color: 'var(--primary-color)' }}>By: {gst.updatedBy}</div>}
                     </div>
                     <span className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore)}`}>

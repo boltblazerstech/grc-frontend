@@ -272,6 +272,14 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                     <label>Address</label>
                                     <textarea className="form-control" name="address" value={formData.address || ''} onChange={handleInputChange} rows={2} />
                                 </div>
+                                {gst.source && (
+                                    <div className="input-group" style={{ marginBottom: '1rem' }}>
+                                        <label>Entry Source</label>
+                                        <div style={{ padding: '0.4rem 0.6rem', background: 'var(--bg-color-alt)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-light)', fontSize: '0.9rem' }}>
+                                            {gst.source}
+                                        </div>
+                                    </div>
+                                )}
                                 <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                     <button className="btn btn-secondary" onClick={() => setIsEditing(false)}>Cancel</button>
                                     <button className="btn btn-primary" onClick={handleSave} disabled={loading}>
