@@ -138,6 +138,37 @@ const SuperAdmin = ({ currentUser }) => {
             {error && <div style={{ color: 'white', backgroundColor: 'var(--danger-color)', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>{error}</div>}
             {successMsg && <div style={{ color: 'white', backgroundColor: 'var(--success-color)', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>{successMsg}</div>}
 
+            <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--warning-color)', background: 'rgba(234, 179, 8, 0.05)' }}>
+                <h3 style={{ color: 'var(--warning-color)' }}>System Maintenance</h3>
+                <p style={{ fontSize: '0.85rem', margin: '0.5rem 0 1rem', color: 'var(--text-light)' }}>
+                    Use these tools to maintain system integrity. 
+                    <strong> Cleanup Garbage Records</strong> will permanently delete all GST entries with invalid formats (empty, "0", "N/A", or whitespace).
+                </p>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button 
+                        className="btn btn-secondary" 
+                        style={{ border: '1px solid var(--warning-color)', color: 'var(--warning-color)' }}
+                        onClick={async () => {
+                            if (window.confirm("Permanently delete all invalid/garbage GST records? This action cannot be undone.")) {
+                                setIsLoading(true);
+                                try {
+                                    const msg = await apiClient.cleanupGarbageRecords();
+                                    setSuccessMsg(msg);
+                                    setError(null);
+                                } catch (err) {
+                                    setError(err.message);
+                                } finally {
+                                    setIsLoading(false);
+                                }
+                            }
+                        }}
+                        disabled={isLoading}
+                    >
+                        Cleanup Garbage Records
+                    </button>
+                </div>
+            </div>
+
             <div className="card" style={{ marginBottom: '2rem' }}>
                 <h3>Add New User</h3>
                 <hr style={{ margin: '1rem 0', borderColor: 'var(--border-color)' }} />

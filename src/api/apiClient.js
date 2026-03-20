@@ -82,6 +82,14 @@ export const apiClient = {
         return response.text();
     },
 
+    async cleanupGarbageRecords() {
+        const response = await fetch(`${API_BASE_URL}/cleanup-garbage`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to cleanup garbage records');
+        return response.text();
+    },
+
     // User Management
     async loginUser(identifier, password) {
         const response = await fetch(`${API_USER_URL}/login`, {
