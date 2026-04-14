@@ -30,7 +30,7 @@ const getConditionLabel = (ruleName, gst) => {
             if (!gst.registrationDate) return 'N/A';
             const years = new Date().getFullYear() - new Date(gst.registrationDate).getFullYear();
             return `${gst.registrationDate} (${years}+ yrs)`;
-        case "Turnover": return `${gst.aggregateTurnover || 0} Cr`;
+        case "Turnover": return gst.aggregateTurnover || 'N/A';
         case "GSTN Status": return gst.gstStatus || 'N/A';
         case "GSTR-1 Filing": return `${gst.delayCountGstr1 || 0} delays`;
         case "GSTR-3B Filing": return `${gst.delayCountGstr3b || 0} delays`;
@@ -48,16 +48,19 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
     const [showBreakdown, setShowBreakdown] = useState(false);
     const [ruleConfig, setRuleConfig] = useState({});
 
+    const isAdmin = currentUser?.role === 'super_admin';
+
     // Fetch full data and rule config on mount
     useEffect(() => {
         const loadFullData = async () => {
             setLoading(true);
             try {
-                // Fetch fresh data (with breakdown) from single-item API
-                const fullGst = await apiClient.getDetailByGstin(gst.gstin);
+                // Admin gets mobile/email via admin endpoint
+                const fullGst = isAdmin
+                    ? await apiClient.getGstDetailsAdmin(gst.gstin)
+                    : await apiClient.getDetailByGstin(gst.gstin);
                 setFormData(fullGst);
-                
-                // Also fetch config
+
                 const configList = await apiClient.getRuleConfig();
                 const configMap = {};
                 configList.forEach(item => configMap[item.configKey] = item.configValue);
@@ -106,9 +109,17 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                 aggregateTurnover: formData.aggregateTurnover,
                 delayCountGstr1: parseInt(formData.delayCountGstr1),
                 delayCountGstr3b: parseInt(formData.delayCountGstr3b),
+                ...(isAdmin && {
+                    mobile: formData.mobile || null,
+                    email: formData.email || null,
+                    panNumber: formData.panNumber || null,
+                    promoters: formData.promoters || null,
+                }),
             };
             await apiClient.updateDetails(gst.gstin, payload);
-            const updated = await apiClient.getDetailByGstin(gst.gstin);
+            const updated = isAdmin
+                ? await apiClient.getGstDetailsAdmin(gst.gstin)
+                : await apiClient.getDetailByGstin(gst.gstin);
             onUpdate(updated);
             setIsEditing(false);
         } catch (err) {
@@ -123,7 +134,9 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
         setError('');
         try {
             await apiClient.calculateScore(gst.gstin);
-            const updated = await apiClient.getDetailByGstin(gst.gstin);
+            const updated = isAdmin
+                ? await apiClient.getGstDetailsAdmin(gst.gstin)
+                : await apiClient.getDetailByGstin(gst.gstin);
             onUpdate(updated);
         } catch (err) {
             setError(err.message || 'Failed to recalculate score');
@@ -191,6 +204,46 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                         </div>
                     )}
 
+                    {formData.apiError && formData.dataSource !== 'Manual' && (
+                        <div style={{ background: '#fff1f2', border: '1px solid #fda4af', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                            <AlertCircle size={18} style={{ color: '#e11d48', flexShrink: 0, marginTop: '1px' }} />
+                            <div>
+                                <div style={{ fontWeight: 600, color: '#be123c', fontSize: '0.9rem' }}>API Error — Data not fetched</div>
+                                <div style={{ color: '#9f1239', fontSize: '0.8rem', marginTop: '2px' }}>
+                                    The Deepvue API returned an error for this GSTIN. Enter details manually using the Edit button.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {formData.apiError && formData.dataSource === 'Manual' && (
+                        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '0.6rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <AlertCircle size={16} style={{ color: '#d97706', flexShrink: 0 }} />
+                            <div style={{ fontSize: '0.82rem', color: '#92400e' }}>
+                                <strong>API Error (permanent)</strong> — Data was entered manually. This GSTIN will be skipped in bulk API refresh.
+                            </div>
+                        </div>
+                    )}
+
+                    {formData.dataSource && (
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem', fontSize: '0.82rem' }}>
+                            <span style={{ color: 'var(--text-light)' }}>Data source:</span>
+                            <span style={{
+                                padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 700,
+                                ...(formData.dataSource === 'API'     ? { background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd' } :
+                                    formData.dataSource === 'Manual'  ? { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' } :
+                                    formData.dataSource === 'Error'   ? { background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' } :
+                                                                        { background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db' })
+                            }}>
+                                {formData.dataSource}
+                            </span>
+                            {formData.lastApiSync && (
+                                <span style={{ color: 'var(--text-light)' }}>
+                                    Last synced: {new Date(formData.lastApiSync).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
                         <h3 style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>GRC Score</h3>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -248,8 +301,8 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                         <input type="date" className="form-control" name="registrationDate" value={toInputDate(formData.registrationDate)} onChange={handleInputChange} />
                                     </div>
                                     <div className="input-group">
-                                        <label>Aggregate Turnover (Cr)<span style={REQUIRED_LABEL_STYLE}>*</span></label>
-                                        <input type="number" step="0.01" className="form-control" name="aggregateTurnover" value={formData.aggregateTurnover ?? ''} onChange={handleInputChange} />
+                                        <label>Aggregate Turnover<span style={REQUIRED_LABEL_STYLE}>*</span></label>
+                                        <input type="text" className="form-control" name="aggregateTurnover" value={formData.aggregateTurnover ?? ''} onChange={handleInputChange} placeholder="e.g. Slab: Rs. 25 Cr. to 100 Cr." />
                                     </div>
                                     <div className="input-group">
                                         <label>GSTR-1 Delay Count<span style={REQUIRED_LABEL_STYLE}>*</span></label>
@@ -272,11 +325,36 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                     <label>Address</label>
                                     <textarea className="form-control" name="address" value={formData.address || ''} onChange={handleInputChange} rows={2} />
                                 </div>
-                                {gst.source && (
+                                {isAdmin && (
+                                    <>
+                                        <div style={{ gridColumn: '1 / -1', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-color)', marginTop: '0.25rem' }}>
+                                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--primary-color)' }}>Admin-only fields</span>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                                            <div className="input-group">
+                                                <label>Mobile</label>
+                                                <input className="form-control" name="mobile" value={formData.mobile || ''} onChange={handleInputChange} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label>Email</label>
+                                                <input className="form-control" name="email" type="email" value={formData.email || ''} onChange={handleInputChange} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label>PAN Number</label>
+                                                <input className="form-control" name="panNumber" value={formData.panNumber || ''} onChange={handleInputChange} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label>Promoters</label>
+                                                <input className="form-control" name="promoters" value={formData.promoters || ''} onChange={handleInputChange} />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                                {formData.source && (
                                     <div className="input-group" style={{ marginBottom: '1rem' }}>
                                         <label>Entry Source</label>
                                         <div style={{ padding: '0.4rem 0.6rem', background: 'var(--bg-color-alt)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-light)', fontSize: '0.9rem' }}>
-                                            {gst.source}
+                                            {formData.source}
                                         </div>
                                     </div>
                                 )}
@@ -289,21 +367,35 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                             </div>
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem 2rem' }}>
-                                <div className="detail-row"><span className="detail-label">Trade Name:</span><span className="detail-value">{gst.tradeName || 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">Legal Name:</span><span className="detail-value">{gst.legalName || 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">Status:</span><span className="detail-value">{gst.gstStatus || 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">Type:</span><span className="detail-value">{gst.gstType || 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">Reg. Date:</span><span className="detail-value">{gst.registrationDate || 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">Trade Name:</span><span className="detail-value">{formData.tradeName || 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">Legal Name:</span><span className="detail-value">{formData.legalName || 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">Status:</span><span className="detail-value">{formData.gstStatus || 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">Type:</span><span className="detail-value">{formData.gstType || 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">Reg. Date:</span><span className="detail-value">{formData.registrationDate || 'N/A'}</span></div>
                                 <div className="detail-row">
                                     <span className="detail-label">Turnover:</span>
-                                    <span className="detail-value">
-                                        {(gst.aggregateTurnover && gst.aggregateTurnover !== "0" && gst.aggregateTurnover !== 0) 
-                                            ? `${gst.aggregateTurnover} Cr+` 
+                                    <span className="detail-value" title={formData.aggregateTurnover || 'N/A'}>
+                                        {(formData.aggregateTurnover && formData.aggregateTurnover !== "0" && formData.aggregateTurnover !== 0)
+                                            ? formData.aggregateTurnover
                                             : 'N/A'}
                                     </span>
                                 </div>
-                                <div className="detail-row"><span className="detail-label">GSTR-1 Delays:</span><span className="detail-value">{gst.delayCountGstr1 ?? 'N/A'}</span></div>
-                                <div className="detail-row"><span className="detail-label">GSTR-3B Delays:</span><span className="detail-value">{gst.delayCountGstr3b ?? 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">GSTR-1 Delays:</span><span className="detail-value">{formData.delayCountGstr1 ?? 'N/A'}</span></div>
+                                <div className="detail-row"><span className="detail-label">GSTR-3B Delays:</span><span className="detail-value">{formData.delayCountGstr3b ?? 'N/A'}</span></div>
+                                {formData.panNumber && <div className="detail-row"><span className="detail-label">PAN:</span><span className="detail-value">{formData.panNumber}</span></div>}
+                                {formData.promoters && <div className="detail-row" style={{ gridColumn: '1 / -1' }}><span className="detail-label">Promoters:</span><span className="detail-value">{formData.promoters}</span></div>}
+                                {isAdmin && formData.mobile && (
+                                    <div className="detail-row">
+                                        <span className="detail-label" style={{ color: 'var(--primary-color)' }}>Mobile (Admin):</span>
+                                        <span className="detail-value">{formData.mobile}</span>
+                                    </div>
+                                )}
+                                {isAdmin && formData.email && (
+                                    <div className="detail-row">
+                                        <span className="detail-label" style={{ color: 'var(--primary-color)' }}>Email (Admin):</span>
+                                        <span className="detail-value">{formData.email}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

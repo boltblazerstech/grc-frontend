@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw, Eye, Copy, Check } from 'lucide-react';
+import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw, Eye, Copy, Check, CloudDownload, Download } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
+import * as XLSX from 'xlsx';
 import GstCard from './GstCard';
 import GstDetailsModal from './GstDetailsModal';
 import GstQuickEditRow from './GstQuickEditRow';
@@ -36,6 +37,12 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
 
     // Modal state
     const [selectedGst, setSelectedGst] = useState(null);
+
+    // Admin refresh state
+    const [showRefreshPanel, setShowRefreshPanel] = useState(false);
+    const [selectedGstins, setSelectedGstins] = useState(new Set());
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [refreshResult, setRefreshResult] = useState(null);
 
     const handleCopy = (gstin) => {
         navigator.clipboard.writeText(gstin);
@@ -139,6 +146,39 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
         }
     };
 
+    const handleExportExcel = () => {
+        const exportData = processedList.map(gst => ({
+            'api_error': gst.apiError != null ? gst.apiError.toString() : 'N/A',
+            'registration_date': gst.registrationDate || 'N/A',
+            'delay_count_gstr1': gst.delayCountGstr1 != null ? gst.delayCountGstr1 : 'N/A',
+            'delay_count_gstr3b': gst.delayCountGstr3b != null ? gst.delayCountGstr3b : 'N/A',
+            'created_at': gst.createdAt ? new Date(gst.createdAt).toLocaleString('en-IN') : 'N/A',
+            'last_api_sync': gst.lastApiSync ? new Date(gst.lastApiSync).toLocaleString('en-IN') : 'N/A',
+            'aggregate_turnover': gst.aggregateTurnover || 'N/A',
+            'source': gst.source || 'N/A',
+            'data_source': gst.dataSource || 'N/A',
+            'email': gst.email || 'N/A',
+            'mobile': gst.mobile || 'N/A',
+            'pan_number': gst.panNumber || 'N/A',
+            'gstin': gst.gstin,
+            'promoters': gst.promoters || 'N/A',
+            'gst_type': gst.gstType || 'N/A',
+            'trade_name': gst.tradeName || 'N/A',
+            'legal_name': gst.legalName || 'N/A',
+            'gst_status': gst.gstStatus || 'N/A',
+            'address': gst.address || 'N/A',
+            'score': gst.grcScore !== null && gst.grcScore !== undefined ? gst.grcScore : 'N/A',
+            'calculated_at': gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN') : 'N/A',
+            'updated_by': gst.updatedBy || 'N/A',
+            'score_version': '1.0'
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "GRC Details");
+        XLSX.writeFile(workbook, "GRC_Details.xlsx");
+    };
+
     const processedList = useMemo(() => {
         let list = [...gstList];
 
@@ -172,9 +212,54 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
         });
     }, [gstList, searchTerm, scoreFilter, thresholds]);
 
-    // Filter the list into Dummy (15 score) and Normal
-    const dummyList = useMemo(() => processedList.filter(g => g.updatedBy === 'Dummy'), [processedList]);
-    const normalList = useMemo(() => processedList.filter(g => g.updatedBy !== 'Dummy'), [processedList]);
+    const handleAdminRefresh = async () => {
+        if (selectedGstins.size === 0) return;
+        setIsRefreshing(true);
+        setRefreshResult(null);
+        try {
+            const result = await apiClient.refreshGstFromApi([...selectedGstins]);
+            setRefreshResult(result);
+            setSelectedGstins(new Set());
+            await fetchDashboardData();
+        } catch (err) {
+            setRefreshResult({ error: err.message || 'Refresh failed' });
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    const handleToggleGstin = (gstin) => {
+        setSelectedGstins(prev => {
+            const next = new Set(prev);
+            if (next.has(gstin)) next.delete(gstin); else next.add(gstin);
+            return next;
+        });
+    };
+
+    const handleSelectAll = (checked) => {
+        if (checked) {
+            setSelectedGstins(new Set(allSelectableGstins));
+        } else {
+            setSelectedGstins(new Set());
+        }
+    };
+
+    // pendingList = no real data yet (old dummy stubs OR api error with no manual entry)
+    // normalList  = has real data (api success OR manual entry — even if apiError is still flagged)
+    const pendingList = useMemo(() =>
+        processedList.filter(g => g.updatedBy === 'Dummy' || (g.apiError === true && g.dataSource !== 'Manual')),
+    [processedList]);
+    const normalList = useMemo(() =>
+        processedList.filter(g => g.updatedBy !== 'Dummy' && !(g.apiError === true && g.dataSource !== 'Manual')),
+    [processedList]);
+
+    // Only non-error GSTINs from both lists are selectable
+    const allSelectableGstins = useMemo(() =>
+        [...normalList, ...pendingList].filter(g => !g.apiError).map(g => g.gstin),
+    [normalList, pendingList]);
+
+    const allSelected = allSelectableGstins.length > 0 && allSelectableGstins.every(g => selectedGstins.has(g));
+    const someSelected = allSelectableGstins.some(g => selectedGstins.has(g));
 
     if (loading && gstList.length === 0) {
         return (
@@ -190,7 +275,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
 
             <div className="dashboard-header card" style={{ padding: '0.6rem 1rem', marginBottom: '1rem' }}>
                 {currentUser && (
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                         <button className="btn btn-primary" onClick={() => { setShowFetchModal(true); setFetchError(''); setNewGstInput(''); }} style={{ whiteSpace: 'nowrap' }}>
                             <Plus size={18} /> Fetch New GST
                         </button>
@@ -201,6 +286,29 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                             disabled={loading}
                         >
                             <RefreshCw size={16} className={loading ? 'spin' : ''} /> Recalculate All
+                        </button>
+                        {currentUser?.role === 'super_admin' && (
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    if (!showRefreshPanel) {
+                                        setViewMode('list');
+                                        setSelectedGstins(new Set());
+                                        setRefreshResult(null);
+                                    }
+                                    setShowRefreshPanel(p => !p);
+                                }}
+                                style={{ whiteSpace: 'nowrap', borderColor: showRefreshPanel ? '#2563eb' : '#3b82f6', color: '#1d4ed8', background: showRefreshPanel ? '#dbeafe' : '' }}
+                            >
+                                <CloudDownload size={16} /> {showRefreshPanel ? 'Cancel Refresh' : 'Refresh from API'}
+                            </button>
+                        )}
+                        <button
+                            className="btn btn-secondary"
+                            onClick={handleExportExcel}
+                            style={{ whiteSpace: 'nowrap', borderColor: '#10b981', color: '#047857', background: '#d1fae5' }}
+                        >
+                            <Download size={16} /> Export Excel
                         </button>
                     </div>
                 )}
@@ -309,8 +417,72 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                 )}
             </div>
 
-            {/* Dummy Score Section */}
-            {dummyList.length > 0 && viewMode !== 'grid' && (
+            {/* Admin Refresh — sticky action bar */}
+            {showRefreshPanel && currentUser?.role === 'super_admin' && (
+                <div style={{ marginBottom: '1rem', padding: '0.6rem 1rem', border: '1px solid #93c5fd', background: '#eff6ff', borderRadius: '8px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem' }}>
+                    {/* Select All */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontWeight: 600, color: '#1e40af', fontSize: '0.88rem', userSelect: 'none' }}>
+                        <input
+                            type="checkbox"
+                            checked={allSelected}
+                            ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                            onChange={e => handleSelectAll(e.target.checked)}
+                            disabled={isRefreshing}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                        Select All Non-Error
+                        <span style={{ fontWeight: 400, color: '#3b82f6' }}>({allSelectableGstins.length})</span>
+                    </label>
+
+                    <span style={{ color: '#1e40af', fontSize: '0.85rem' }}>
+                        <strong>{selectedGstins.size}</strong> selected
+                    </span>
+
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleAdminRefresh}
+                        disabled={isRefreshing || selectedGstins.size === 0}
+                        style={{ background: '#2563eb', borderColor: '#2563eb', padding: '0.35rem 0.9rem', fontSize: '0.85rem' }}
+                    >
+                        {isRefreshing
+                            ? <><span className="spinner" style={{ width: '13px', height: '13px' }} /> Refreshing...</>
+                            : <><CloudDownload size={14} /> Refresh {selectedGstins.size > 0 ? `${selectedGstins.size} Selected` : ''}</>
+                        }
+                    </button>
+
+                    <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontStyle: 'italic' }}>
+                        Check rows below to select · Error GSTINs are disabled
+                    </span>
+
+                    {refreshResult && (
+                        <div style={{ width: '100%', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                            {refreshResult.error ? (
+                                <span style={{ color: '#dc2626' }}>{refreshResult.error}</span>
+                            ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr style={{ background: '#dbeafe' }}>
+                                            <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>GSTIN</th>
+                                            <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>Result</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(refreshResult).map(([gstin, result]) => (
+                                            <tr key={gstin} style={{ borderBottom: '1px solid #bfdbfe' }}>
+                                                <td style={{ padding: '0.2rem 0.5rem', fontFamily: 'monospace' }}>{gstin}</td>
+                                                <td style={{ padding: '0.2rem 0.5rem', color: result === 'refreshed' ? '#16a34a' : '#dc2626' }}>{result}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Pending / Error Score Section */}
+            {pendingList.length > 0 && viewMode !== 'grid' && (
                 <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{
                         display: 'flex', alignItems: 'center', gap: '0.6rem',
@@ -321,7 +493,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     }}>
                         <AlertCircle size={18} style={{ color: '#f97316', flexShrink: 0 }} />
                         <span style={{ color: '#fed7aa', fontWeight: 600, fontSize: '0.95rem' }}>
-                            Dummy Score GSTs ({dummyList.length}) - Details pending
+                            Pending / Error GSTs ({pendingList.length}) — Data not yet available
                         </span>
                     </div>
 
@@ -330,6 +502,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                             <table className="gst-table" style={{ minWidth: '700px' }}>
                                 <thead style={{ background: 'rgba(249,115,22,0.12)' }}>
                                     <tr>
+                                        {showRefreshPanel && <th style={{ width: '36px', textAlign: 'center' }}></th>}
                                         <th style={{ width: '40px' }}>#</th>
                                         <th>GSTIN</th>
                                         <th>Trade Name</th>
@@ -340,10 +513,22 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {dummyList.map((gst, index) => (
+                                    {pendingList.map((gst, index) => (
                                         <tr key={gst.gstin}
                                             style={{ background: 'rgba(249,115,22,0.05)' }}
                                         >
+                                            {showRefreshPanel && (
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedGstins.has(gst.gstin)}
+                                                        onChange={() => handleToggleGstin(gst.gstin)}
+                                                        disabled={!!gst.apiError || isRefreshing}
+                                                        title={gst.apiError ? 'API error — enter data manually to enable' : ''}
+                                                        style={{ width: '15px', height: '15px', cursor: gst.apiError ? 'not-allowed' : 'pointer', opacity: gst.apiError ? 0.4 : 1 }}
+                                                    />
+                                                </td>
+                                            )}
                                             <td style={{ color: 'var(--text-light)', fontWeight: 500, textAlign: 'center' }}>{index + 1}</td>
                                             <td className="gstin-cell" style={{ whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -397,7 +582,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                             gap: '1rem'
                         }}>
-                            {dummyList.map((gst, index) => (
+                            {pendingList.map((gst, index) => (
                                 <div key={gst.gstin}
                                     style={{
                                         background: 'rgba(249,115,22,0.05)',
@@ -414,6 +599,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                                             <span style={{ color: '#f97316', fontWeight: 600, fontSize: '0.8rem' }}>#{index + 1}</span>
                                             <span style={{ fontWeight: 700, fontSize: '1.05rem', color: '#fed7aa', letterSpacing: '0.5px' }}>{gst.gstin}</span>
+                                        {gst.apiError && (
+                                            <span style={{ background: '#fee2e2', color: '#991b1b', fontSize: '0.6rem', fontWeight: 700, padding: '0.1rem 0.35rem', borderRadius: '3px', border: '1px solid #fca5a5' }}>API Error</span>
+                                        )}
                                         </div>
                                         <div className={`score-badge ${getScoreColor(gst.grcScore, thresholds)}`} style={{ 
                                             fontSize: '1rem', 
@@ -441,9 +629,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                             <span style={{ color: '#fdba74', opacity: 0.9 }}>Turnover:</span>
                                             <span style={{ color: '#fed7aa', fontWeight: 600 }}>
-                                                {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) 
-                                                    ? 'N/A' 
-                                                    : `${gst.aggregateTurnover} Cr+`}
+                                                {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0)
+                                                    ? 'N/A'
+                                                    : gst.aggregateTurnover}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
@@ -486,14 +674,27 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     ) : ( 
 
                         <div style={{ border: '1px solid #f97316', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '1rem' }}>
-                            {dummyList.map((gst, index) => (
-                                <GstQuickEditRow
-                                    key={gst.gstin}
-                                    index={index + 1}
-                                    gst={gst}
-                                    getScoreColor={(score) => getScoreColor(score, thresholds)}
-                                    onUpdate={handleUpdateItemInList}
-                                />
+                            {pendingList.map((gst, index) => (
+                                <div key={gst.gstin} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    {showRefreshPanel && (
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedGstins.has(gst.gstin)}
+                                            onChange={() => handleToggleGstin(gst.gstin)}
+                                            disabled={!!gst.apiError || isRefreshing}
+                                            title={gst.apiError ? 'API error — enter data manually to enable' : ''}
+                                            style={{ width: '15px', height: '15px', flexShrink: 0, cursor: gst.apiError ? 'not-allowed' : 'pointer', opacity: gst.apiError ? 0.4 : 1 }}
+                                        />
+                                    )}
+                                    <div style={{ flex: 1 }}>
+                                        <GstQuickEditRow
+                                            index={index + 1}
+                                            gst={gst}
+                                            getScoreColor={(score) => getScoreColor(score, thresholds)}
+                                            onUpdate={handleUpdateItemInList}
+                                        />
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     )}
@@ -505,6 +706,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     <table className="gst-table" style={{ minWidth: '700px' }}>
                         <thead>
                             <tr>
+                                {showRefreshPanel && <th style={{ width: '36px', textAlign: 'center' }}></th>}
                                 <th style={{ width: '40px' }}>#</th>
                                 <th>GSTIN</th>
                                 <th>Trade Name</th>
@@ -520,10 +722,23 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                     <tr
                                         key={gst.gstin}
                                         className={`gst-table-row ${recentlyAdded.has(gst.gstin) ? 'new-item' : ''}`}
+                                        style={showRefreshPanel && selectedGstins.has(gst.gstin) ? { background: '#eff6ff' } : {}}
                                     >
+                                        {showRefreshPanel && (
+                                            <td style={{ textAlign: 'center' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedGstins.has(gst.gstin)}
+                                                    onChange={() => handleToggleGstin(gst.gstin)}
+                                                    disabled={!!gst.apiError || isRefreshing}
+                                                    title={gst.apiError ? 'API error — select manually' : ''}
+                                                    style={{ width: '15px', height: '15px', cursor: gst.apiError ? 'not-allowed' : 'pointer', opacity: gst.apiError ? 0.4 : 1 }}
+                                                />
+                                            </td>
+                                        )}
                                         <td style={{ color: 'var(--text-light)', fontWeight: 500, textAlign: 'center' }}>{index + 1}</td>
                                         <td className="gstin-cell" style={{ whiteSpace: 'nowrap' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                 {gst.gstin}
                                                 <button 
                                                     className="ghost-btn" 
@@ -533,6 +748,11 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                                 >
                                                     {copiedGstin === gst.gstin ? <Check size={14} /> : <Copy size={14} />}
                                                 </button>
+                                                {gst.apiError && (
+                                                    <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px' }} title="API failed">
+                                                        Error (API)
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td>
@@ -563,8 +783,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-light)' }}>
-                                        {processedList.length === 0 ? 'No GST numbers found matching your criteria.' : 'All entries have dummy scores - fill in details using "Quick Edit" or the modal.'}
+                                    <td colSpan={showRefreshPanel ? 8 : 7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-light)' }}>
+                                        {processedList.length === 0 ? 'No GST numbers found matching your criteria.' : 'All entries have pending scores.'}
                                     </td>
                                 </tr>
                             )}
@@ -575,15 +795,26 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                 <div className="gst-grid">
                     {normalList.length > 0 ? (
                         normalList.map((gst, index) => (
-                            <GstCard
-                                key={gst.gstin}
-                                gst={gst}
-                                index={index + 1}
-                                isNew={recentlyAdded.has(gst.gstin)}
-                                isFirstFetch={false}
-                                onClick={setSelectedGst}
-                                thresholds={thresholds}
-                            />
+                            <div key={gst.gstin} style={{ position: 'relative' }}>
+                                {showRefreshPanel && (
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedGstins.has(gst.gstin)}
+                                        onChange={() => handleToggleGstin(gst.gstin)}
+                                        disabled={!!gst.apiError || isRefreshing}
+                                        title={gst.apiError ? 'API error — select manually' : ''}
+                                        style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 10, width: '16px', height: '16px', cursor: gst.apiError ? 'not-allowed' : 'pointer', opacity: gst.apiError ? 0.4 : 1 }}
+                                    />
+                                )}
+                                <GstCard
+                                    gst={gst}
+                                    index={index + 1}
+                                    isNew={recentlyAdded.has(gst.gstin)}
+                                    isFirstFetch={false}
+                                    onClick={showRefreshPanel ? () => handleToggleGstin(gst.gstin) : setSelectedGst}
+                                    thresholds={thresholds}
+                                />
+                            </div>
                         ))
                     ) : (
                         <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-light)' }}>
@@ -595,13 +826,26 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                 <div className="gst-quick-edit-list">
                     {normalList.length > 0 ? (
                         normalList.map((gst, index) => (
-                            <GstQuickEditRow
-                                key={gst.gstin}
-                                index={index + 1}
-                                gst={gst}
-                                getScoreColor={(score) => getScoreColor(score, thresholds)}
-                                onUpdate={handleUpdateItemInList}
-                            />
+                            <div key={gst.gstin} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {showRefreshPanel && (
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedGstins.has(gst.gstin)}
+                                        onChange={() => handleToggleGstin(gst.gstin)}
+                                        disabled={!!gst.apiError || isRefreshing}
+                                        title={gst.apiError ? 'API error — select manually' : ''}
+                                        style={{ width: '15px', height: '15px', flexShrink: 0, cursor: gst.apiError ? 'not-allowed' : 'pointer', opacity: gst.apiError ? 0.4 : 1 }}
+                                    />
+                                )}
+                                <div style={{ flex: 1 }}>
+                                    <GstQuickEditRow
+                                        index={index + 1}
+                                        gst={gst}
+                                        getScoreColor={(score) => getScoreColor(score, thresholds)}
+                                        onUpdate={handleUpdateItemInList}
+                                    />
+                                </div>
+                            </div>
                         ))
                     ) : (
                         <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-light)' }}>

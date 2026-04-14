@@ -58,14 +58,30 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const dataSourceBadge = (ds) => {
+        if (!ds) return null;
+        const styles = {
+            API:     { background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd' },
+            Manual:  { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' },
+            Error:   { background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' },
+            Pending: { background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db' },
+        };
+        const s = styles[ds] || styles.Pending;
+        return (
+            <span style={{ ...s, fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                {ds}
+            </span>
+        );
+    };
+
     return (
         <div
             className={`card gst-card ${isFirstFetch ? 'first-fetch-item' : isNew ? 'new-item' : ''}`}
-            style={{ 
+            style={{
                 position: 'relative',
                 padding: '0.85rem 1rem',
                 transition: 'transform 0.2s, box-shadow 0.2s',
-                border: '1px solid var(--border-color)',
+                border: gst.apiError ? '1px solid #fca5a5' : '1px solid var(--border-color)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '0.6rem'
@@ -73,11 +89,11 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
         >
             <div className="gst-card-header" style={{ padding: 0, border: 0, marginBottom: 0 }}>
                 <div style={{ flex: 1 }}>
-                    <div className="gst-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                    <div className="gst-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                         <span style={{ color: 'var(--text-light)', fontSize: '0.8rem', fontWeight: 600 }}>#{index}</span>
                         <span style={{ fontSize: '1.1rem', fontWeight: 700, letterSpacing: '0.5px', color: 'var(--primary-color)' }}>{gst.gstin}</span>
-                        <button 
-                            className="ghost-btn" 
+                        <button
+                            className="ghost-btn"
                             onClick={handleCopy}
                             title="Copy GSTIN"
                             style={{ padding: '0.2rem', color: 'var(--text-light)', display: 'inline-flex' }}
@@ -85,6 +101,12 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                             {copied ? <Check size={14} color="var(--success-color)" /> : <Copy size={14} />}
                         </button>
                         {isFirstFetch && <span className="first-fetch-badge">NEW</span>}
+                        {gst.apiError && (
+                            <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px' }} title="API failed">
+                                Error (API)
+                            </span>
+                        )}
+                        {dataSourceBadge(gst.dataSource)}
                     </div>
                     <div className="gst-subtitle" style={{ 
                         fontSize: '0.9rem', 
@@ -135,10 +157,11 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                 </div>
                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>Turnover:</span>
-                    <span className="detail-value" style={{ fontWeight: 600 }}>
-                        {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0) 
-                            ? 'N/A' 
-                            : `${gst.aggregateTurnover} Cr+`}
+                    <span className="detail-value" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}
+                          title={gst.aggregateTurnover || 'N/A'}>
+                        {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0)
+                            ? 'N/A'
+                            : gst.aggregateTurnover}
                     </span>
                 </div>
                 

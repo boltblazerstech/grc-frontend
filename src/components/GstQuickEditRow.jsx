@@ -77,6 +77,11 @@ const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index }) => {
                     >
                         {copied ? <Check size={14} color="var(--success-color)" /> : <Copy size={14} />}
                     </button>
+                    {gst.apiError && (
+                        <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px', whiteSpace: 'nowrap' }} title="API failed">
+                            Error (API)
+                        </span>
+                    )}
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>{gst.tradeName || gst.legalName || 'N/A'}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -138,8 +143,8 @@ const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index }) => {
                     </div>
 
                     <div className="input-group" style={{ marginBottom: 0 }}>
-                        <label style={{ fontSize: '0.7rem', marginBottom: '2px', display: 'block' }}>Turnover (Cr)</label>
-                        <input type="number" step="0.01" className="form-control form-control-sm" name="aggregateTurnover" value={formData.aggregateTurnover} onChange={handleInputChange} />
+                        <label style={{ fontSize: '0.7rem', marginBottom: '2px', display: 'block' }}>Turnover</label>
+                        <input type="text" className="form-control form-control-sm" name="aggregateTurnover" value={formData.aggregateTurnover} onChange={handleInputChange} placeholder="e.g. Slab: Rs. 25 Cr. to 100 Cr." />
                     </div>
 
                     <div className="input-group" style={{ marginBottom: 0 }}>

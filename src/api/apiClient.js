@@ -192,5 +192,29 @@ export const apiClient = {
         });
         if (!response.ok) throw new Error('Failed to update rule config');
         return response.json();
+    },
+
+    async getGstDetailsAdmin(gstin) {
+        const response = await fetch(`${API_BASE_URL}/details/${gstin}/admin`, {
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to fetch admin detail for GSTIN');
+        return response.json();
+    },
+
+    async refreshGstFromApi(gstins = []) {
+        const response = await fetch(`${API_BASE_URL}/admin/refresh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Role': 'super_admin'
+            },
+            body: JSON.stringify({ gstins })
+        });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Failed to refresh GST data from API');
+        }
+        return response.json();
     }
 };
