@@ -217,7 +217,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
         setIsRefreshing(true);
         setRefreshResult(null);
         try {
-            const result = await apiClient.refreshGstFromApi([...selectedGstins]);
+            const result = await apiClient.refreshGstFromApi([...selectedGstins], currentUser?.name);
             setRefreshResult(result);
             setSelectedGstins(new Set());
             await fetchDashboardData();

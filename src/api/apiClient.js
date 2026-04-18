@@ -202,14 +202,14 @@ export const apiClient = {
         return response.json();
     },
 
-    async refreshGstFromApi(gstins = []) {
+    async refreshGstFromApi(gstins = [], updatedBy = null) {
         const response = await fetch(`${API_BASE_URL}/admin/refresh`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Role': 'super_admin'
             },
-            body: JSON.stringify({ gstins })
+            body: JSON.stringify({ gstins, updatedBy })
         });
         if (!response.ok) {
             const err = await response.text();
