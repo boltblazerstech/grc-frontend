@@ -627,20 +627,23 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                             <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.gstStatus || 'N/A'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Turnover:</span>
-                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Age:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.registrationDate ? 'Pending' : 'N/A'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Type:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.gstType ? gst.gstType.split(' ')[0] : 'N/A'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            {/* Empty to balance grid */}
+                                        </div>
+                                        <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem' }}>
+                                            <span style={{ color: '#fdba74', opacity: 0.9, minWidth: '65px' }}>Turnover:</span>
+                                            <span style={{ color: '#fed7aa', fontWeight: 600, textAlign: 'right' }}>
                                                 {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0)
                                                     ? 'N/A'
                                                     : gst.aggregateTurnover}
                                             </span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '0.5rem' }}>
-                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Age:</span>
-                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.registrationDate ? 'Pending' : 'N/A'}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: '#fdba74', opacity: 0.9 }}>Type:</span>
-                                            <span style={{ color: '#fed7aa', fontWeight: 600 }}>{gst.gstType ? gst.gstType.split(' ')[0] : 'N/A'}</span>
                                         </div>
                                     </div>
 

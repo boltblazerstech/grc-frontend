@@ -156,33 +156,41 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                     </span>
                 </div>
                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>Turnover:</span>
-                    <span className="detail-value" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}
-                          title={gst.aggregateTurnover || 'N/A'}>
-                        {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0)
-                            ? 'N/A'
-                            : gst.aggregateTurnover}
-                    </span>
-                </div>
-                
-                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '1rem' }}>
                     <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>Age:</span>
                     <span className="detail-value" style={{ fontWeight: 600 }}>{calculateAge(gst.registrationDate)}</span>
                 </div>
-                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                
+                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '1rem' }}>
                     <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>Type:</span>
                     <span className="detail-value" style={{ fontWeight: 600 }} title={gst.gstType}>
                         {formatGstType(gst.gstType)}
                     </span>
                 </div>
-
-                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '1rem' }}>
-                    <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>GSTR-1:</span>
-                    <span className="detail-value" style={{ fontWeight: 600 }}>{gst.delayCountGstr1 !== null ? gst.delayCountGstr1 : 'N/A'}</span>
-                </div>
                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>GSTR-3B:</span>
-                    <span className="detail-value" style={{ fontWeight: 600 }}>{gst.delayCountGstr3b !== null ? gst.delayCountGstr3b : 'N/A'}</span>
+                    {/* Empty cell to keep grid balanced, or we can just leave it */}
+                </div>
+
+                <div className="detail-row" style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem' }}>
+                    <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500, minWidth: '65px' }}>Turnover:</span>
+                    <span className="detail-value" style={{ fontWeight: 600, textAlign: 'right' }}>
+                        {(!gst.aggregateTurnover || gst.aggregateTurnover === "0" || gst.aggregateTurnover === 0)
+                            ? 'N/A'
+                            : gst.aggregateTurnover}
+                    </span>
+                </div>
+
+                <div style={{ gridColumn: 'span 2', marginTop: '0.3rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.4rem', opacity: 0.9 }}>
+                    <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-light)', fontWeight: 700, marginBottom: '0.3rem', letterSpacing: '0.5px' }}>Delay Count</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.4rem 0.5rem' }}>
+                        <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', paddingRight: '1rem' }}>
+                            <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>GSTR-1:</span>
+                            <span className="detail-value" style={{ fontWeight: 600 }}>{gst.delayCountGstr1 !== null ? gst.delayCountGstr1 : 'N/A'}</span>
+                        </div>
+                        <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span className="detail-label" style={{ color: 'var(--text-light)', fontWeight: 500 }}>GSTR-3B:</span>
+                            <span className="detail-value" style={{ fontWeight: 600 }}>{gst.delayCountGstr3b !== null ? gst.delayCountGstr3b : 'N/A'}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
