@@ -109,6 +109,7 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                 aggregateTurnover: formData.aggregateTurnover,
                 delayCountGstr1: parseInt(formData.delayCountGstr1),
                 delayCountGstr3b: parseInt(formData.delayCountGstr3b),
+                updatedBy: currentUser?.name || null,
                 ...(isAdmin && {
                     mobile: formData.mobile || null,
                     email: formData.email || null,

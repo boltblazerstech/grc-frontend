@@ -692,6 +692,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                             gst={gst}
                                             getScoreColor={(score) => getScoreColor(score, thresholds)}
                                             onUpdate={handleUpdateItemInList}
+                                            currentUser={currentUser}
                                         />
                                     </div>
                                 </div>

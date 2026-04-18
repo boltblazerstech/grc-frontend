@@ -4,7 +4,7 @@ import { apiClient } from '../api/apiClient';
 
 const REQUIRED_LABEL_STYLE = { color: 'var(--danger-color)', marginLeft: '2px' };
 
-const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index }) => {
+const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index, currentUser }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [formData, setFormData] = useState({
@@ -37,6 +37,7 @@ const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index }) => {
                 ...formData,
                 delayCountGstr1: parseInt(formData.delayCountGstr1 || 0),
                 delayCountGstr3b: parseInt(formData.delayCountGstr3b || 0),
+                updatedBy: currentUser?.name || null,
             };
             // updateDetails already triggers recalculation and returns full object
             const updated = await apiClient.updateDetails(gst.gstin, payload);
