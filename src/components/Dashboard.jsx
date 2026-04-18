@@ -26,6 +26,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     // Search and Filter state
     const [searchTerm, setSearchTerm] = useState('');
     const [scoreFilter, setScoreFilter] = useState('all'); // 'all', 'good', 'okay', 'watch'
+    const [sourceFilter, setSourceFilter] = useState('all'); // 'all', 'api', 'manual', 'error'
 
     // New GST Feature
     const [showFetchModal, setShowFetchModal] = useState(false);
@@ -204,13 +205,22 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
             });
         }
 
+        if (sourceFilter !== 'all') {
+            list = list.filter(g => {
+                if (sourceFilter === 'api') return g.dataSource === 'API' && !g.apiError;
+                if (sourceFilter === 'manual') return g.dataSource === 'Manual';
+                if (sourceFilter === 'error') return g.apiError === true;
+                return true;
+            });
+        }
+
         return list.sort((a, b) => {
             if (a.scoreCalculatedAt && b.scoreCalculatedAt) {
                 return new Date(b.scoreCalculatedAt) - new Date(a.scoreCalculatedAt);
             }
             return a.gstin.localeCompare(b.gstin);
         });
-    }, [gstList, searchTerm, scoreFilter, thresholds]);
+    }, [gstList, searchTerm, scoreFilter, sourceFilter, thresholds]);
 
     const handleAdminRefresh = async () => {
         if (selectedGstins.size === 0) return;
@@ -355,66 +365,111 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                 </div>
             </div>
 
-            {/* Score Filter Buttons */}
-            <div style={{ 
-                display: 'flex', 
-                gap: '1rem', 
-                marginBottom: '1rem', 
-                flexWrap: 'wrap',
-                alignItems: 'center'
-            }}>
-                <button 
-                    onClick={() => setScoreFilter('all')}
-                    className={`btn ${scoreFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                >
-                    All
-                </button>
-                <button 
-                    onClick={() => setScoreFilter(scoreFilter === 'watch' ? 'all' : 'watch')}
-                    style={{ 
-                        display: 'flex', alignItems: 'center', gap: '0.5rem', 
-                        padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                        border: scoreFilter === 'watch' ? '2px solid var(--danger-color)' : '1px solid var(--border-color)',
-                        backgroundColor: scoreFilter === 'watch' ? 'rgba(239, 68, 68, 0.1)' : 'white',
-                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
-                    }}
-                >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--danger-color)' }}></span>
-                    <span>{'>'}30 Under WatchList</span>
-                </button>
-                <button 
-                    onClick={() => setScoreFilter(scoreFilter === 'okay' ? 'all' : 'okay')}
-                    style={{ 
-                        display: 'flex', alignItems: 'center', gap: '0.5rem', 
-                        padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                        border: scoreFilter === 'okay' ? '2px solid var(--warning-color)' : '1px solid var(--border-color)',
-                        backgroundColor: scoreFilter === 'okay' ? 'rgba(234, 179, 8, 0.1)' : 'white',
-                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
-                    }}
-                >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--warning-color)' }}></span>
-                    <span>20-30 Okay</span>
-                </button>
-                <button 
-                    onClick={() => setScoreFilter(scoreFilter === 'good' ? 'all' : 'good')}
-                    style={{ 
-                        display: 'flex', alignItems: 'center', gap: '0.5rem', 
-                        padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                        border: scoreFilter === 'good' ? '2px solid var(--success-color)' : '1px solid var(--border-color)',
-                        backgroundColor: scoreFilter === 'good' ? 'rgba(34, 197, 94, 0.1)' : 'white',
-                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
-                    }}
-                >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--success-color)' }}></span>
-                    <span>{'<'}20 Good</span>
-                </button>
+            {/* Filters Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>By Score:</span>
+                    <button 
+                        onClick={() => setScoreFilter('all')}
+                        className={`btn ${scoreFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                    >
+                        All
+                    </button>
+                    <button 
+                        onClick={() => setScoreFilter(scoreFilter === 'watch' ? 'all' : 'watch')}
+                        style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                            border: scoreFilter === 'watch' ? '2px solid var(--danger-color)' : '1px solid var(--border-color)',
+                            backgroundColor: scoreFilter === 'watch' ? 'rgba(239, 68, 68, 0.1)' : 'white',
+                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                        }}
+                    >
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--danger-color)' }}></span>
+                        <span>{'>'}30 Under WatchList</span>
+                    </button>
+                    <button 
+                        onClick={() => setScoreFilter(scoreFilter === 'okay' ? 'all' : 'okay')}
+                        style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                            border: scoreFilter === 'okay' ? '2px solid var(--warning-color)' : '1px solid var(--border-color)',
+                            backgroundColor: scoreFilter === 'okay' ? 'rgba(234, 179, 8, 0.1)' : 'white',
+                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                        }}
+                    >
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--warning-color)' }}></span>
+                        <span>20-30 Okay</span>
+                    </button>
+                    <button 
+                        onClick={() => setScoreFilter(scoreFilter === 'good' ? 'all' : 'good')}
+                        style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                            border: scoreFilter === 'good' ? '2px solid var(--success-color)' : '1px solid var(--border-color)',
+                            backgroundColor: scoreFilter === 'good' ? 'rgba(34, 197, 94, 0.1)' : 'white',
+                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                        }}
+                    >
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--success-color)' }}></span>
+                        <span>{'<'}20 Good</span>
+                    </button>
+                </div>
                 
-                {scoreFilter !== 'all' && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
-                        Filtering: <strong>{processedList.length}</strong> items found
-                    </span>
-                )}
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>By Source:</span>
+                    <button 
+                        onClick={() => setSourceFilter('all')}
+                        className={`btn ${sourceFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                    >
+                        All
+                    </button>
+                    <button 
+                        onClick={() => setSourceFilter(sourceFilter === 'api' ? 'all' : 'api')}
+                        style={{ 
+                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                            border: sourceFilter === 'api' ? '2px solid #1e40af' : '1px solid var(--border-color)',
+                            backgroundColor: sourceFilter === 'api' ? '#eff6ff' : 'white',
+                            color: sourceFilter === 'api' ? '#1e40af' : 'var(--text-color)',
+                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                        }}
+                    >
+                        API (Success)
+                    </button>
+                    <button 
+                        onClick={() => setSourceFilter(sourceFilter === 'manual' ? 'all' : 'manual')}
+                        style={{ 
+                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                            border: sourceFilter === 'manual' ? '2px solid #b45309' : '1px solid var(--border-color)',
+                            backgroundColor: sourceFilter === 'manual' ? '#fff7ed' : 'white',
+                            color: sourceFilter === 'manual' ? '#b45309' : 'var(--text-color)',
+                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                        }}
+                    >
+                        Manual Entries
+                    </button>
+                    <button 
+                        onClick={() => setSourceFilter(sourceFilter === 'error' ? 'all' : 'error')}
+                        style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                            border: sourceFilter === 'error' ? '2px solid #b91c1c' : '1px solid var(--border-color)',
+                            backgroundColor: sourceFilter === 'error' ? '#fef2f2' : 'white',
+                            color: sourceFilter === 'error' ? '#b91c1c' : 'var(--text-color)',
+                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                        }}
+                    >
+                        API Errors
+                    </button>
+
+                    {(scoreFilter !== 'all' || sourceFilter !== 'all') && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
+                            Filtering: <strong>{processedList.length}</strong> items found
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* Admin Refresh — sticky action bar */}
