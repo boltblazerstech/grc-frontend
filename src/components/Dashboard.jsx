@@ -74,9 +74,10 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
 
     useEffect(() => {
         fetchDashboardData();
-        // If logged out, force grid view
+        // If logged out, force grid view and reset auth-only filters
         if (!currentUser) {
             setViewMode('grid');
+            setSourceFilter(prev => prev === 'api' ? 'all' : prev);
         }
     }, [forceRefreshFlag, currentUser]);
 
@@ -417,59 +418,61 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     </button>
                 </div>
                 
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>By Source:</span>
-                    <button 
-                        onClick={() => setSourceFilter('all')}
-                        className={`btn ${sourceFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                    >
-                        All
-                    </button>
-                    <button 
-                        onClick={() => setSourceFilter(sourceFilter === 'api' ? 'all' : 'api')}
-                        style={{ 
-                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                            border: sourceFilter === 'api' ? '2px solid #1e40af' : '1px solid var(--border-color)',
-                            backgroundColor: sourceFilter === 'api' ? '#eff6ff' : 'white',
-                            color: sourceFilter === 'api' ? '#1e40af' : 'var(--text-color)',
-                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
-                        }}
-                    >
-                        API (Success)
-                    </button>
-                    <button 
-                        onClick={() => setSourceFilter(sourceFilter === 'manual' ? 'all' : 'manual')}
-                        style={{ 
-                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                            border: sourceFilter === 'manual' ? '2px solid #b45309' : '1px solid var(--border-color)',
-                            backgroundColor: sourceFilter === 'manual' ? '#fff7ed' : 'white',
-                            color: sourceFilter === 'manual' ? '#b45309' : 'var(--text-color)',
-                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
-                        }}
-                    >
-                        Manual Entries
-                    </button>
-                    <button 
-                        onClick={() => setSourceFilter(sourceFilter === 'error' ? 'all' : 'error')}
-                        style={{ 
-                            display: 'flex', alignItems: 'center', gap: '0.3rem',
-                            padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                            border: sourceFilter === 'error' ? '2px solid #b91c1c' : '1px solid var(--border-color)',
-                            backgroundColor: sourceFilter === 'error' ? '#fef2f2' : 'white',
-                            color: sourceFilter === 'error' ? '#b91c1c' : 'var(--text-color)',
-                            fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
-                        }}
-                    >
-                        API Errors
-                    </button>
+                {currentUser && (
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>By Source:</span>
+                        <button
+                            onClick={() => setSourceFilter('all')}
+                            className={`btn ${sourceFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                        >
+                            All
+                        </button>
+                        <button
+                            onClick={() => setSourceFilter(sourceFilter === 'api' ? 'all' : 'api')}
+                            style={{
+                                padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                                border: sourceFilter === 'api' ? '2px solid #1e40af' : '1px solid var(--border-color)',
+                                backgroundColor: sourceFilter === 'api' ? '#eff6ff' : 'white',
+                                color: sourceFilter === 'api' ? '#1e40af' : 'var(--text-color)',
+                                fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                            }}
+                        >
+                            API (Success)
+                        </button>
+                        <button
+                            onClick={() => setSourceFilter(sourceFilter === 'manual' ? 'all' : 'manual')}
+                            style={{
+                                padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                                border: sourceFilter === 'manual' ? '2px solid #b45309' : '1px solid var(--border-color)',
+                                backgroundColor: sourceFilter === 'manual' ? '#fff7ed' : 'white',
+                                color: sourceFilter === 'manual' ? '#b45309' : 'var(--text-color)',
+                                fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                            }}
+                        >
+                            Manual Entries
+                        </button>
+                        <button
+                            onClick={() => setSourceFilter(sourceFilter === 'error' ? 'all' : 'error')}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
+                                border: sourceFilter === 'error' ? '2px solid #b91c1c' : '1px solid var(--border-color)',
+                                backgroundColor: sourceFilter === 'error' ? '#fef2f2' : 'white',
+                                color: sourceFilter === 'error' ? '#b91c1c' : 'var(--text-color)',
+                                fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.2s'
+                            }}
+                        >
+                            API Errors
+                        </button>
 
-                    {(scoreFilter !== 'all' || sourceFilter !== 'all') && (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
-                            Filtering: <strong>{processedList.length}</strong> items found
-                        </span>
-                    )}
-                </div>
+                        {(scoreFilter !== 'all' || sourceFilter !== 'all') && (
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
+                                Filtering: <strong>{processedList.length}</strong> items found
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Admin Refresh — sticky action bar */}
