@@ -344,6 +344,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                 className={`view-toggle-btn ${viewMode === 'edit' ? 'active' : ''}`}
                                 onClick={() => setViewMode('edit')}
                                 title="Quick Edit View"
+                                disabled={showRefreshPanel}
                             >
                                 <Edit3 size={18} />
                             </button>
@@ -351,6 +352,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                 className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
                                 onClick={() => setViewMode('list')}
                                 title="List View"
+                                disabled={showRefreshPanel}
                             >
                                 <List size={18} />
                             </button>
@@ -358,6 +360,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                 className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
                                 onClick={() => setViewMode('grid')}
                                 title="Card View"
+                                disabled={showRefreshPanel}
                             >
                                 <LayoutGrid size={18} />
                             </button>
