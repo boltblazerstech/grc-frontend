@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw, Eye, Copy, Check, CloudDownload, Download } from 'lucide-react';
+import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw, Eye, Copy, Check, CloudDownload, Download, FileText } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 import * as XLSX from 'xlsx';
 import GstCard from './GstCard';
 import GstDetailsModal from './GstDetailsModal';
 import GstQuickEditRow from './GstQuickEditRow';
+import Gstr7Management from './Gstr7Management';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
@@ -44,6 +45,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     const [selectedGstins, setSelectedGstins] = useState(new Set());
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [refreshResult, setRefreshResult] = useState(null);
+    const [showGstr7, setShowGstr7] = useState(false);
 
     const handleCopy = (gstin) => {
         navigator.clipboard.writeText(gstin);
@@ -321,6 +323,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                         >
                             <Download size={16} /> Export Excel
                         </button>
+                        <button
+                            className={`btn ${showGstr7 ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setShowGstr7(!showGstr7)}
+                            style={{ whiteSpace: 'nowrap' }}
+                        >
+                            <FileText size={16} /> {showGstr7 ? 'Back to Dashboard' : 'GSTR-7 Config'}
+                        </button>
                     </div>
                 )}
 
@@ -369,8 +378,14 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                 </div>
             </div>
 
-            {/* Filters Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
+            {showGstr7 ? (
+                <div style={{ marginTop: '1rem' }}>
+                    <Gstr7Management />
+                </div>
+            ) : (
+                <>
+                    {/* Filters Section */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>By Score:</span>
                     <button 
@@ -918,6 +933,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                         </div>
                     )}
                 </div>
+            )}
+                </>
             )}
 
             {selectedGst && (

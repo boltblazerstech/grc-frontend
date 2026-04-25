@@ -216,5 +216,85 @@ export const apiClient = {
             throw new Error(err || 'Failed to refresh GST data from API');
         }
         return response.json();
+    },
+
+    // ── GSTR-7 Management Endpoints ──────────────────────────────────────────
+
+    async getPanGstr7Data() {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/pans`, {
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to fetch PAN GSTR-7 data');
+        return response.json();
+    },
+
+    async saveHsn(pan, hsnCode) {
+        const savedUser = localStorage.getItem('grc_user');
+        const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
+
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Role': 'super_admin'
+            },
+            body: JSON.stringify({ pan, hsnCode, updatedBy: userName })
+        });
+        if (!response.ok) throw new Error('Failed to save HSN');
+        return response.json();
+    },
+
+    async markUnmarkGstd(gstin, gstdNo) {
+        const queryParam = gstdNo ? `?gstdNo=${encodeURIComponent(gstdNo)}` : '';
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/gstd/${gstin}${queryParam}`, {
+            method: 'PUT',
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to mark/unmark GSTD');
+        return response.json();
+    },
+
+    async updateGstr7Status(gstin, status, delayCount) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/status/${gstin}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Role': 'super_admin'
+            },
+            body: JSON.stringify({ status, delayCount })
+        });
+        if (!response.ok) throw new Error('Failed to update GSTR-7 status');
+        return response.json();
+    },
+
+    // Master HSN list for GSTR-7
+    async getGstr7HsnMaster() {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-master`, {
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to fetch HSN master list');
+        return response.json();
+    },
+
+    async addGstr7HsnMaster(hsnCode, description) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-master`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Role': 'super_admin'
+            },
+            body: JSON.stringify({ hsnCode, description })
+        });
+        if (!response.ok) throw new Error('Failed to add HSN to master list');
+        return response.json();
+    },
+
+    async deleteGstr7HsnMaster(hsnCode) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-master/${hsnCode}`, {
+            method: 'DELETE',
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to delete HSN from master list');
+        return response;
     }
 };

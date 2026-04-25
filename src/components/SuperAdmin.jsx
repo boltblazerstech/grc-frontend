@@ -133,12 +133,15 @@ const SuperAdmin = ({ currentUser }) => {
 
     return (
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <h2 style={{ marginBottom: '1.5rem', color: 'var(--primary-color)' }}>Super Admin Panel</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h2 style={{ color: 'var(--primary-color)', margin: 0 }}>Super Admin Panel</h2>
+            </div>
 
             {error && <div style={{ color: 'white', backgroundColor: 'var(--danger-color)', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>{error}</div>}
             {successMsg && <div style={{ color: 'white', backgroundColor: 'var(--success-color)', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>{successMsg}</div>}
 
-            <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--warning-color)', background: 'rgba(234, 179, 8, 0.05)' }}>
+
+                    <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--warning-color)', background: 'rgba(234, 179, 8, 0.05)' }}>
                 <h3 style={{ color: 'var(--warning-color)' }}>System Maintenance</h3>
                 <p style={{ fontSize: '0.85rem', margin: '0.5rem 0 1rem', color: 'var(--text-light)' }}>
                     Use these tools to maintain system integrity. 
