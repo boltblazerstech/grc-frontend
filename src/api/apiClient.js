@@ -228,19 +228,19 @@ export const apiClient = {
         return response.json();
     },
 
-    async assignCategoryToPan(pan, categoryId) {
+    async saveHsn(pan, hsnCode) {
         const savedUser = localStorage.getItem('grc_user');
         const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
 
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn`, {
             method: 'POST',
-            headers: {
+            headers: { 
                 'Content-Type': 'application/json',
                 'Role': 'super_admin'
             },
-            body: JSON.stringify({ pan, categoryId, updatedBy: userName })
+            body: JSON.stringify({ pan, hsnCode, updatedBy: userName })
         });
-        if (!response.ok) throw new Error('Failed to assign category');
+        if (!response.ok) throw new Error('Failed to save HSN');
         return response.json();
     },
 
@@ -254,142 +254,47 @@ export const apiClient = {
         return response.json();
     },
 
-    async updateGstr7Status(gstin, status, delayCount, missedCount) {
+    async updateGstr7Status(gstin, status, delayCount) {
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/status/${gstin}`, {
             method: 'PUT',
             headers: { 
                 'Content-Type': 'application/json',
                 'Role': 'super_admin'
             },
-            body: JSON.stringify({ status, delayCount, missedCount })
+            body: JSON.stringify({ status, delayCount })
         });
         if (!response.ok) throw new Error('Failed to update GSTR-7 status');
         return response.json();
     },
 
-    // HSN Categories
-    async getHsnCategories() {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-categories`, {
+    // Master HSN list for GSTR-7
+    async getGstr7HsnMaster() {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-master`, {
             headers: { 'Role': 'super_admin' }
         });
-        if (!response.ok) throw new Error('Failed to fetch HSN categories');
+        if (!response.ok) throw new Error('Failed to fetch HSN master list');
         return response.json();
     },
 
-    async addHsnCategory(name, description) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-categories`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Role': 'super_admin' },
-            body: JSON.stringify({ name, description })
-        });
-        if (!response.ok) throw new Error('Failed to add HSN category');
-        return response.json();
-    },
-
-    async deleteHsnCategory(id) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-categories/${id}`, {
-            method: 'DELETE',
-            headers: { 'Role': 'super_admin' }
-        });
-        if (!response.ok) throw new Error('Failed to delete HSN category');
-    },
-
-    async addCodeToCategory(categoryId, hsnCode, description) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-categories/${categoryId}/codes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Role': 'super_admin' },
-            body: JSON.stringify({ hsnCode, description })
-        });
-        if (!response.ok) throw new Error('Failed to add HSN code');
-        return response.json();
-    },
-
-    async removeCodeFromCategory(categoryId, hsnCode) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-categories/${categoryId}/codes/${hsnCode}`, {
-            method: 'DELETE',
-            headers: { 'Role': 'super_admin' }
-        });
-        if (!response.ok) throw new Error('Failed to remove HSN code');
-    },
-
-    // GSTR-7 Filing History (AI-powered)
-    async parseGstr7Filing(gstin, tableText) {
-        const savedUser = localStorage.getItem('grc_user');
-        const userRole = savedUser ? JSON.parse(savedUser).role : 'user';
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/parse-filing`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Role': userRole },
-            body: JSON.stringify({ gstin, tableText })
-        });
-        if (!response.ok) {
-            const msg = await response.text();
-            throw new Error(msg || 'AI parsing failed');
-        }
-        return response.json();
-    },
-
-    async saveGstr7Filing(gstin, records) {
-        const savedUser = localStorage.getItem('grc_user');
-        const userRole = savedUser ? JSON.parse(savedUser).role : 'user';
-        const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
-
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/save-filing`, {
+    async addGstr7HsnMaster(hsnCode, description) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-master`, {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json', 
-                'Role': userRole,
-                'Username': userName
+                'Content-Type': 'application/json',
+                'Role': 'super_admin'
             },
-            body: JSON.stringify({ gstin, records })
+            body: JSON.stringify({ hsnCode, description })
         });
-        if (!response.ok) {
-            const msg = await response.text();
-            throw new Error(msg || 'Failed to save filing data');
-        }
+        if (!response.ok) throw new Error('Failed to add HSN to master list');
         return response.json();
     },
 
-    async getGstr7FilingDetails(gstin) {
-        const savedUser = localStorage.getItem('grc_user');
-        const userRole = savedUser ? JSON.parse(savedUser).role : 'user';
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/filing-details/${gstin}`, {
-            headers: { 'Role': userRole }
-        });
-        if (!response.ok) throw new Error('Failed to fetch filing details');
-        return response.json();
-    },
-
-    async getPendingReviews() {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews`, {
-            headers: { 'Role': 'super_admin' }
-        });
-        if (!response.ok) throw new Error('Failed to fetch pending reviews');
-        return response.json();
-    },
-
-    async getReviewsForGstin(gstin) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews`, {
-            headers: { 'Role': 'super_admin' }
-        });
-        if (!response.ok) return [];
-        const all = await response.json();
-        return all.filter(r => r.gstin === gstin);
-    },
-
-    async approveReview(id, records) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews/${id}/approve`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Role': 'super_admin' },
-            body: JSON.stringify({ records })
-        });
-        if (!response.ok) throw new Error('Failed to approve review');
-    },
-
-    async rejectReview(id) {
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews/${id}/reject`, {
+    async deleteGstr7HsnMaster(hsnCode) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-master/${hsnCode}`, {
             method: 'DELETE',
             headers: { 'Role': 'super_admin' }
         });
-        if (!response.ok) throw new Error('Failed to reject review');
+        if (!response.ok) throw new Error('Failed to delete HSN from master list');
+        return response;
     }
 };
