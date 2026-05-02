@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 
-const UserProfileModal = ({ user, onClose, onLogout }) => {
+const UserProfileModal = ({ user, onClose, onLogout, isEmbedded = false }) => {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -44,15 +44,14 @@ const UserProfileModal = ({ user, onClose, onLogout }) => {
         }
     };
 
-    return (
-        <div className="modal-overlay">
-            <div className="modal-content" style={{ maxWidth: '400px' }}>
-                <div className="modal-header">
-                    <h2>User Profile</h2>
-                    <button className="close-btn" onClick={onClose}><X size={24} /></button>
-                </div>
-                
-                <div className="modal-body">
+    const content = (
+        <>
+            <div className={isEmbedded ? "" : "modal-header"}>
+                <h2>{isEmbedded ? "Account Details" : "User Profile"}</h2>
+                {!isEmbedded && <button className="close-btn" onClick={onClose}><X size={24} /></button>}
+            </div>
+            
+            <div className={isEmbedded ? "" : "modal-body"}>
                     <div style={{ marginBottom: '2rem' }}>
                         <p style={{ margin: '0.25rem 0', color: 'var(--text-light)' }}>Name:</p>
                         <h3 style={{ margin: '0 0 1rem 0' }}>{user.name}</h3>
@@ -162,7 +161,18 @@ const UserProfileModal = ({ user, onClose, onLogout }) => {
                     >
                         Logout
                     </button>
-                </div>
+            </div>
+        </>
+    );
+
+    if (isEmbedded) {
+        return content;
+    }
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-content" style={{ maxWidth: '400px' }}>
+                {content}
             </div>
         </div>
     );

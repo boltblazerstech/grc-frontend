@@ -45,7 +45,6 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     const [selectedGstins, setSelectedGstins] = useState(new Set());
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [refreshResult, setRefreshResult] = useState(null);
-    const [showGstr7, setShowGstr7] = useState(false);
 
     const handleCopy = (gstin) => {
         navigator.clipboard.writeText(gstin);
@@ -316,22 +315,15 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                                 <CloudDownload size={16} /> {showRefreshPanel ? 'Cancel Refresh' : 'Refresh from API'}
                             </button>
                         )}
-                        <button
-                            className="btn btn-secondary"
-                            onClick={handleExportExcel}
-                            style={{ whiteSpace: 'nowrap', borderColor: '#10b981', color: '#047857', background: '#d1fae5' }}
-                        >
-                            <Download size={16} /> Export Excel
-                        </button>
-                        <button
-                            className={`btn ${showGstr7 ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setShowGstr7(!showGstr7)}
-                            style={{ whiteSpace: 'nowrap' }}
-                        >
-                            <FileText size={16} /> {showGstr7 ? 'Back to Dashboard' : 'GSTR-7 Config'}
-                        </button>
-                    </div>
-                )}
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleExportExcel}
+                                style={{ whiteSpace: 'nowrap', borderColor: '#10b981', color: '#047857', background: '#d1fae5' }}
+                            >
+                                <Download size={16} /> Export Excel
+                            </button>
+                        </div>
+                    )}
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <div className="search-bar">
@@ -378,13 +370,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                 </div>
             </div>
 
-            {showGstr7 ? (
-                <div style={{ marginTop: '1rem' }}>
-                    <Gstr7Management />
-                </div>
-            ) : (
-                <>
-                    {/* Filters Section */}
+            <div style={{ marginTop: '1rem' }}>
+                {/* Filters Section */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>By Score:</span>
@@ -934,8 +921,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     )}
                 </div>
             )}
-                </>
-            )}
+        </div>
 
             {selectedGst && (
                 <GstDetailsModal
