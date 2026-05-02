@@ -367,6 +367,15 @@ export const apiClient = {
         return response.json();
     },
 
+    async getReviewsForGstin(gstin) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews`, {
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) return [];
+        const all = await response.json();
+        return all.filter(r => r.gstin === gstin);
+    },
+
     async approveReview(id, records) {
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews/${id}/approve`, {
             method: 'POST',

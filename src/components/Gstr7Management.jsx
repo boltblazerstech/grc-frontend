@@ -34,13 +34,31 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
     const [loadingHistory, setLoadingHistory] = useState(true);
     const [err, setErr] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+    const [pendingReviews, setPendingReviews] = useState([]);
+    const [approvingReviewId, setApprovingReviewId] = useState(null);
+    const [rejectingReviewId, setRejectingReviewId] = useState(null);
+
+    const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
+    const isSuperAdmin = savedUser.role === 'super_admin';
 
     useEffect(() => {
         document.body.style.overflow = 'hidden';
-        apiClient.getGstr7FilingDetails(gstin)
-            .then(data => setHistory(data))
-            .catch(() => setHistory([]))
-            .finally(() => setLoadingHistory(false));
+        const loadData = async () => {
+            try {
+                const hist = await apiClient.getGstr7FilingDetails(gstin);
+                setHistory(hist);
+                // Only fetch reviews if super_admin and no history
+                if (isSuperAdmin && (!hist || hist.length === 0)) {
+                    const reviews = await apiClient.getReviewsForGstin(gstin);
+                    setPendingReviews(reviews.filter(r => r.status === 'PENDING'));
+                }
+            } catch {
+                setHistory([]);
+            } finally {
+                setLoadingHistory(false);
+            }
+        };
+        loadData();
         return () => { document.body.style.overflow = ''; };
     }, [gstin]);
 
@@ -85,6 +103,30 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
             }
         } catch (e) { showMsg('Save failed: ' + e.message, true); }
         finally { setSaving(false); }
+    };
+
+    const handleApproveReview = async (review) => {
+        setApprovingReviewId(review.id);
+        try {
+            const records = JSON.parse(review.recordsJson || '[]');
+            await apiClient.approveReview(review.id, records);
+            setPendingReviews(prev => prev.filter(r => r.id !== review.id));
+            const updated = await apiClient.getGstr7FilingDetails(gstin);
+            setHistory(updated);
+            showMsg('Review approved and filing saved successfully!');
+            if (onSaved) onSaved();
+        } catch (e) { showMsg('Approval failed: ' + e.message, true); }
+        finally { setApprovingReviewId(null); }
+    };
+
+    const handleRejectReview = async (id) => {
+        setRejectingReviewId(id);
+        try {
+            await apiClient.rejectReview(id);
+            setPendingReviews(prev => prev.filter(r => r.id !== id));
+            showMsg('Review rejected and removed.');
+        } catch (e) { showMsg('Rejection failed: ' + e.message, true); }
+        finally { setRejectingReviewId(null); }
     };
 
     const fmtPeriod = (rp) => {
@@ -147,6 +189,56 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    ) : pendingReviews.length > 0 ? (
+                        /* ── Pending Review Section (super_admin only, no history) ── */
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            {pendingReviews.map(review => {
+                                const records = (() => { try { return JSON.parse(review.recordsJson || '[]'); } catch { return []; } })();
+                                return (
+                                    <div key={review.id} style={{ border: '1.5px solid #f59e0b', borderRadius: '10px', overflow: 'hidden', marginBottom: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 1rem', backgroundColor: '#fef3c7' }}>
+                                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                ⏳ PENDING REVIEW — submitted by <strong>{review.submittedBy || 'user'}</strong>
+                                            </span>
+                                            <span style={{ fontSize: '0.72rem', color: '#b45309' }}>{review.createdAt ? new Date(review.createdAt).toLocaleString() : ''}</span>
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+                                            <thead>
+                                                <tr style={{ backgroundColor: '#fffbeb' }}>
+                                                    {['Period', 'Filed On'].map(h => (
+                                                        <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.72rem', color: '#92400e', textTransform: 'uppercase' }}>{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {records.map((r, i) => (
+                                                    <tr key={r.returnPeriod} style={{ borderBottom: '1px solid #fde68a', backgroundColor: i % 2 === 0 ? 'white' : '#fffbeb' }}>
+                                                        <td style={{ padding: '0.4rem 0.75rem', fontWeight: 600 }}>{fmtPeriod(r.returnPeriod)}</td>
+                                                        <td style={{ padding: '0.4rem 0.75rem' }}>{r.dateOfFiling || <span style={{ fontStyle: 'italic', color: 'var(--text-light)' }}>Not Filed</span>}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.6rem 0.75rem', backgroundColor: '#fffbeb', borderTop: '1px solid #fde68a' }}>
+                                            <button
+                                                onClick={() => handleApproveReview(review)}
+                                                disabled={approvingReviewId === review.id}
+                                                style={{ padding: '0.35rem 0.9rem', fontSize: '0.78rem', fontWeight: 600, background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                {approvingReviewId === review.id ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>Approving...</> : '✓ Approve & Save'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleRejectReview(review.id)}
+                                                disabled={rejectingReviewId === review.id}
+                                                style={{ padding: '0.35rem 0.9rem', fontSize: '0.78rem', fontWeight: 600, background: 'transparent', color: '#ef4444', border: '1.5px solid #ef4444', borderRadius: '6px', cursor: 'pointer' }}
+                                            >
+                                                {rejectingReviewId === review.id ? 'Rejecting...' : '✕ Reject'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ) : (
                         <div style={{ backgroundColor: '#f8f9fa', border: '1px dashed var(--border-color)', borderRadius: '8px', padding: '1.5rem', textAlign: 'center', marginBottom: '1.5rem' }}>
@@ -971,7 +1063,13 @@ const Gstr7Management = () => {
                                                                                         {g.gstr7LastUpdated ? new Date(g.gstr7LastUpdated).toLocaleString() : <span style={{ fontStyle: 'italic' }}>Never</span>}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                                                                        <button className="btn btn-primary" onClick={() => handleSaveGstinRow(panObj.panNumber, g)} disabled={savingGstinRow === g.gstin} style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                                                        <button
+                                                                                            className="btn btn-primary"
+                                                                                            onClick={() => handleSaveGstinRow(panObj.panNumber, g)}
+                                                                                            disabled={savingGstinRow === g.gstin || !hasGstd}
+                                                                                            title={!hasGstd ? 'Mark as GSTD first' : 'Save Configuration'}
+                                                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem', whiteSpace: 'nowrap', opacity: !hasGstd ? 0.4 : 1, cursor: !hasGstd ? 'not-allowed' : 'pointer' }}
+                                                                                        >
                                                                                             {savingGstinRow === g.gstin
                                                                                                 ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px', marginRight: '4px' }}></span>Saving...</>
                                                                                                 : <><Save size={13} style={{ marginRight: '4px' }} />Save Config</>}
@@ -979,14 +1077,19 @@ const Gstr7Management = () => {
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem', textAlign: 'right' }}>
                                                                                         <button
-                                                                                            title="Import / View Filing History"
-                                                                                            onClick={() => setModalGstin(g.gstin)}
+                                                                                            title={!hasGstd ? 'Mark as GSTD first' : 'Import / View Filing History'}
+                                                                                            onClick={() => hasGstd && setModalGstin(g.gstin)}
+                                                                                            disabled={!hasGstd}
                                                                                             style={{
                                                                                                 padding: '0.3rem 0.65rem', fontSize: '0.78rem', borderRadius: '4px',
-                                                                                                border: '1.5px solid var(--primary-color)',
-                                                                                                backgroundColor: 'transparent', color: 'var(--primary-color)',
-                                                                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
-                                                                                            }}>
+                                                                                                border: `1.5px solid ${hasGstd ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                                                                                                backgroundColor: 'transparent',
+                                                                                                color: hasGstd ? 'var(--primary-color)' : 'var(--text-light)',
+                                                                                                cursor: hasGstd ? 'pointer' : 'not-allowed',
+                                                                                                opacity: hasGstd ? 1 : 0.4,
+                                                                                                display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+                                                                                            }}
+                                                                                        >
                                                                                             <Plus size={13} /> Import
                                                                                         </button>
                                                                                     </td>
