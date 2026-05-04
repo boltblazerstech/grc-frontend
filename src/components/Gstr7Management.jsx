@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/apiClient';
-import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, Trash2, Tag, History, Sparkles } from 'lucide-react';
+import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, Trash2, Tag, History, Sparkles, ClipboardList } from 'lucide-react';
+import Gstr7ReviewPage from './Gstr7ReviewPage';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -569,6 +570,10 @@ let _cachedCats = null;
 // ── Main component ────────────────────────────────────────────────────────────
 
 const Gstr7Management = () => {
+    const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
+    const isSuperAdmin = savedUser.role === 'super_admin';
+
+    const [activeTab, setActiveTab] = useState('pans');
     const [pansData, setPansData] = useState(_cachedPans || []);
     const [categories, setCategories] = useState(_cachedCats || []);
     const [loading, setLoading] = useState(!_cachedPans);
@@ -835,6 +840,25 @@ const Gstr7Management = () => {
         return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><div className="spinner"></div></div>;
     }
 
+    if (activeTab === 'reviews' && isSuperAdmin) {
+        return (
+            <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <button
+                        onClick={() => setActiveTab('pans')}
+                        style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', background: 'transparent', color: 'var(--text-light)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                        ← Back to PAN Management
+                    </button>
+                    <h3 style={{ margin: 0, color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <ClipboardList size={20} /> GSTR-7 Pending Reviews
+                    </h3>
+                </div>
+                <Gstr7ReviewPage />
+            </div>
+        );
+    }
+
     return (
         <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -863,6 +887,16 @@ const Gstr7Management = () => {
                                 </button>
                             </div>
                         </>
+                    )}
+                    {isSuperAdmin && (
+                        <button
+                            onClick={() => setActiveTab('reviews')}
+                            className="btn btn-secondary"
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderColor: '#7c3aed', color: '#5b21b6' }}
+                        >
+                            <ClipboardList size={14} style={{ marginRight: '6px' }} />
+                            Pending Reviews
+                        </button>
                     )}
                     <button className="btn btn-secondary" onClick={() => setShowManage(!showManage)}
                         style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>

@@ -1,19 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
 :root {
-  --primary-color: #2596be;
-  --primary-hover: #1e7a9b;
-  --bg-color: #f4f7f6;
+  --primary-color: #4f46e5;
+  --primary-hover: #4338ca;
+  --bg-color: #f8fafc;
   --surface-color: #ffffff;
-  --text-dark: #333333;
-  --text-light: #666666;
-  --border-color: #e0e0e0;
-  --success-color: #4caf50;
-  --warning-color: #ff9800;
-  --danger-color: #f44336;
-  --new-item-bg: #e3f2fd;
+  --text-dark: #0f172a;
+  --text-light: #64748b;
+  --border-color: #e2e8f0;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --new-item-bg: #e0e7ff;
   --transition-speed: 0.3s;
-  --border-radius: 8px;
-  --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  --bg-alt-color: #dfebea;
+  --border-radius: 16px;
+  --box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+  --bg-alt-color: #f1f5f9;
 }
 
 * {
@@ -23,7 +25,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-dark);
   line-height: 1.6;
@@ -72,16 +74,18 @@ textarea {
 
 /* Navbar */
 .navbar {
-  background-color: var(--surface-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  padding: 0.5rem 2rem;
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  padding: 0.75rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   position: sticky;
   top: 0;
   z-index: 100;
-  border-bottom: 2px solid var(--primary-color);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .navbar h1 {
@@ -163,7 +167,7 @@ textarea {
 }
 
 .btn-secondary:hover {
-  background-color: rgba(37, 150, 190, 0.05);
+  background-color: rgba(79, 70, 229, 0.05);
 }
 
 .btn-danger {
@@ -179,9 +183,9 @@ textarea {
   background-color: var(--surface-color);
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
-  padding: 1rem 1.25rem;
-  transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
-  border: 1px solid var(--border-color);
+  padding: 1.5rem;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 /* Form Elements */
@@ -208,7 +212,7 @@ textarea {
 .form-control:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(37, 150, 190, 0.2);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 /* Dashboard specific Layouts */
@@ -235,7 +239,7 @@ textarea {
 /* GST List */
 .gst-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 1.5rem;
 }
 
@@ -244,8 +248,8 @@ textarea {
 }
 
 .gst-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
   border-color: var(--primary-color);
 }
 
@@ -524,7 +528,7 @@ textarea {
 }
 
 .view-toggle-btn:hover:not(.active) {
-  background-color: rgba(37, 150, 190, 0.08);
+  background-color: rgba(79, 70, 229, 0.08);
 }
 
 /* Table / List View */
@@ -573,7 +577,7 @@ textarea {
 }
 
 .gst-table-row:hover {
-  background-color: rgba(37, 150, 190, 0.05);
+  background-color: rgba(79, 70, 229, 0.05);
 }
 
 .gst-table-row.new-item {
@@ -640,7 +644,7 @@ textarea {
 }
 
 .breakdown-toggle:hover {
-  background-color: rgba(37, 150, 190, 0.05);
+  background-color: rgba(79, 70, 229, 0.05);
 }
 
 .breakdown-body {

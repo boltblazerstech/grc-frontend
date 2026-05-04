@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import SuperAdmin from './components/SuperAdmin';
+import Gstr7Management from './components/Gstr7Management';
 import { apiClient } from './api/apiClient';
 import './App.css';
 
@@ -11,6 +12,7 @@ function App() {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [forceRefreshFlag, setForceRefreshFlag] = useState(0);
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
+  const [showGstr7, setShowGstr7] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
 
   // Check simple local storage on mount
@@ -78,6 +80,7 @@ function App() {
 
   const handleHomeClick = () => {
     setShowSuperAdmin(false);
+    setShowGstr7(false);
     setShowLogin(false);
   };
 
@@ -101,7 +104,9 @@ function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         showSuperAdmin={showSuperAdmin}
-        setShowSuperAdmin={setShowSuperAdmin}
+        setShowSuperAdmin={(val) => { setShowSuperAdmin(val); if (val) setShowGstr7(false); }}
+        showGstr7={showGstr7}
+        setShowGstr7={(val) => { setShowGstr7(val); if (val) setShowSuperAdmin(false); }}
         onLoginClick={() => setShowLogin(true)}
         onHomeClick={handleHomeClick}
       />
@@ -109,6 +114,8 @@ function App() {
       <main className="main-content">
         {showSuperAdmin && currentUser?.role === 'super_admin' ? (
           <SuperAdmin currentUser={currentUser} />
+        ) : showGstr7 && currentUser ? (
+          <Gstr7Management />
         ) : (
           <Dashboard forceRefreshFlag={forceRefreshFlag} currentUser={currentUser} />
         )}

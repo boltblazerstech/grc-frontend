@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { RefreshCw, User, ShieldAlert, Settings } from 'lucide-react';
+import { User, ShieldAlert, Settings, FileText } from 'lucide-react';
 import UserProfileModal from './UserProfileModal';
 import SettingsModal from './SettingsModal';
 
-const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, showSuperAdmin, setShowSuperAdmin, onLoginClick, onHomeClick }) => {
+const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, showSuperAdmin, setShowSuperAdmin, showGstr7, setShowGstr7, onLoginClick, onHomeClick }) => {
     const [showProfile, setShowProfile] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
 
@@ -23,6 +23,18 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                                 >
                                     <ShieldAlert size={18} />
                                     <span className="btn-text">{showSuperAdmin ? 'Back to Dashboard' : 'Admin Portal'}</span>
+                                </button>
+                            )}
+
+                            {!showSuperAdmin && (
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowGstr7(!showGstr7)}
+                                    title="Manage GSTR-7"
+                                    style={showGstr7 ? { borderColor: '#7c3aed', color: '#5b21b6', background: '#ede9fe' } : {}}
+                                >
+                                    <FileText size={18} />
+                                    <span className="btn-text">{showGstr7 ? 'Back to Dashboard' : 'Manage GSTR-7'}</span>
                                 </button>
                             )}
 

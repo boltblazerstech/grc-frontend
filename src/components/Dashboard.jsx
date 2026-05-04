@@ -5,7 +5,6 @@ import * as XLSX from 'xlsx';
 import GstCard from './GstCard';
 import GstDetailsModal from './GstDetailsModal';
 import GstQuickEditRow from './GstQuickEditRow';
-import Gstr7Management from './Gstr7Management';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
