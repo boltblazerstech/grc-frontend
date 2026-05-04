@@ -1202,6 +1202,9 @@ const Gstr7Management = () => {
                     onSaved={() => fetchAll(false)}
                 />
             )}
+            <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px' }}>
+                Build Version: 1.1.0 - GSTR7 Sync Fix
+            </div>
         </div>
     );
 };
