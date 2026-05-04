@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, Copy, Check, AlertCircle } from 'lucide-react';
+import { Eye, Copy, Check, AlertCircle, History } from 'lucide-react';
 import Gstr7Timeline from './Gstr7Timeline';
 
 const calculateAge = (dateString) => {
@@ -50,6 +50,18 @@ const formatTurnover = (turnover) => {
     return turnover;
 };
 
+const formatPeriod = (period) => {
+    if (!period) return period;
+    const parts = period.split("-");
+    if (parts.length === 2) {
+        const date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+        const monthName = date.toLocaleString('default', { month: 'long' });
+        const yearStr = parts[0].substring(2);
+        return `${monthName} ${yearStr}`;
+    }
+    return period;
+};
+
 const Gstr7Badge = ({ status }) => {
     let bg = '#f3f4f6';
     let color = '#374151';
@@ -58,7 +70,7 @@ const Gstr7Badge = ({ status }) => {
     if (status === 'Regular without delay') {
         bg = '#d1fae5'; color = '#047857'; text = 'Regular';
     } else if (status === 'Regular with Delay') {
-        bg = '#fef3c7'; color = '#b45309'; text = 'Delayed';
+        bg = '#fef3c7'; color = '#b45309'; text = 'Regular with delay';
     } else if (status === 'Missed') {
         bg = '#fee2e2'; color = '#b91c1c'; text = 'Missed';
     }
@@ -125,7 +137,29 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                         >
                             {copied ? <Check size={14} color="var(--success-color)" /> : <Copy size={14} />}
                         </button>
+                        <button
+                            className="ghost-btn"
+                            onClick={(e) => { e.stopPropagation(); onClick(gst); }}
+                            title="View Details"
+                            style={{ padding: '0.2rem', color: 'var(--primary-color)', display: 'inline-flex', border: '1px solid var(--border-color)', borderRadius: '4px', background: '#f9fafb' }}
+                        >
+                            <Eye size={14} />
+                        </button>
                         {isFirstFetch && <span className="first-fetch-badge">NEW</span>}
+                        {gst.gstdNo && (
+                            <span style={{ 
+                                backgroundColor: '#f0f9ff', 
+                                color: '#0369a1', 
+                                border: '1px solid #bae6fd', 
+                                padding: '0.1rem 0.4rem', 
+                                borderRadius: '4px', 
+                                fontSize: '0.7rem', 
+                                fontWeight: 700,
+                                fontFamily: "'Roboto Mono', monospace"
+                            }}>
+                                GSTD: {gst.gstdNo}
+                            </span>
+                        )}
                         {dataSourceBadge(gst.dataSource)}
                         {gst.apiError && (
                             <span style={{ background: '#fee2e2', color: '#991b1b', fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="API failed">
@@ -169,141 +203,125 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
             {/* 3-Column Body Section */}
             <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: '1.2fr 1fr 1fr', 
+                gridTemplateColumns: '0.8fr 1.2fr 1.5fr', 
                 gap: '1rem',
                 fontSize: '0.8rem'
             }}>
-                {/* Column 1: Basic Info */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', borderRight: '1px solid var(--border-color)', paddingRight: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Status:</span>
-                        <span style={{ 
-                            fontWeight: 700,
-                            color: gst.gstStatus === 'Active' ? 'var(--success-color)' : 'var(--danger-color)' 
-                        }}>
-                            {gst.gstStatus || 'N/A'}
-                        </span>
+                {/* Column 1: Basic Info (Left) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', borderRight: '1px solid var(--border-color)', paddingRight: '0.75rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600, fontSize: '0.75rem' }}>Age</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-dark)', fontSize: '0.9rem' }}>{calculateAge(gst.registrationDate)}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Type:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--text-dark)' }} title={gst.gstType}>
+                    <div style={{ display: 'flex', flexDirection: 'column', marginTop: '0.4rem' }}>
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600, fontSize: '0.75rem' }}>Type</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-dark)', fontSize: '0.85rem' }} title={gst.gstType}>
                             {formatGstType(gst.gstType)}
                         </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Age:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{calculateAge(gst.registrationDate)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Turnover:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--text-dark)', textAlign: 'right', maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formatTurnover(gst.aggregateTurnover)}>
+                    <div style={{ display: 'flex', flexDirection: 'column', marginTop: '0.4rem' }}>
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600, fontSize: '0.75rem' }}>Turnover</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-dark)', fontSize: '0.85rem' }} title={formatTurnover(gst.aggregateTurnover)}>
                             {formatTurnover(gst.aggregateTurnover)}
                         </span>
                     </div>
                 </div>
 
-                {/* Column 2: Delay Count */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', borderRight: '1px solid var(--border-color)', paddingRight: '1rem' }}>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-dark)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
-                        Delay Count
+                {/* Column 2: GST Compliance (Middle) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', borderRight: '1px solid var(--border-color)', paddingRight: '0.75rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary-color)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
+                        GST Compliance
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>GSTR-1</span>
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>GST - status:</span>
                         <span style={{ 
-                            background: gst.delayCountGstr1 > 0 ? '#fee2e2' : '#f3f4f6', 
-                            color: gst.delayCountGstr1 > 0 ? '#b91c1c' : '#374151', 
-                            padding: '0.15rem 0.5rem', 
-                            borderRadius: '4px', 
-                            fontWeight: 700, 
-                            fontSize: '0.75rem' 
+                            fontWeight: 700,
+                            color: gst.gstStatus === 'Active' ? 'var(--success-color)' : 'var(--danger-color)',
+                            backgroundColor: gst.gstStatus === 'Active' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: '4px'
                         }}>
-                            {gst.delayCountGstr1 !== null ? gst.delayCountGstr1 : 'N/A'}
+                            {gst.gstStatus || 'N/A'}
                         </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>GSTR-3B</span>
-                        <span style={{ 
-                            background: gst.delayCountGstr3b > 0 ? '#fee2e2' : '#f3f4f6', 
-                            color: gst.delayCountGstr3b > 0 ? '#b91c1c' : '#374151', 
-                            padding: '0.15rem 0.5rem', 
-                            borderRadius: '4px', 
-                            fontWeight: 700, 
-                            fontSize: '0.75rem' 
-                        }}>
-                            {gst.delayCountGstr3b !== null ? gst.delayCountGstr3b : 'N/A'}
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>GSTR 1 delay:</span>
+                        <span style={{ fontWeight: 700, color: gst.delayCountGstr1 > 0 ? 'var(--danger-color)' : 'var(--text-dark)' }}>
+                            {gst.delayCountGstr1 !== null ? gst.delayCountGstr1 : '0'}
                         </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>GSTR 3B delay:</span>
+                        <span style={{ fontWeight: 700, color: gst.delayCountGstr3b > 0 ? 'var(--danger-color)' : 'var(--text-dark)' }}>
+                            {gst.delayCountGstr3b !== null ? gst.delayCountGstr3b : '0'}
+                        </span>
+                    </div>
+                    <div style={{ marginTop: 'auto', paddingTop: '0.4rem', fontSize: '0.68rem', color: 'var(--text-light)', borderTop: '1px dashed var(--border-color)', lineHeight: 1.3 }}>
+                        Last updated: {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                     </div>
                 </div>
 
-                {/* Column 3: GSTR-7 Compliance */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-dark)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
-                        GSTR-7 Compliance
-                    </div>
-                    <div>
-                        <Gstr7Badge status={gst.gstr7Status} />
+                {/* Column 3: GSTR-7 Compliance (Right) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary-color)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>GSTR7 Compliance</span>
+                        {(gst.categoryName?.toLowerCase() === 'scrap' || (gst.gstr7Status && gst.gstr7Status !== 'NA')) && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setShowTimeline(!showTimeline); }}
+                                title="View Month-wise Filing"
+                                style={{ 
+                                    background: 'var(--primary-color)', 
+                                    border: 'none', 
+                                    cursor: 'pointer', 
+                                    padding: '0.2rem 0.3rem', 
+                                    color: 'white', 
+                                    borderRadius: '4px', 
+                                    display: 'flex', 
+                                    alignItems: 'center',
+                                    gap: '0.2rem'
+                                }}
+                            >
+                                <History size={12} />
+                            </button>
+                        )}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Missed:</span>
-                        <span style={{ 
-                            fontWeight: 700, 
-                            color: gst.gstr7MissedCount > 0 ? '#b91c1c' : '#059669', 
-                            fontSize: '0.8rem' 
-                        }}>
-                            {gst.gstr7MissedCount ?? 0}
-                        </span>
+                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Business:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{gst.categoryName || 'N/A'}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Last Filed:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--text-dark)', fontSize: '0.75rem' }}>
-                            {gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleString('en-IN', { month: 'short', year: 'numeric' }) : 'N/A'}
-                        </span>
-                    </div>
-                    {gst.gstr7Status !== 'NA' && gst.gstr7Status !== 'Processing' && (
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); setShowTimeline(!showTimeline); }}
-                            style={{ 
-                                marginTop: '0.2rem',
-                                fontSize: '0.7rem', 
-                                color: 'var(--primary-color)', 
-                                background: 'none', 
-                                border: '1px solid var(--primary-color)',
-                                borderRadius: '4px',
-                                padding: '0.2rem 0.4rem',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                                textAlign: 'center',
-                                transition: 'all 0.2s ease'
-                            }}>
-                            {showTimeline ? 'Hide History Timeline' : 'View History Timeline'}
-                        </button>
+
+                    {gst.categoryName?.toLowerCase() === 'scrap' || (gst.gstr7Status && gst.gstr7Status !== 'NA') ? (
+                        <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Status:</span>
+                                <span style={{ fontWeight: 700, color: 'var(--success-color)' }}>applicable</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Filling status:</span>
+                                <Gstr7Badge status={gst.gstr7Status} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>If delayed:</span>
+                                <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{gst.gstr7DelayCount || 0} times</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Missed count:</span>
+                                <span style={{ fontWeight: 700, color: gst.gstr7MissedCount > 0 ? 'var(--danger-color)' : 'var(--text-dark)' }}>{gst.gstr7MissedCount || 0}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-light)', fontWeight: 600 }}>Last filling month:</span>
+                                <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{formatPeriod(gst.gstr7LastReturnPeriod) || '—'}</span>
+                            </div>
+                            <div style={{ marginTop: 'auto', paddingTop: '0.4rem', fontSize: '0.7rem', color: 'var(--text-light)', borderTop: '1px dashed var(--border-color)' }}>
+                                Last updated: {gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleDateString('en-IN') : '—'}
+                            </div>
+                        </>
+                    ) : (
+                        <div style={{ background: '#f3f4f6', color: '#6b7280', padding: '0.5rem', borderRadius: '6px', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, marginTop: '0.5rem' }}>
+                            Not Applicable
+                        </div>
                     )}
                 </div>
-            </div>
-
-            <div style={{ height: '1px', background: 'var(--border-color)', opacity: 0.5 }}></div>
-
-            {/* Footer Section */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-light)' }}>
-                <span>
-                    Updated: {gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                </span>
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onClick(gst); }}
-                    style={{ 
-                        background: 'none', 
-                        border: 'none', 
-                        color: 'var(--primary-color)', 
-                        fontWeight: 700, 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.3rem',
-                        cursor: 'pointer',
-                        padding: '0.2rem'
-                    }}
-                >
-                    <Eye size={14} /> View Details
-                </button>
             </div>
 
             {/* Expandable Timeline Section */}

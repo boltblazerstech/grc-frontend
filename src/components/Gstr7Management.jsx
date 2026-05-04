@@ -7,7 +7,7 @@ import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, Trash2, Tag, Hi
 const StatusBadge = ({ status }) => {
     const cfg = {
         'Regular without delay': { bg: '#d4edda', color: '#155724', label: '✓ Regular' },
-        'Regular with Delay':    { bg: '#fff3cd', color: '#856404', label: '⚠ Delayed' },
+        'Regular with Delay':    { bg: '#fff3cd', color: '#856404', label: '⚠ Regular with delay' },
         'Missed':                { bg: '#f8d7da', color: '#721c24', label: '✕ Missed' },
         'Processing':            { bg: '#e0f2fe', color: '#0369a1', label: '⟳ Processing' },
         'NA':                    { bg: '#f3f4f6', color: '#6b7280', label: 'N/A' },
@@ -132,7 +132,7 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
     const fmtPeriod = (rp) => {
         const ym = rp ? rp.split('-') : [];
         return ym.length === 2
-            ? new Date(+ym[0], +ym[1] - 1).toLocaleString('default', { month: 'short' }) + ' ' + ym[0]
+            ? new Date(+ym[0], +ym[1] - 1).toLocaleString('default', { month: 'long' }) + ' ' + ym[0].substring(2)
             : rp;
     };
 
@@ -182,7 +182,7 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                                             <td style={{ padding: '0.45rem 0.75rem' }}>{r.dateOfFiling || <span style={{ fontStyle: 'italic', color: 'var(--text-light)' }}>Not Filed</span>}</td>
                                             <td style={{ padding: '0.45rem 0.75rem' }}>
                                                 <span style={{ backgroundColor: statusBg(r.status), color: statusColor(r.status), padding: '0.15rem 0.5rem', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                                    {r.status === 'Regular without delay' ? '✓ Regular' : r.status === 'Regular with Delay' ? '⚠ Delayed' : r.status === 'Missed' ? '✕ Missed' : r.status || '—'}
+                                                    {r.status === 'Regular without delay' ? '✓ Regular' : r.status === 'Regular with Delay' ? '⚠ Regular with delay' : r.status === 'Missed' ? '✕ Missed' : r.status || '—'}
                                                 </span>
                                             </td>
                                         </tr>
@@ -267,6 +267,22 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                             <button className="btn btn-primary" onClick={handleParse} disabled={parsing || !text.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 {parsing ? <><span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></span>Parsing with AI...</> : <><Sparkles size={15} />Parse with AI</>}
                             </button>
+                            <button 
+                                className="btn btn-secondary" 
+                                onClick={async () => {
+                                    if (!text.trim()) return;
+                                    try {
+                                        await apiClient.parseAndSaveGstr7FilingAsync(gstin, text);
+                                        if (onSaved) onSaved();
+                                        onClose();
+                                    } catch (e) {
+                                        showMsg('Async Start Failed: ' + e.message, true);
+                                    }
+                                }} 
+                                disabled={parsing || !text.trim()} 
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eef2f6', color: '#333' }}>
+                                <Save size={15} /> Close & Auto Save (Background)
+                            </button>
                             {preview && (
                                 <>
                                     <button className="btn btn-primary" onClick={handleSave} disabled={saving}
@@ -314,7 +330,7 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                                                     <td style={{ padding: '0.45rem 0.75rem' }}>{p.dateOfFiling || <span style={{ fontStyle: 'italic', color: 'var(--text-light)' }}>Not Filed</span>}</td>
                                                     <td style={{ padding: '0.45rem 0.75rem' }}>
                                                         <span style={{ backgroundColor: statusBg(p.status), color: statusColor(p.status), padding: '0.15rem 0.5rem', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                                            {p.status === 'Regular without delay' ? '✓ Regular' : p.status === 'Regular with Delay' ? '⚠ Delayed' : p.status === 'Missed' ? '✕ Missed' : p.status || '—'}
+                                                            {p.status === 'Regular without delay' ? '✓ Regular' : p.status === 'Regular with Delay' ? '⚠ Regular with delay' : p.status === 'Missed' ? '✕ Missed' : p.status || '—'}
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -476,6 +492,22 @@ const FilingHistorySection = ({ gstin, onClose }) => {
                             ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px', marginRight: '6px' }}></span>Parsing...</>
                             : <><Sparkles size={14} style={{ marginRight: '5px' }} />Parse with AI</>}
                     </button>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                            if (!text.trim()) return;
+                            try {
+                                await apiClient.parseAndSaveGstr7FilingAsync(gstin, text);
+                                onClose(); // Close out of this section
+                            } catch (e) {
+                                showMsg('Async Start Failed: ' + e.message, true);
+                            }
+                        }}
+                        disabled={parsing || !text.trim()}
+                        style={{ fontSize: '0.82rem', padding: '0.4rem 0.9rem', backgroundColor: '#eef2f6', color: '#333' }}
+                    >
+                        <Save size={14} style={{ marginRight: '5px' }} /> Close & Auto Save (Background)
+                    </button>
                     {preview && (
                         <button
                             className="btn btn-primary"
@@ -530,12 +562,16 @@ const FilingHistorySection = ({ gstin, onClose }) => {
     );
 };
 
+// ── Module-level cache (survives re-navigation without page refresh) ──────────
+let _cachedPans = null;
+let _cachedCats = null;
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const Gstr7Management = () => {
-    const [pansData, setPansData] = useState([]);
-    const [categories, setCategories] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [pansData, setPansData] = useState(_cachedPans || []);
+    const [categories, setCategories] = useState(_cachedCats || []);
+    const [loading, setLoading] = useState(!_cachedPans);
     const [error, setError] = useState(null);
     const [expandedPans, setExpandedPans] = useState(new Set());
     const [editState, setEditState] = useState({});
@@ -572,17 +608,20 @@ const Gstr7Management = () => {
 
     const fetchAll = async (showLoader = true) => {
         try {
-            if (showLoader) setLoading(true);
+            // Only show the spinner if we have no cached data yet
+            if (showLoader && !_cachedPans) setLoading(true);
             const [pans, cats] = await Promise.all([
                 apiClient.getPanGstr7Data(),
                 apiClient.getHsnCategories()
             ]);
+            _cachedPans = pans;
+            _cachedCats = cats;
             setPansData(pans);
             setCategories(cats);
         } catch (err) {
             setError(err.message);
         } finally {
-            if (showLoader) setLoading(false);
+            setLoading(false);
         }
     };
 
@@ -594,11 +633,38 @@ const Gstr7Management = () => {
     const isValidGstin = (gstin) =>
         /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin.toUpperCase());
 
+    const isValidGstd = (gstd) =>
+        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]D[0-9A-Z]$/.test(gstd.toUpperCase());
+
+    const getGstdValidationMessage = (gstd) => {
+        if (!gstd) return '';
+        const val = gstd.toUpperCase();
+        if (val.length !== 15) return "Must be exactly 15 characters.";
+        if (!/^[0-9]{2}/.test(val)) return "First two characters must be numbers (State Code).";
+        if (!/^[0-9]{2}[A-Z]{5}/.test(val)) return "Characters 3-7 must be letters (PAN).";
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}/.test(val)) return "Characters 8-11 must be numbers.";
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]/.test(val)) return "Character 12 must be a letter.";
+        if (val.charAt(13) !== 'D') return "The 14th character (second to last) must be 'D'.";
+        if (!isValidGstd(val)) return "Invalid GSTD format.";
+        return '';
+    };
+
     // ── Category assignment ──────────────────────────────────────────────────
 
     const handleToggleCategory = async (pan, categoryId) => {
         const panObj = pansData.find(p => p.panNumber === pan);
         const newCategoryId = panObj && panObj.categoryId === categoryId ? null : categoryId;
+        const newCatObj = categories.find(c => c.id === newCategoryId);
+        const isScrap = newCatObj && newCatObj.name.toLowerCase() === 'scrap';
+
+        // Optimistic UI Update for instant feedback
+        setPansData(prev => prev.map(p => {
+            if (p.panNumber === pan) {
+                return { ...p, categoryId: newCategoryId, categoryName: newCatObj ? newCatObj.name : null, isApplicable: !!isScrap };
+            }
+            return p;
+        }));
+
         try {
             setSavingCategory(pan);
             setError(null);
@@ -607,6 +673,7 @@ const Gstr7Management = () => {
             fetchAll(false);
         } catch (err) {
             setError('Failed to update category: ' + err.message);
+            fetchAll(false); // Revert optimistic update on failure
         } finally {
             setSavingCategory(null);
         }
@@ -677,7 +744,7 @@ const Gstr7Management = () => {
         try {
             const gState = editState[pan]?.gstins[gstin];
             const newGstd = gState.gstdNo.trim().toUpperCase();
-            if (newGstd !== '' && !isValidGstin(newGstd)) throw new Error(`Invalid GSTD format.`);
+            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid GSTD format. Must end with 'D' followed by one character.`);
             setSavingGstd(gstin);
             setError(null);
             await apiClient.markUnmarkGstd(gstin, newGstd);
@@ -692,7 +759,7 @@ const Gstr7Management = () => {
             const gState = editState[pan]?.gstins[g.gstin];
             const currentGstd = g.gstdNo || '';
             const newGstd = gState.gstdNo.trim().toUpperCase();
-            if (newGstd !== '' && !isValidGstin(newGstd)) throw new Error(`Invalid GSTD format: "${newGstd}".`);
+            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid GSTD format: "${newGstd}". Must end with 'D' followed by one character.`);
             setSavingGstinRow(g.gstin);
             setError(null);
             if (currentGstd !== newGstd) await apiClient.markUnmarkGstd(g.gstin, newGstd);
@@ -917,7 +984,14 @@ const Gstr7Management = () => {
                                         <React.Fragment key={panObj.panNumber}>
                                             <tr style={{ backgroundColor: isExpanded ? 'rgba(37,150,190,0.06)' : (index % 2 === 0 ? 'transparent' : 'var(--bg-alt-color)') }}>
                                                 <td style={{ color: 'var(--text-light)', fontWeight: 500 }}>{index + 1}</td>
-                                                <td style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.85rem' }}>{panObj.panNumber}</td>
+                                                <td>
+                                                    <div style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.85rem' }}>{panObj.panNumber}</div>
+                                                    {panObj.companyName && (
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }} title={panObj.companyName}>
+                                                            {panObj.companyName}
+                                                        </div>
+                                                    )}
+                                                </td>
                                                 <td style={{ textAlign: 'center' }}>
                                                     <span style={{ backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.15rem 0.55rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>
                                                         {panObj.gstins.length}
@@ -1011,22 +1085,24 @@ const Gstr7Management = () => {
                                                                                         {g.gstin}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem' }}>
-                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                            <button 
-                                                                                                onClick={() => handleGstinChange(panObj.panNumber, g.gstin, 'gstdNo', currentGstd === g.gstin ? '' : g.gstin)}
-                                                                                                style={{
-                                                                                                    padding: '0.35rem 0.6rem', fontSize: '0.75rem', fontWeight: 600,
-                                                                                                    borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
-                                                                                                    backgroundColor: currentGstd === g.gstin ? '#10b981' : 'transparent',
-                                                                                                    color: currentGstd === g.gstin ? 'white' : 'var(--primary-color)',
-                                                                                                    border: `1.5px solid ${currentGstd === g.gstin ? '#10b981' : 'var(--primary-color)'}`
-                                                                                                }}>
-                                                                                                {currentGstd === g.gstin ? '✓ Marked as GSTD' : 'Mark as GSTD'}
-                                                                                            </button>
-                                                                                            {currentGstd !== savedGstd && (
-                                                                                                <button className="btn btn-primary" onClick={() => handleSaveGstd(panObj.panNumber, g.gstin)} disabled={savingGstd === g.gstin} title="Confirm & Save" style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem' }}>
-                                                                                                    <Save size={13} />
-                                                                                                </button>
+                                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                                <input 
+                                                                                                    type="text" 
+                                                                                                    className="form-control" 
+                                                                                                    placeholder="Enter GSTD No." 
+                                                                                                    value={currentGstd} 
+                                                                                                    onChange={e => handleGstinChange(panObj.panNumber, g.gstin, 'gstdNo', e.target.value)}
+                                                                                                    style={{ width: '150px', padding: '0.35rem 0.5rem', fontSize: '0.83rem', fontFamily: "'Roboto Mono', monospace", border: (currentGstd !== '' && !isValidGstd(currentGstd)) ? '2px solid #ef4444' : '1px solid var(--border-color)' }}
+                                                                                                />
+                                                                                                {currentGstd !== savedGstd && (
+                                                                                                    <button className="btn btn-primary" onClick={() => handleSaveGstd(panObj.panNumber, g.gstin)} disabled={savingGstd === g.gstin || (currentGstd !== '' && !isValidGstd(currentGstd))} title="Confirm & Save" style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem' }}>
+                                                                                                        <Save size={13} />
+                                                                                                    </button>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            {currentGstd !== '' && !isValidGstd(currentGstd) && (
+                                                                                                <span style={{ color: '#ef4444', fontSize: '0.65rem', lineHeight: 1.1, maxWidth: '180px' }}>{getGstdValidationMessage(currentGstd)}</span>
                                                                                             )}
                                                                                         </div>
                                                                                     </td>
@@ -1034,7 +1110,7 @@ const Gstr7Management = () => {
                                                                                         {hasGstd ? (
                                                                                             <select className="form-control" value={gState.status} onChange={e => handleGstinChange(panObj.panNumber, g.gstin, 'status', e.target.value)} style={{ width: '130px', padding: '0.35rem 0.5rem', fontSize: '0.83rem' }}>
                                                                                                 <option value="Regular without delay">✅ Regular</option>
-                                                                                                <option value="Regular with Delay">⚠️ Delayed</option>
+                                                                                                <option value="Regular with Delay">⚠️ Regular with delay</option>
                                                                                                 <option value="Missed">❌ Missed</option>
                                                                                             </select>
                                                                                         ) : (

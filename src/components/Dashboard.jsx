@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw, Eye, Copy, Check, CloudDownload, Download, FileText } from 'lucide-react';
+import { Search, Plus, List, LayoutGrid, Edit3, Trash2, X, AlertCircle, RefreshCw, Eye, Copy, Check, CloudDownload, Download, FileText, Users } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 import * as XLSX from 'xlsx';
 import GstCard from './GstCard';
@@ -16,6 +16,140 @@ const getScoreColor = (score, thresholds) => {
     if (score >= yellow) return 'score-yellow';
     return 'score-green';
 };
+
+// ── New Vendors Modal (Home Page) ─────────────────────────────────────────────────────────────
+
+const gstr7BadgeStyle = (status) => {
+    if (!status || status === 'NA' || status === 'Processing') return { bg: '#f3f4f6', color: '#6b7280' };
+    if (status === 'Regular without delay') return { bg: '#d4edda', color: '#155724' };
+    if (status === 'Regular with Delay') return { bg: '#fff3cd', color: '#856404' };
+    if (status === 'Missed') return { bg: '#f8d7da', color: '#721c24' };
+    return { bg: '#e2e3e5', color: '#383d41' };
+};
+
+const gstStatusStyle = (status) => {
+    if (status === 'Active') return { bg: '#d4edda', color: '#155724' };
+    if (status === 'Cancelled') return { bg: '#f8d7da', color: '#721c24' };
+    return { bg: '#f3f4f6', color: '#6b7280' };
+};
+
+const NewVendorsModal = ({ onClose }) => {
+    const [vendors, setVendors] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
+
+    useEffect(() => {
+        apiClient.getNewVendors(100)
+            .then(setVendors)
+            .catch(e => setError(e.message))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const fmtDate = (iso) => {
+        if (!iso) return '—';
+        try { 
+            return new Date(iso).toLocaleString('en-IN', { 
+                day: '2-digit', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: true 
+            }); 
+        }
+        catch { return iso; }
+    };
+
+    const filtered = vendors.filter(v =>
+        !search ||
+        v.gstin?.toLowerCase().includes(search.toLowerCase()) ||
+        v.companyName?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={onClose}>
+            <div style={{ background: 'white', borderRadius: '14px', width: '100%', maxWidth: '860px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #f0f7ff, #f8f9fa)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <Users size={20} color="var(--primary-color)" />
+                        <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>New Vendors</h3>
+                        {!loading && <span style={{ background: 'var(--primary-color)', color: 'white', borderRadius: '12px', padding: '0.1rem 0.55rem', fontSize: '0.78rem', fontWeight: 700 }}>{filtered.length}</span>}
+                    </div>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)', padding: '0.2rem' }}><X size={20} /></button>
+                </div>
+
+                {/* Search */}
+                <div style={{ padding: '0.85rem 1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                    <input
+                        type="text"
+                        placeholder="Search by GSTIN or company name..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="form-control"
+                        style={{ fontSize: '0.85rem' }}
+                        autoFocus
+                    />
+                </div>
+
+                {/* Body */}
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                    {loading ? (
+                        <div style={{ padding: '3rem', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+                    ) : error ? (
+                        <div style={{ padding: '2rem', color: '#721c24', textAlign: 'center' }}>{error}</div>
+                    ) : filtered.length === 0 ? (
+                        <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-light)' }}>No vendors found.</div>
+                    ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+                            <thead>
+                                <tr style={{ background: '#f8f9fa', position: 'sticky', top: 0, zIndex: 1 }}>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase', width: '36px' }}>#</th>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase' }}>GSTIN</th>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase' }}>Company Name</th>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase' }}>Added On</th>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase' }}>GST Status</th>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase' }}>GSTR-7 Status</th>
+                                    <th style={{ padding: '0.6rem 0.85rem', textAlign: 'left', borderBottom: '2px solid var(--border-color)', color: 'var(--text-light)', fontSize: '0.72rem', textTransform: 'uppercase' }}>Source</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map((v, i) => {
+                                    const gstr7Style = gstr7BadgeStyle(v.gstr7Status);
+                                    const gstStyle = gstStatusStyle(v.gstStatus);
+                                    return (
+                                        <tr key={v.gstin} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'white' : '#fafcfd' }}>
+                                            <td style={{ padding: '0.55rem 0.85rem', color: 'var(--text-light)', fontSize: '0.75rem' }}>{i + 1}</td>
+                                            <td style={{ padding: '0.55rem 0.85rem', fontFamily: "'Roboto Mono', monospace", fontWeight: 600, color: 'var(--primary-color)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{v.gstin}</td>
+                                            <td style={{ padding: '0.55rem 0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={v.companyName}>{v.companyName || <span style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>N/A</span>}</td>
+                                            <td style={{ padding: '0.55rem 0.85rem', color: 'var(--text-light)', whiteSpace: 'nowrap' }}>{fmtDate(v.createdAt)}</td>
+                                            <td style={{ padding: '0.55rem 0.85rem' }}>
+                                                <span style={{ background: gstStyle.bg, color: gstStyle.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                                    {v.gstStatus || '—'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '0.55rem 0.85rem' }}>
+                                                <span style={{ background: gstr7Style.bg, color: gstr7Style.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                                                    {v.gstr7Status === 'Regular without delay' ? '✓ Regular'
+                                                        : v.gstr7Status === 'Regular with Delay' ? '⚠ Regular with delay'
+                                                        : v.gstr7Status === 'Missed' ? '✕ Missed'
+                                                        : v.gstr7Status || 'Not Set'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '0.55rem 0.85rem' }}>
+                                                <span style={{ background: v.dataSource === 'API' ? '#dbeafe' : v.dataSource === 'Manual' ? '#fef3c7' : '#f3f4f6', color: v.dataSource === 'API' ? '#1e40af' : v.dataSource === 'Manual' ? '#92400e' : '#6b7280', padding: '0.12rem 0.45rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
+                                                    {v.dataSource || '—'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     const [gstList, setGstList] = useState([]);
@@ -45,6 +179,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
     const [selectedGstins, setSelectedGstins] = useState(new Set());
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [refreshResult, setRefreshResult] = useState(null);
+    const [showNewVendors, setShowNewVendors] = useState(false);
 
     const handleCopy = (gstin) => {
         navigator.clipboard.writeText(gstin);
@@ -322,6 +457,15 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                             >
                                 <Download size={16} /> Export Excel
                             </button>
+                            {currentUser?.role === 'super_admin' && (
+                                <button
+                                    onClick={() => setShowNewVendors(true)}
+                                    className="btn"
+                                    style={{ whiteSpace: 'nowrap', background: '#0ea5e9', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    <Users size={16} /> New Vendors
+                                </button>
+                            )}
                         </div>
                     )}
 
@@ -980,6 +1124,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
                     </div>
                 </div>
             )}
+
+            {showNewVendors && <NewVendorsModal onClose={() => setShowNewVendors(false)} />}
         </div>
     );
 };

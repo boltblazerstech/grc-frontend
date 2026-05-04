@@ -328,6 +328,27 @@ export const apiClient = {
         return response.json();
     },
 
+    async parseAndSaveGstr7FilingAsync(gstin, tableText) {
+        const savedUser = localStorage.getItem('grc_user');
+        const userRole = savedUser ? JSON.parse(savedUser).role : 'user';
+        const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
+
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/parse-save-async`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Role': userRole,
+                'Username': userName
+            },
+            body: JSON.stringify({ gstin, tableText })
+        });
+        if (!response.ok) {
+            const msg = await response.text();
+            throw new Error(msg || 'Failed to start async parsing');
+        }
+        return response.json();
+    },
+
     async saveGstr7Filing(gstin, records) {
         const savedUser = localStorage.getItem('grc_user');
         const userRole = savedUser ? JSON.parse(savedUser).role : 'user';
@@ -391,5 +412,13 @@ export const apiClient = {
             headers: { 'Role': 'super_admin' }
         });
         if (!response.ok) throw new Error('Failed to reject review');
+    },
+
+    async getNewVendors(limit = 50) {
+        const response = await fetch(`${API_BASE_URL}/admin/new-vendors?limit=${limit}`, {
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to fetch new vendors');
+        return response.json();
     }
 };

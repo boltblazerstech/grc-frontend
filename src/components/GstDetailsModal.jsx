@@ -269,7 +269,7 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
                             <h3>GST Details</h3>
                             {!isEditing && (
-                                <button className="btn btn-secondary" onClick={() => { setFormData({ ...gst }); setIsEditing(true); setError(''); }} style={{ padding: '0.2rem 0.75rem' }}>
+                                <button className="btn btn-secondary" onClick={() => { setIsEditing(true); setError(''); }} style={{ padding: '0.2rem 0.75rem' }}>
                                     <Edit2 size={14} /> Edit
                                 </button>
                             )}
