@@ -754,6 +754,7 @@ const Gstr7ReviewPage = () => {
                                       }}
                                       autoFocus
                                     />
+                                  ) : (
                                     <span
                                       style={{
                                         padding: "0.35rem 0.5rem",
