@@ -3,7 +3,7 @@
 :root {
   --primary-color: #4f46e5;
   --primary-hover: #4338ca;
-  --bg-color: #f8fafc;
+  --bg-color: #f6f8fd;
   --surface-color: #ffffff;
   --text-dark: #0f172a;
   --text-light: #64748b;
@@ -11,10 +11,10 @@
   --success-color: #10b981;
   --warning-color: #f59e0b;
   --danger-color: #ef4444;
-  --new-item-bg: #e0e7ff;
-  --transition-speed: 0.3s;
-  --border-radius: 16px;
-  --box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+  --new-item-bg: #ede9fe;
+  --transition-speed: 0.25s;
+  --border-radius: 14px;
+  --box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 8px 24px -4px rgba(99,102,241,0.08);
   --bg-alt-color: #f1f5f9;
 }
 
@@ -26,7 +26,8 @@
 
 body {
   font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
+  background: linear-gradient(160deg, #f6f8fd 0%, #f0f4ff 50%, #f5f3ff 100%);
+  background-attachment: fixed;
   color: var(--text-dark);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -132,8 +133,8 @@ textarea {
 /* Main Content */
 .main-content {
   flex: 1;
-  padding: 1rem 2rem;
-  max-width: 1200px;
+  padding: 1rem 1.25rem; /* Reduced from 2rem */
+  max-width: 1400px; /* Increased from 1200px */
   margin: 0 auto;
   width: 100%;
 }
@@ -151,13 +152,15 @@ textarea {
 }
 
 .btn-primary {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
   color: white;
+  box-shadow: 0 2px 12px rgba(99,102,241,0.3);
 }
 
 .btn-primary:hover {
-  background-color: var(--primary-hover);
+  background: linear-gradient(135deg, #4338ca, #6d28d9);
   transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(99,102,241,0.4);
 }
 
 .btn-secondary {
@@ -184,8 +187,8 @@ textarea {
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
   padding: 1.5rem;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(226, 232, 240, 0.7);
 }
 
 /* Form Elements */
@@ -203,16 +206,18 @@ textarea {
 .form-control {
   width: 100%;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  font-size: 1rem;
-  transition: border-color var(--transition-speed) ease;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 0.95rem;
+  background: #f8fafc;
+  transition: all var(--transition-speed) ease;
 }
 
 .form-control:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  background: white;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1), 0 2px 8px rgba(79,70,229,0.08);
 }
 
 /* Dashboard specific Layouts */
@@ -239,8 +244,8 @@ textarea {
 /* GST List */
 .gst-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); /* Increased min-width to ensure 3-column content fits */
+  gap: 1.25rem;
 }
 
 .gst-card {

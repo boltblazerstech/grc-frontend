@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import SuperAdmin from './components/SuperAdmin';
 import Gstr7Management from './components/Gstr7Management';
+import AdminCenter from './components/AdminCenter';
 import { apiClient } from './api/apiClient';
 import './App.css';
 
@@ -113,7 +114,7 @@ function App() {
 
       <main className="main-content">
         {showSuperAdmin && currentUser?.role === 'super_admin' ? (
-          <SuperAdmin currentUser={currentUser} />
+          <AdminCenter currentUser={currentUser} />
         ) : showGstr7 && currentUser ? (
           <Gstr7Management />
         ) : (

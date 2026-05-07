@@ -250,7 +250,7 @@ export const apiClient = {
             method: 'PUT',
             headers: { 'Role': 'super_admin' }
         });
-        if (!response.ok) throw new Error('Failed to mark/unmark GSTD');
+        if (!response.ok) throw new Error('Failed to mark/unmark TDS no');
         return response.json();
     },
 

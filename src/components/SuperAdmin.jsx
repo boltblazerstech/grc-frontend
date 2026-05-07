@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/apiClient';
 
-const SuperAdmin = ({ currentUser }) => {
+const SuperAdmin = ({ currentUser, isTab }) => {
     const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -132,10 +132,12 @@ const SuperAdmin = ({ currentUser }) => {
     }
 
     return (
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2 style={{ color: 'var(--primary-color)', margin: 0 }}>Super Admin Panel</h2>
-            </div>
+        <div style={{ maxWidth: isTab ? '100%' : '800px', margin: '0 auto' }}>
+            {!isTab && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h2 style={{ color: 'var(--primary-color)', margin: 0 }}>Super Admin Panel</h2>
+                </div>
+            )}
 
             {error && <div style={{ color: 'white', backgroundColor: 'var(--danger-color)', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>{error}</div>}
             {successMsg && <div style={{ color: 'white', backgroundColor: 'var(--success-color)', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>{successMsg}</div>}

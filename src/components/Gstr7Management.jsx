@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/apiClient';
-import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, Trash2, Tag, History, Sparkles, ClipboardList } from 'lucide-react';
+import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, Trash2, Tag, History, Sparkles, ClipboardList, Copy, Check } from 'lucide-react';
 import Gstr7ReviewPage from './Gstr7ReviewPage';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -569,7 +569,7 @@ let _cachedCats = null;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const Gstr7Management = () => {
+const Gstr7Management = ({ isTab }) => {
     const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
     const isSuperAdmin = savedUser.role === 'super_admin';
 
@@ -598,6 +598,14 @@ const Gstr7Management = () => {
     const [newCodeInputs, setNewCodeInputs] = useState({});
     const [newCodeDescInputs, setNewCodeDescInputs] = useState({});
     const [savingCode, setSavingCode] = useState(null);
+    const [copiedPans, setCopiedPans] = useState({});
+
+    const handleCopyPan = (e, pan) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(pan);
+        setCopiedPans(prev => ({ ...prev, [pan]: true }));
+        setTimeout(() => setCopiedPans(prev => ({ ...prev, [pan]: false })), 2000);
+    };
 
     const sortedPansData = React.useMemo(() => {
         if (!sortEligibleFirst) return pansData;
@@ -650,7 +658,7 @@ const Gstr7Management = () => {
         if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}/.test(val)) return "Characters 8-11 must be numbers.";
         if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]/.test(val)) return "Character 12 must be a letter.";
         if (val.charAt(13) !== 'D') return "The 14th character (second to last) must be 'D'.";
-        if (!isValidGstd(val)) return "Invalid GSTD format.";
+        if (!isValidGstd(val)) return "Invalid TDS no format.";
         return '';
     };
 
@@ -749,13 +757,13 @@ const Gstr7Management = () => {
         try {
             const gState = editState[pan]?.gstins[gstin];
             const newGstd = gState.gstdNo.trim().toUpperCase();
-            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid GSTD format. Must end with 'D' followed by one character.`);
+            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid TDS no format. Must end with 'D' followed by one character.`);
             setSavingGstd(gstin);
             setError(null);
             await apiClient.markUnmarkGstd(gstin, newGstd);
-            showSuccess(`GSTD No. saved for ${gstin}`);
+            showSuccess(`TDS no saved for ${gstin}`);
             fetchAll(false);
-        } catch (err) { setError('Failed to save GSTD: ' + err.message); }
+        } catch (err) { setError('Failed to save TDS no: ' + err.message); }
         finally { setSavingGstd(null); }
     };
 
@@ -764,7 +772,7 @@ const Gstr7Management = () => {
             const gState = editState[pan]?.gstins[g.gstin];
             const currentGstd = g.gstdNo || '';
             const newGstd = gState.gstdNo.trim().toUpperCase();
-            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid GSTD format: "${newGstd}". Must end with 'D' followed by one character.`);
+            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid TDS no format: "${newGstd}". Must end with 'D' followed by one character.`);
             setSavingGstinRow(g.gstin);
             setError(null);
             if (currentGstd !== newGstd) await apiClient.markUnmarkGstd(g.gstin, newGstd);
@@ -862,9 +870,11 @@ const Gstr7Management = () => {
     return (
         <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h3 style={{ margin: 0, color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <Settings size={22} /> GSTR-7 Management
-                </h3>
+                {!isTab ? (
+                    <h3 style={{ margin: 0, color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <Settings size={22} /> GSTR-7 Management
+                    </h3>
+                ) : <div />}
                 
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                     {!showManage && pansData.length > 0 && (
@@ -1019,7 +1029,17 @@ const Gstr7Management = () => {
                                             <tr style={{ backgroundColor: isExpanded ? 'rgba(37,150,190,0.06)' : (index % 2 === 0 ? 'transparent' : 'var(--bg-alt-color)') }}>
                                                 <td style={{ color: 'var(--text-light)', fontWeight: 500 }}>{index + 1}</td>
                                                 <td>
-                                                    <div style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.85rem' }}>{panObj.panNumber}</div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                        <div style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.85rem' }}>{panObj.panNumber}</div>
+                                                        <button
+                                                            className="ghost-btn"
+                                                            onClick={(e) => handleCopyPan(e, panObj.panNumber)}
+                                                            title="Copy PAN"
+                                                            style={{ padding: '0.15rem', color: 'var(--text-light)', display: 'inline-flex', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                                                        >
+                                                            {copiedPans[panObj.panNumber] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
+                                                        </button>
+                                                    </div>
                                                     {panObj.companyName && (
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }} title={panObj.companyName}>
                                                             {panObj.companyName}
@@ -1092,7 +1112,7 @@ const Gstr7Management = () => {
                                                                 <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', backgroundColor: 'var(--new-item-bg)', padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
                                                                     {panObj.categoryName
                                                                         ? `${panObj.categoryName} — HSN: ${(panObj.hsnCodes || []).join(', ')}`
-                                                                        : 'GSTD Applicable'}
+                                                                        : 'TDS no Applicable'}
                                                                 </span>
                                                             </div>
 
@@ -1100,7 +1120,7 @@ const Gstr7Management = () => {
                                                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                                 <thead>
                                                                     <tr style={{ backgroundColor: 'rgba(37,150,190,0.08)' }}>
-                                                                        {['GSTIN', 'GSTD No.', 'Filing Status', 'Delay Count', 'Missed Count', 'Last Updated', 'Action', 'History'].map((h, i) => (
+                                                                        {['GSTIN', 'TDS no', 'Filing Status', 'Delay Count', 'Missed Count', 'Last Updated', 'Action', 'History'].map((h, i) => (
                                                                             <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: i >= 6 ? 'right' : 'left', fontSize: '0.75rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{h}</th>
                                                                         ))}
                                                                     </tr>
@@ -1124,7 +1144,7 @@ const Gstr7Management = () => {
                                                                                                 <input 
                                                                                                     type="text" 
                                                                                                     className="form-control" 
-                                                                                                    placeholder="Enter GSTD No." 
+                                                                                                    placeholder="Enter TDS no" 
                                                                                                     value={currentGstd} 
                                                                                                     onChange={e => handleGstinChange(panObj.panNumber, g.gstin, 'gstdNo', e.target.value)}
                                                                                                     style={{ width: '150px', padding: '0.35rem 0.5rem', fontSize: '0.83rem', fontFamily: "'Roboto Mono', monospace", border: (currentGstd !== '' && !isValidGstd(currentGstd)) ? '2px solid #ef4444' : '1px solid var(--border-color)' }}
@@ -1148,7 +1168,7 @@ const Gstr7Management = () => {
                                                                                                 <option value="Missed">❌ Missed</option>
                                                                                             </select>
                                                                                         ) : (
-                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontStyle: 'italic' }}>Mark as GSTD first</span>
+                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontStyle: 'italic' }}>Mark as TDS no first</span>
                                                                                         )}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem' }}>
@@ -1177,7 +1197,7 @@ const Gstr7Management = () => {
                                                                                             className="btn btn-primary"
                                                                                             onClick={() => handleSaveGstinRow(panObj.panNumber, g)}
                                                                                             disabled={savingGstinRow === g.gstin || !hasGstd}
-                                                                                            title={!hasGstd ? 'Mark as GSTD first' : 'Save Configuration'}
+                                                                                            title={!hasGstd ? 'Mark as TDS no first' : 'Save Configuration'}
                                                                                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem', whiteSpace: 'nowrap', opacity: !hasGstd ? 0.4 : 1, cursor: !hasGstd ? 'not-allowed' : 'pointer' }}
                                                                                         >
                                                                                             {savingGstinRow === g.gstin
@@ -1187,7 +1207,7 @@ const Gstr7Management = () => {
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem', textAlign: 'right' }}>
                                                                                         <button
-                                                                                            title={!hasGstd ? 'Mark as GSTD first' : 'Import / View Filing History'}
+                                                                                            title={!hasGstd ? 'Mark as TDS no first' : 'Import / View Filing History'}
                                                                                             onClick={() => hasGstd && setModalGstin(g.gstin)}
                                                                                             disabled={!hasGstd}
                                                                                             style={{

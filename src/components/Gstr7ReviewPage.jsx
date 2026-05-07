@@ -470,7 +470,7 @@ const Gstr7ReviewPage = () => {
                             </h3>
                             {rev.gstdNo && (
                               <span style={{ fontSize: "0.75rem", background: "#dbeafe", color: "#1e40af", padding: "0.1rem 0.5rem", borderRadius: "4px", fontWeight: 700 }}>
-                                GSTD: {rev.gstdNo}
+                                TDS no: {rev.gstdNo}
                               </span>
                             )}
                           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Edit2, AlertCircle, ChevronDown, ChevronUp, Trash2, RefreshCw } from 'lucide-react';
+import { X, Save, Edit2, AlertCircle, ChevronDown, ChevronUp, Trash2, RefreshCw, Copy, Check } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 
 const getScoreColor = (score, thresholds) => {
@@ -49,6 +49,15 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
     const [ruleConfig, setRuleConfig] = useState({});
 
     const isAdmin = currentUser?.role === 'super_admin';
+
+    const [copiedPan, setCopiedPan] = useState(false);
+
+    const handleCopyPan = (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(formData.panNumber);
+        setCopiedPan(true);
+        setTimeout(() => setCopiedPan(false), 2000);
+    };
 
     // Fetch full data and rule config on mount
     useEffect(() => {
@@ -383,7 +392,7 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                 </div>
                                 <div className="detail-row"><span className="detail-label">GSTR-1 Delays:</span><span className="detail-value">{formData.delayCountGstr1 ?? 'N/A'}</span></div>
                                 <div className="detail-row"><span className="detail-label">GSTR-3B Delays:</span><span className="detail-value">{formData.delayCountGstr3b ?? 'N/A'}</span></div>
-                                {formData.panNumber && <div className="detail-row"><span className="detail-label">PAN:</span><span className="detail-value">{formData.panNumber}</span></div>}
+                                {formData.panNumber && <div className="detail-row"><span className="detail-label">PAN:</span><span className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>{formData.panNumber}<button className="ghost-btn" onClick={handleCopyPan} title="Copy PAN" style={{ padding: '0.15rem', color: 'var(--text-light)', display: 'inline-flex', border: 'none', background: 'transparent', cursor: 'pointer' }}>{copiedPan ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}</button></span></div>}
                                 {formData.promoters && <div className="detail-row" style={{ gridColumn: '1 / -1' }}><span className="detail-label">Promoters:</span><span className="detail-value">{formData.promoters}</span></div>}
                                 {isAdmin && formData.mobile && (
                                     <div className="detail-row">
