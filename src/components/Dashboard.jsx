@@ -469,6 +469,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState(null);
   const [showNewVendors, setShowNewVendors] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleCopy = (gstin) => {
     navigator.clipboard.writeText(gstin);
@@ -582,48 +583,119 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     }
   };
 
-  const handleExportExcel = () => {
-    const exportData = processedList.map((gst) => ({
-      api_error: gst.apiError != null ? gst.apiError.toString() : "N/A",
-      registration_date: gst.registrationDate || "N/A",
-      delay_count_gstr1:
-        gst.delayCountGstr1 != null ? gst.delayCountGstr1 : "N/A",
-      delay_count_gstr3b:
-        gst.delayCountGstr3b != null ? gst.delayCountGstr3b : "N/A",
-      created_at: gst.createdAt
-        ? new Date(gst.createdAt).toLocaleString("en-IN")
-        : "N/A",
-      last_api_sync: gst.lastApiSync
-        ? new Date(gst.lastApiSync).toLocaleString("en-IN")
-        : "N/A",
-      aggregate_turnover: gst.aggregateTurnover || "N/A",
-      source: gst.source || "N/A",
-      data_source: gst.dataSource || "N/A",
-      email: gst.email || "N/A",
-      mobile: gst.mobile || "N/A",
-      pan_number: gst.panNumber || "N/A",
-      gstin: gst.gstin,
-      promoters: gst.promoters || "N/A",
-      gst_type: gst.gstType || "N/A",
-      trade_name: gst.tradeName || "N/A",
-      legal_name: gst.legalName || "N/A",
-      gst_status: gst.gstStatus || "N/A",
-      address: gst.address || "N/A",
-      score:
-        gst.grcScore !== null && gst.grcScore !== undefined
-          ? gst.grcScore
-          : "N/A",
-      calculated_at: gst.scoreCalculatedAt
-        ? new Date(gst.scoreCalculatedAt).toLocaleString("en-IN")
-        : "N/A",
-      updated_by: gst.updatedBy || "N/A",
-      score_version: "1.0",
-    }));
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      // Fetch all GSTR-7 filing details in one call (grouped by GSTIN)
+      let filingMap = {};
+      try {
+        filingMap = await apiClient.getAllGstr7FilingDetails();
+      } catch {
+        // If the user doesn't have access or API fails, proceed without filing data
+        filingMap = {};
+      }
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "GRC Details");
-    XLSX.writeFile(workbook, "GRC_Details.xlsx");
+      // Build the list of last 12 relevant months (same logic as backend)
+      const today = new Date();
+      const day = today.getDate();
+      let latestYear, latestMonth;
+      if (day <= 11) {
+        // Up to month-2
+        latestMonth = today.getMonth() - 1; // getMonth() is 0-indexed
+        latestYear = today.getFullYear();
+        if (latestMonth < 0) { latestMonth += 12; latestYear -= 1; }
+      } else {
+        // Up to month-1
+        latestMonth = today.getMonth();
+        latestYear = today.getFullYear();
+        if (latestMonth < 0) { latestMonth += 12; latestYear -= 1; }
+      }
+
+      // Generate 12 months from latest going backwards
+      const months = [];
+      let y = latestYear, m = latestMonth;
+      for (let i = 0; i < 12; i++) {
+        const mm = String(m + 1).padStart(2, "0"); // 1-indexed for display
+        months.push(`${y}-${mm}`);
+        m--;
+        if (m < 0) { m = 11; y--; }
+      }
+
+      const monthLabels = months.map((period) => {
+        const [yr, mo] = period.split("-");
+        const d = new Date(parseInt(yr), parseInt(mo) - 1, 1);
+        return d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+      });
+
+      const exportData = processedList.map((gst) => {
+        const row = {
+          gstin: gst.gstin,
+          pan_number: gst.panNumber || "N/A",
+          trade_name: gst.tradeName || "N/A",
+          legal_name: gst.legalName || "N/A",
+          gst_type: gst.gstType || "N/A",
+          gst_status: gst.gstStatus || "N/A",
+          registration_date: gst.registrationDate || "N/A",
+          address: gst.address || "N/A",
+          email: gst.email || "N/A",
+          mobile: gst.mobile || "N/A",
+          promoters: gst.promoters || "N/A",
+          aggregate_turnover: gst.aggregateTurnover || "N/A",
+          delay_count_gstr1:
+            gst.delayCountGstr1 != null ? gst.delayCountGstr1 : "N/A",
+          delay_count_gstr3b:
+            gst.delayCountGstr3b != null ? gst.delayCountGstr3b : "N/A",
+          score:
+            gst.grcScore !== null && gst.grcScore !== undefined
+              ? gst.grcScore
+              : "N/A",
+          calculated_at: gst.scoreCalculatedAt
+            ? new Date(gst.scoreCalculatedAt).toLocaleString("en-IN")
+            : "N/A",
+          source: gst.source || "N/A",
+          data_source: gst.dataSource || "N/A",
+          api_error: gst.apiError != null ? gst.apiError.toString() : "N/A",
+          created_at: gst.createdAt
+            ? new Date(gst.createdAt).toLocaleString("en-IN")
+            : "N/A",
+          last_api_sync: gst.lastApiSync
+            ? new Date(gst.lastApiSync).toLocaleString("en-IN")
+            : "N/A",
+          updated_by: gst.updatedBy || "N/A",
+          // ── GSTR-7 Fields ──
+          tds_no: gst.gstdNo || "N/A",
+          hsn_category: gst.categoryName || "N/A",
+          gstr7_status: gst.gstr7Status || "N/A",
+          gstr7_delay_count:
+            gst.gstr7DelayCount != null ? gst.gstr7DelayCount : "N/A",
+          gstr7_missed_count:
+            gst.gstr7MissedCount != null ? gst.gstr7MissedCount : "N/A",
+        };
+
+        // Add monthly filing columns
+        const filings = filingMap[gst.gstin] || [];
+        const filingByPeriod = {};
+        filings.forEach((f) => {
+          filingByPeriod[f.returnPeriod] = f.dateOfFiling || null;
+        });
+
+        months.forEach((period, idx) => {
+          const colName = `filing_${monthLabels[idx].replace(/ /g, "_")}`;
+          row[colName] = filingByPeriod[period] || "N/A";
+        });
+
+        return row;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "GRC Details");
+      XLSX.writeFile(workbook, "GRC_Details.xlsx");
+    } catch (err) {
+      alert("Export failed: " + (err.message || "Unknown error"));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const processedList = useMemo(() => {
@@ -826,14 +898,16 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             <button
               className="btn btn-secondary"
               onClick={handleExportExcel}
+              disabled={isExporting}
               style={{
                 whiteSpace: "nowrap",
                 borderColor: "#10b981",
                 color: "#047857",
                 background: "#d1fae5",
+                opacity: isExporting ? 0.7 : 1,
               }}
             >
-              <Download size={16} /> Export Excel
+              <Download size={16} /> {isExporting ? "Exporting..." : "Export Excel"}
             </button>
             {currentUser?.role === "super_admin" && (
               <>

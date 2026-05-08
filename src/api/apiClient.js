@@ -380,6 +380,16 @@ export const apiClient = {
         return response.json();
     },
 
+    async getAllGstr7FilingDetails() {
+        const savedUser = localStorage.getItem('grc_user');
+        const userRole = savedUser ? JSON.parse(savedUser).role : 'user';
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/filing-details-all`, {
+            headers: { 'Role': userRole }
+        });
+        if (!response.ok) throw new Error('Failed to fetch all filing details');
+        return response.json();
+    },
+
     async getPendingReviews() {
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/reviews`, {
             headers: { 'Role': 'super_admin' }

@@ -599,6 +599,8 @@ const Gstr7Management = ({ isTab }) => {
     const [newCodeDescInputs, setNewCodeDescInputs] = useState({});
     const [savingCode, setSavingCode] = useState(null);
     const [copiedPans, setCopiedPans] = useState({});
+    const [highlightedPan, setHighlightedPan] = useState(null);
+    const rowRefs = React.useRef({});
 
     const handleCopyPan = (e, pan) => {
         e.stopPropagation();
@@ -609,13 +611,17 @@ const Gstr7Management = ({ isTab }) => {
 
     const sortedPansData = React.useMemo(() => {
         if (!sortEligibleFirst) return pansData;
+        // Freeze sort order while a row is highlighted (prevents row from jumping)
+        if (highlightedPan) return [...pansData].sort((a, b) => {
+            return a.panNumber.localeCompare(b.panNumber);
+        });
         return [...pansData].sort((a, b) => {
             const aVal = a.isApplicable ? 1 : 0;
             const bVal = b.isApplicable ? 1 : 0;
             if (aVal !== bVal) return bVal - aVal; // Eligible first
             return a.panNumber.localeCompare(b.panNumber); // then alphabetical
         });
-    }, [pansData, sortEligibleFirst]);
+    }, [pansData, sortEligibleFirst, highlightedPan]);
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -681,12 +687,23 @@ const Gstr7Management = ({ isTab }) => {
         try {
             setSavingCategory(pan);
             setError(null);
+            setHighlightedPan(pan);
+            // Disable 'Eligible at Top' automatically when editing to keep position
+            setSortEligibleFirst(false);
+            
             await apiClient.assignCategoryToPan(pan, newCategoryId);
             showSuccess(newCategoryId ? `Category assigned to PAN ${pan}` : `Category removed from PAN ${pan}`);
-            fetchAll(false);
+            await fetchAll(false);
+            
+            // Scroll into view after data settles
+            setTimeout(() => {
+                rowRefs.current[pan]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+            // Highlight now remains until manual page refresh or data re-fetch
         } catch (err) {
             setError('Failed to update category: ' + err.message);
             fetchAll(false); // Revert optimistic update on failure
+            setHighlightedPan(null);
         } finally {
             setSavingCategory(null);
         }
@@ -1026,7 +1043,15 @@ const Gstr7Management = ({ isTab }) => {
 
                                     return (
                                         <React.Fragment key={panObj.panNumber}>
-                                            <tr style={{ backgroundColor: isExpanded ? 'rgba(37,150,190,0.06)' : (index % 2 === 0 ? 'transparent' : 'var(--bg-alt-color)') }}>
+                                            <tr 
+                                                ref={el => rowRefs.current[panObj.panNumber] = el}
+                                                style={{ 
+                                                    backgroundColor: highlightedPan === panObj.panNumber 
+                                                        ? '#e0f2fe' 
+                                                        : isExpanded ? 'rgba(37,150,190,0.06)' : (index % 2 === 0 ? 'transparent' : 'var(--bg-alt-color)'),
+                                                    transition: 'background-color 0.5s ease',
+                                                    boxShadow: highlightedPan === panObj.panNumber ? 'inset 3px 0 0 var(--primary-color)' : 'none'
+                                                }}>
                                                 <td style={{ color: 'var(--text-light)', fontWeight: 500 }}>{index + 1}</td>
                                                 <td>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
