@@ -16,6 +16,7 @@ import {
   Download,
   FileText,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 import { apiClient } from "../api/apiClient";
 import * as XLSX from "xlsx";
@@ -439,7 +440,7 @@ const NewVendorsModal = ({ onClose }) => {
   );
 };
 
-const Dashboard = ({ forceRefreshFlag, currentUser }) => {
+const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [gstList, setGstList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -835,21 +836,38 @@ const Dashboard = ({ forceRefreshFlag, currentUser }) => {
               <Download size={16} /> Export Excel
             </button>
             {currentUser?.role === "super_admin" && (
-              <button
-                onClick={() => setShowNewVendors(true)}
-                className="btn"
-                style={{
-                  whiteSpace: "nowrap",
-                  background: "#0ea5e9",
-                  color: "white",
-                  border: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <Users size={16} /> New Vendors
-              </button>
+              <>
+                <button
+                  onClick={() => setShowNewVendors(true)}
+                  className="btn"
+                  style={{
+                    whiteSpace: "nowrap",
+                    background: "#0ea5e9",
+                    color: "white",
+                    border: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Users size={16} /> New Vendors
+                </button>
+                <button
+                  onClick={onOpenGstr7}
+                  className="btn"
+                  style={{
+                    whiteSpace: "nowrap",
+                    background: "#8b5cf6",
+                    color: "white",
+                    border: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <ShieldCheck size={16} /> GSTR-7 Master
+                </button>
+              </>
             )}
           </div>
         )}

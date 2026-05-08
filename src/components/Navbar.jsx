@@ -127,12 +127,18 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                         <>
                             {currentUser.role === 'super_admin' && (
                                 <button
-                                    className={`navbar-btn ${showSuperAdmin ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
-                                    onClick={() => setShowSuperAdmin(!showSuperAdmin)}
+                                    className={`navbar-btn ${(showSuperAdmin || showGstr7) ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                    onClick={() => {
+                                        if (showGstr7) {
+                                            setShowGstr7(false);
+                                        } else {
+                                            setShowSuperAdmin(!showSuperAdmin);
+                                        }
+                                    }}
                                     title="Super Admin Control Center"
                                 >
                                     <ShieldAlert size={15} />
-                                    <span className="btn-text">{showSuperAdmin ? 'Back to Dashboard' : 'Super Admin'}</span>
+                                    <span className="btn-text">{(showSuperAdmin || showGstr7) ? 'Back to Dashboard' : 'Super Admin'}</span>
                                 </button>
                             )}
 

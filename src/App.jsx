@@ -114,11 +114,15 @@ function App() {
 
       <main className="main-content">
         {showSuperAdmin && currentUser?.role === 'super_admin' ? (
-          <AdminCenter currentUser={currentUser} />
+          <SuperAdmin currentUser={currentUser} />
         ) : showGstr7 && currentUser ? (
           <Gstr7Management />
         ) : (
-          <Dashboard forceRefreshFlag={forceRefreshFlag} currentUser={currentUser} />
+          <Dashboard 
+            forceRefreshFlag={forceRefreshFlag} 
+            currentUser={currentUser} 
+            onOpenGstr7={() => { setShowGstr7(true); setShowSuperAdmin(false); }}
+          />
         )}
       </main>
 
