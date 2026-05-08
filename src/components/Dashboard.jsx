@@ -451,6 +451,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [scoreFilter, setScoreFilter] = useState("all"); // 'all', 'good', 'okay', 'watch'
   const [sourceFilter, setSourceFilter] = useState("all"); // 'all', 'api', 'manual', 'error'
+  const [turnoverFilter, setTurnoverFilter] = useState("all"); // 'all', 'below3'
 
   // New GST Feature
   const [showFetchModal, setShowFetchModal] = useState(false);
@@ -698,6 +699,41 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     }
   };
 
+  /**
+   * Parse aggregate_turnover string → numeric value in Crore.
+   * Returns null for unparseable / NA values.
+   */
+  const parseTurnoverToCrore = (raw) => {
+    if (!raw || raw.trim() === '' || raw.trim().toUpperCase() === 'NA') return null;
+    const s = raw.trim().toLowerCase();
+
+    // 'below X cr' → X
+    const belowCr = s.match(/below\s+([\d.]+)\s*cr/);
+    if (belowCr) return parseFloat(belowCr[1]);
+
+    // 'X cr and above' / '500 cr. and above' → X (very large)
+    const aboveCr = s.match(/([\d.]+)\s*cr.*above/);
+    if (aboveCr) return parseFloat(aboveCr[1]);
+
+    // Range like '1.5 cr. to 5 cr.' or 'rs. 5 cr. to 25 cr.' → take upper bound
+    const crRange = s.match(/([\d.]+)\s*cr[^\d]*to\s*([\d.]+)\s*cr/);
+    if (crRange) return parseFloat(crRange[2]);
+
+    // '0 to 40 lakhs' / 'rs. 0 to 40 lakhs' → upper in lakhs ÷ 100
+    const lakhsRange = s.match(/to\s*([\d.]+)\s*lakh/);
+    if (lakhsRange) return parseFloat(lakhsRange[1]) / 100;
+
+    // '40 lakhs to 1.5 cr.' → upper bound in cr
+    const lakhToCr = s.match(/lakh.*to\s*([\d.]+)\s*cr/);
+    if (lakhToCr) return parseFloat(lakhToCr[1]);
+
+    // Single plain number → already in crore
+    const plain = s.match(/^[\d.]+$/);
+    if (plain) return parseFloat(s);
+
+    return null;
+  };
+
   const processedList = useMemo(() => {
     let list = [...gstList];
 
@@ -735,13 +771,30 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       });
     }
 
+    if (turnoverFilter === "below3") {
+      list = list.filter((g) => {
+        const val = parseTurnoverToCrore(g.aggregateTurnover);
+        // Include NA (null) and values <= 3 Cr
+        return val === null || val <= 3;
+      });
+      // When turnover filter is active, sort by turnover ascending (NA last)
+      return list.sort((a, b) => {
+        const aVal = parseTurnoverToCrore(a.aggregateTurnover);
+        const bVal = parseTurnoverToCrore(b.aggregateTurnover);
+        if (aVal === null && bVal === null) return a.gstin.localeCompare(b.gstin);
+        if (aVal === null) return 1;  // NA goes last
+        if (bVal === null) return -1;
+        return aVal - bVal;
+      });
+    }
+
     return list.sort((a, b) => {
       if (a.scoreCalculatedAt && b.scoreCalculatedAt) {
         return new Date(b.scoreCalculatedAt) - new Date(a.scoreCalculatedAt);
       }
       return a.gstin.localeCompare(b.gstin);
     });
-  }, [gstList, searchTerm, scoreFilter, sourceFilter, thresholds]);
+  }, [gstList, searchTerm, scoreFilter, sourceFilter, turnoverFilter, thresholds]);
 
   const handleAdminRefresh = async () => {
     if (selectedGstins.size === 0) return;
@@ -1138,6 +1191,45 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
               ></span>
               <span>{"<"}20 Good</span>
             </button>
+          </div>
+
+          {/* Turnover Filter Row */}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>
+              By Turnover:
+            </span>
+            <button
+              onClick={() => setTurnoverFilter("all")}
+              className={`btn ${turnoverFilter === "all" ? "btn-primary" : "btn-secondary"}`}
+              style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem" }}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setTurnoverFilter(turnoverFilter === "below3" ? "all" : "below3")}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.4rem 0.9rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                border: turnoverFilter === "below3" ? '2px solid #7c3aed' : '1px solid var(--border-color)',
+                backgroundColor: turnoverFilter === "below3" ? 'rgba(124, 58, 237, 0.1)' : 'white',
+                color: turnoverFilter === "below3" ? '#7c3aed' : 'var(--text-color)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                transition: 'all 0.2s',
+              }}
+            >
+              <span style={{ fontSize: '0.95rem' }}>₹</span>
+              Below 3 Cr
+            </button>
+            {turnoverFilter === "below3" && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
+                Showing <strong>{processedList.length}</strong> vendors with turnover ≤ 3 Cr (sorted ascending)
+              </span>
+            )}
           </div>
 
           {currentUser && (

@@ -37,9 +37,21 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
           fetchedMap[item.returnPeriod] = item;
         });
 
+        let earliestPeriod = null;
+        if (data && data.length > 0) {
+          earliestPeriod = data.reduce((min, p) => p.returnPeriod < min ? p.returnPeriod : min, data[0].returnPeriod);
+        }
+
         const fullHistory = relevantPeriods.map((period) => {
           if (fetchedMap[period]) {
             return fetchedMap[period];
+          }
+          if (earliestPeriod && period < earliestPeriod) {
+            return {
+              returnPeriod: period,
+              status: "NA",
+              dateOfFiling: null,
+            };
           }
           return {
             returnPeriod: period,
@@ -208,6 +220,7 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
                 const isMissed = item.status === "Missed";
                 const isRegular = item.status === "Regular without delay";
                 const isDelayed = item.status === "Regular with Delay";
+                const isNA = item.status === "NA";
 
                 return (
                   <div
@@ -259,6 +272,8 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
                         />
                       ) : isMissed ? (
                         <XCircle size={18} color="#ef4444" fill="#fef2f2" />
+                      ) : isNA ? (
+                        <span style={{ fontSize: "0.8rem", color: "var(--text-light)", fontWeight: 600 }}>NA</span>
                       ) : (
                         <Clock size={18} color="#f59e0b" fill="#fffbeb" />
                       )}
@@ -273,7 +288,7 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
                         fontSize: "0.7rem",
                       }}
                     >
-                      {formatFiledDate(item.dateOfFiling)}
+                      {isNA ? "-" : formatFiledDate(item.dateOfFiling)}
                     </div>
                   </div>
                 );
