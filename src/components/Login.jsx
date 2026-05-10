@@ -87,7 +87,7 @@ const Login = ({ onLogin }) => {
                     width: 100%;
                     padding: 0.85rem 1rem 0.85rem 2.8rem;
                     border: 1.5px solid #e2e8f0;
-                    border-radius: 12px;
+                    border-radius: 6px;
                     font-size: 0.95rem;
                     font-family: 'Outfit', sans-serif;
                     background: #f8fafc;
@@ -96,16 +96,16 @@ const Login = ({ onLogin }) => {
                     outline: none;
                 }
                 .login-input:focus {
-                    border-color: #6366f1;
+                    border-color: var(--primary-color);
                     background: #ffffff;
-                    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(99, 102, 241, 0.08);
+                    box-shadow: 0 0 0 2px rgba(0, 191, 255, 0.2);
                 }
                 .login-input::placeholder { color: #94a3b8; }
                 .login-btn {
                     width: 100%;
                     padding: 0.9rem;
                     border: none;
-                    border-radius: 12px;
+                    border-radius: 6px;
                     font-size: 1rem;
                     font-weight: 700;
                     font-family: 'Outfit', sans-serif;
@@ -114,26 +114,14 @@ const Login = ({ onLogin }) => {
                     align-items: center;
                     justify-content: center;
                     gap: 0.5rem;
-                    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+                    background: var(--primary-color);
                     color: white;
-                    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-                    transition: all 0.25s ease;
+                    transition: all 0.2s ease;
                     position: relative;
                     overflow: hidden;
                 }
-                .login-btn::before {
-                    content: '';
-                    position: absolute;
-                    top: 0; left: -100%;
-                    width: 200%;
-                    height: 100%;
-                    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
-                    transition: left 0.5s ease;
-                }
-                .login-btn:hover::before { left: 100%; }
                 .login-btn:hover:not(:disabled) {
-                    transform: translateY(-2px);
-                    box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5);
+                    background: var(--primary-hover);
                 }
                 .login-btn:disabled {
                     opacity: 0.7;
@@ -167,7 +155,7 @@ const Login = ({ onLogin }) => {
                 {/* ── LEFT PANEL ── */}
                 <div style={{
                     flex: '0 0 48%',
-                    background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4f46e5 60%, #6d28d9 100%)',
+                    background: 'var(--primary-color)',
                     position: 'relative',
                     overflow: 'hidden',
                     display: 'flex',
@@ -193,26 +181,22 @@ const Login = ({ onLogin }) => {
                         backgroundSize: '40px 40px',
                     }} />
 
-                    {/* Glowing orbs */}
-                    <div style={{ position: 'absolute', top: '-80px', right: '-80px', width: '320px', height: '320px', background: 'radial-gradient(circle, rgba(139,92,246,0.35) 0%, transparent 70%)', borderRadius: '50%' }} />
-                    <div style={{ position: 'absolute', bottom: '-60px', left: '-60px', width: '280px', height: '280px', background: 'radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)', borderRadius: '50%' }} />
+
 
                     <div style={{ position: 'relative', zIndex: 1 }}>
                         {/* Logo / Brand */}
                         <div style={{ marginBottom: '2.5rem', animation: 'fadeSlideIn 0.6s ease forwards' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.6rem' }}>
                                 <div style={{
-                                    width: '44px', height: '44px', borderRadius: '12px',
-                                    background: 'linear-gradient(135deg, #a78bfa, #7c3aed)',
+                                    width: '44px', height: '44px', borderRadius: '8px',
+                                    background: 'rgba(255,255,255,0.2)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    boxShadow: '0 4px 20px rgba(167,139,250,0.4)',
-                                    animation: 'pulse-ring 2.5s ease-out infinite',
                                 }}>
                                     <Shield size={22} color="white" />
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', lineHeight: 1 }}>GRC Manager</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'rgba(196,181,253,0.8)', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Score & Compliance</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.8)', fontWeight: 500, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Score & Compliance</div>
                                 </div>
                             </div>
                         </div>
@@ -222,12 +206,10 @@ const Login = ({ onLogin }) => {
                             <h1 style={{
                                 fontSize: '2.4rem', fontWeight: 900, color: 'white',
                                 lineHeight: 1.2, marginBottom: '1rem',
-                                background: 'linear-gradient(135deg, #ffffff 0%, #c4b5fd 100%)',
-                                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                             }}>
                                 Vendor Compliance<br />Made Intelligent.
                             </h1>
-                            <p style={{ fontSize: '1rem', color: 'rgba(196,181,253,0.85)', lineHeight: 1.7, maxWidth: '380px', fontWeight: 400 }}>
+                            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.7, maxWidth: '380px', fontWeight: 400 }}>
                                 Monitor your entire vendor portfolio's GST compliance, risk scores, and filing history — all from one unified dashboard.
                             </p>
                         </div>
@@ -238,15 +220,15 @@ const Login = ({ onLogin }) => {
                                 <div key={i} className="feature-item" style={{ animationDelay: `${0.25 + i * 0.08}s` }}>
                                     <div style={{
                                         width: '34px', height: '34px', borderRadius: '8px', flexShrink: 0,
-                                        background: 'rgba(167,139,250,0.25)',
+                                        background: 'rgba(255,255,255,0.2)',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        border: '1px solid rgba(167,139,250,0.3)',
+                                        border: '1px solid rgba(255,255,255,0.3)',
                                     }}>
-                                        <f.icon size={16} color="#c4b5fd" />
+                                        <f.icon size={16} color="white" />
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'white', marginBottom: '0.1rem' }}>{f.title}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'rgba(196,181,253,0.75)', lineHeight: 1.4 }}>{f.desc}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.4 }}>{f.desc}</div>
                                     </div>
                                 </div>
                             ))}
@@ -259,8 +241,8 @@ const Login = ({ onLogin }) => {
                         }}>
                             {[['500+', 'Vendors Tracked'], ['98%', 'Accuracy Rate'], ['<1s', 'Score Refresh']].map(([num, label], i) => (
                                 <div key={i} style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#a78bfa' }}>{num}</div>
-                                    <div style={{ fontSize: '0.65rem', color: 'rgba(196,181,253,0.7)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</div>
+                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, color: 'white' }}>{num}</div>
+                                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</div>
                                 </div>
                             ))}
                         </div>
@@ -274,14 +256,12 @@ const Login = ({ onLogin }) => {
                     flexDirection: 'column',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    background: 'linear-gradient(160deg, #f8fafc 0%, #f0f4ff 100%)',
+                    background: 'var(--bg-color)',
                     padding: '2rem',
                     position: 'relative',
                     overflow: 'hidden',
                 }}>
-                    {/* Subtle background decoration */}
-                    <div style={{ position: 'absolute', top: '-100px', right: '-100px', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
-                    <div style={{ position: 'absolute', bottom: '-80px', left: '-80px', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(139,92,246,0.05) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+
 
                     <div style={{
                         width: '100%', maxWidth: '420px',
@@ -292,13 +272,13 @@ const Login = ({ onLogin }) => {
                         <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
                             <div style={{
                                 display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                                background: 'linear-gradient(135deg, #ede9fe, #e0e7ff)',
-                                border: '1px solid #c4b5fd',
-                                borderRadius: '20px', padding: '0.3rem 0.85rem',
+                                background: 'rgba(0, 191, 255, 0.1)',
+                                border: '1px solid var(--primary-color)',
+                                borderRadius: '6px', padding: '0.3rem 0.85rem',
                                 marginBottom: '1rem',
                             }}>
-                                <Sparkles size={12} color="#7c3aed" />
-                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', letterSpacing: '0.5px' }}>SECURE ACCESS</span>
+                                <Sparkles size={12} color="var(--primary-color)" />
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary-color)', letterSpacing: '0.5px' }}>SECURE ACCESS</span>
                             </div>
                             <h2 style={{
                                 fontSize: '2rem', fontWeight: 900, color: '#0f172a',
@@ -314,10 +294,10 @@ const Login = ({ onLogin }) => {
                         {/* Form Card */}
                         <div style={{
                             background: 'white',
-                            borderRadius: '20px',
+                            borderRadius: '8px',
                             padding: '2rem',
-                            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 40px -8px rgba(99,102,241,0.12)',
-                            border: '1px solid rgba(226,232,240,0.8)',
+                            boxShadow: 'var(--box-shadow)',
+                            border: '1px solid var(--border-color)',
                         }}>
                             {/* Error Message */}
                             {error && (
@@ -341,7 +321,7 @@ const Login = ({ onLogin }) => {
                                     </label>
                                     <div style={{ position: 'relative' }}>
                                         <div style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', transition: 'color 0.2s' }}>
-                                            <Mail size={16} color={focusedField === 'id' ? '#6366f1' : '#94a3b8'} />
+                                            <Mail size={16} color={focusedField === 'id' ? 'var(--primary-color)' : '#94a3b8'} />
                                         </div>
                                         <input
                                             type="text"
@@ -364,7 +344,7 @@ const Login = ({ onLogin }) => {
                                     </label>
                                     <div style={{ position: 'relative' }}>
                                         <div style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                                            <Lock size={16} color={focusedField === 'pw' ? '#6366f1' : '#94a3b8'} />
+                                            <Lock size={16} color={focusedField === 'pw' ? 'var(--primary-color)' : '#94a3b8'} />
                                         </div>
                                         <input
                                             type={showPassword ? 'text' : 'password'}
