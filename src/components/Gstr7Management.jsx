@@ -39,6 +39,13 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
     const [approvingReviewId, setApprovingReviewId] = useState(null);
     const [rejectingReviewId, setRejectingReviewId] = useState(null);
 
+    // Manual entry state
+    const [showManualEntry, setShowManualEntry] = useState(false);
+    const [manualStatus, setManualStatus] = useState('Regular without delay');
+    const [manualDelayCount, setManualDelayCount] = useState(0);
+    const [manualMissedCount, setManualMissedCount] = useState(0);
+    const [savingManual, setSavingManual] = useState(false);
+
     const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
     const isSuperAdmin = savedUser.role === 'super_admin';
 
@@ -104,6 +111,23 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
             }
         } catch (e) { showMsg('Save failed: ' + e.message, true); }
         finally { setSaving(false); }
+    };
+
+    const handleSaveManual = async () => {
+        setSavingManual(true);
+        try {
+            await apiClient.updateGstr7Status(
+                gstin,
+                manualStatus,
+                manualStatus === 'Regular with Delay' ? parseInt(manualDelayCount || 0, 10) : 0,
+                manualStatus === 'Missed' ? parseInt(manualMissedCount || 0, 10) : 0
+            );
+            showMsg('Status saved successfully!');
+            if (onSaved) onSaved();
+            setShowManualEntry(false);
+            onClose();
+        } catch (e) { showMsg('Save failed: ' + e.message, true); }
+        finally { setSavingManual(false); }
     };
 
     const handleApproveReview = async (review) => {
@@ -292,6 +316,74 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                                     </button>
                                     <button className="btn btn-secondary" onClick={() => setPreview(null)} style={{ fontSize: '0.83rem' }}>Discard Preview</button>
                                 </>
+                            )}
+                        </div>
+
+                        {/* ── Fill Manually (fallback) ── */}
+                        <div style={{ marginTop: '1rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.9rem' }}>
+                            <button
+                                onClick={() => setShowManualEntry(v => !v)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: '1.5px solid #6b7280', borderRadius: '8px', padding: '0.4rem 0.9rem', fontSize: '0.82rem', fontWeight: 600, color: '#374151', cursor: 'pointer', transition: 'all 0.15s' }}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                {showManualEntry ? 'Hide Manual Entry' : 'Fill Manually (AI Fallback)'}
+                            </button>
+
+                            {showManualEntry && (
+                                <div style={{ marginTop: '0.9rem', backgroundColor: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                                    <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.9rem' }}>
+                                        ✎ Manual Entry — Set Status Directly
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                                        {/* Filing Status */}
+                                        <div style={{ flex: 1, minWidth: '180px' }}>
+                                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>Filing Status</label>
+                                            <select
+                                                value={manualStatus}
+                                                onChange={e => setManualStatus(e.target.value)}
+                                                style={{ width: '100%', padding: '0.45rem 0.65rem', fontSize: '0.84rem', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer' }}
+                                            >
+                                                <option value="Regular without delay">✓ Regular without delay</option>
+                                                <option value="Regular with Delay">⚠ Regular with Delay</option>
+                                                <option value="Missed">✕ Missed</option>
+                                                <option value="Processing">⟳ Processing</option>
+                                                <option value="NA">N/A</option>
+                                            </select>
+                                        </div>
+                                        {/* Delay Count — always visible */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>Delay Count</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={manualDelayCount}
+                                                onChange={e => setManualDelayCount(e.target.value)}
+                                                style={{ width: '90px', padding: '0.45rem 0.6rem', fontSize: '0.84rem', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: 'white' }}
+                                            />
+                                        </div>
+                                        {/* Missed Count — always visible */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>Missed Count</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={manualMissedCount}
+                                                onChange={e => setManualMissedCount(e.target.value)}
+                                                style={{ width: '90px', padding: '0.45rem 0.6rem', fontSize: '0.84rem', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: 'white' }}
+                                            />
+                                        </div>
+                                        {/* Save */}
+                                        <button
+                                            onClick={handleSaveManual}
+                                            disabled={savingManual}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.45rem 1.1rem', fontSize: '0.84rem', fontWeight: 700, backgroundColor: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: savingManual ? 'not-allowed' : 'pointer', opacity: savingManual ? 0.7 : 1, transition: 'opacity 0.15s', whiteSpace: 'nowrap' }}
+                                        >
+                                            {savingManual
+                                                ? <><span className="spinner" style={{ width: '13px', height: '13px', borderWidth: '2px' }}></span>Saving...</>
+                                                : <><Save size={14} />Save Manual Entry</>}
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -586,6 +678,7 @@ const Gstr7Management = ({ isTab }) => {
     const [successMsg, setSuccessMsg] = useState('');
     const [showManage, setShowManage] = useState(false);
     const [sortEligibleFirst, setSortEligibleFirst] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Modal state for filing history
     const [modalGstin, setModalGstin] = useState(null);
@@ -610,18 +703,28 @@ const Gstr7Management = ({ isTab }) => {
     };
 
     const sortedPansData = React.useMemo(() => {
-        if (!sortEligibleFirst) return pansData;
-        // Freeze sort order while a row is highlighted (prevents row from jumping)
-        if (highlightedPan) return [...pansData].sort((a, b) => {
-            return a.panNumber.localeCompare(b.panNumber);
-        });
-        return [...pansData].sort((a, b) => {
-            const aVal = a.isApplicable ? 1 : 0;
-            const bVal = b.isApplicable ? 1 : 0;
-            if (aVal !== bVal) return bVal - aVal; // Eligible first
-            return a.panNumber.localeCompare(b.panNumber); // then alphabetical
-        });
-    }, [pansData, sortEligibleFirst, highlightedPan]);
+        let data;
+        if (!sortEligibleFirst) {
+            data = pansData;
+        } else if (highlightedPan) {
+            // Freeze sort order while a row is highlighted (prevents row from jumping)
+            data = [...pansData].sort((a, b) => a.panNumber.localeCompare(b.panNumber));
+        } else {
+            data = [...pansData].sort((a, b) => {
+                const aVal = a.isApplicable ? 1 : 0;
+                const bVal = b.isApplicable ? 1 : 0;
+                if (aVal !== bVal) return bVal - aVal; // Eligible first
+                return a.panNumber.localeCompare(b.panNumber); // then alphabetical
+            });
+        }
+        // Apply search filter (PAN or any GSTIN)
+        if (!searchQuery.trim()) return data;
+        const q = searchQuery.trim().toUpperCase();
+        return data.filter(panObj =>
+            panObj.panNumber?.toUpperCase().includes(q) ||
+            (panObj.gstins || []).some(g => g.gstin?.toUpperCase().includes(q))
+        );
+    }, [pansData, sortEligibleFirst, highlightedPan, searchQuery]);
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -1024,6 +1127,30 @@ const Gstr7Management = ({ isTab }) => {
             ) : (
                 /* ─── PAN list view ─── */
                 <div className="card">
+                    {/* ── Search bar ── */}
+                    <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <div style={{ position: 'relative', flex: 1, maxWidth: '380px' }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '0.7rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input
+                                id="gstr7-search"
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search by PAN or GSTIN…"
+                                style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '2.1rem', paddingRight: searchQuery ? '2rem' : '0.75rem', paddingTop: '0.4rem', paddingBottom: '0.4rem', fontSize: '0.85rem', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'var(--bg-alt-color)', color: 'var(--text-color)', transition: 'border-color 0.2s' }}
+                                onFocus={e => e.target.style.borderColor = 'var(--primary-color)'}
+                                onBlur={e => e.target.style.borderColor = 'var(--border-color)'}
+                            />
+                            {searchQuery && (
+                                <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)', fontSize: '1rem', lineHeight: 1, padding: 0 }} title="Clear">✕</button>
+                            )}
+                        </div>
+                        {searchQuery && (
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 500 }}>
+                                {sortedPansData.length} result{sortedPansData.length !== 1 ? 's' : ''}
+                            </span>
+                        )}
+                    </div>
                     <div className="gst-table-wrapper" style={{ overflowX: 'auto' }}>
                         <table className="gst-table" style={{ width: '100%' }}>
                             <thead>
@@ -1073,18 +1200,37 @@ const Gstr7Management = ({ isTab }) => {
                                                 </td>
                                                 <td style={{ verticalAlign: 'top', paddingTop: '0.5rem' }}>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                                                        {panObj.gstins.map(g => (
-                                                            <div key={g.gstin} style={{ display: 'flex', flexDirection: 'column', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'white' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
-                                                                    <span style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.8rem', color: 'var(--primary-color)' }}>{g.gstin}</span>
-                                                                    <button className="ghost-btn" onClick={(e) => handleCopyPan(e, g.gstin)} title="Copy GSTIN" style={{ padding: '0.15rem', color: 'var(--text-light)', border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex' }}>
-                                                                        {copiedPans[g.gstin] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
-                                                                    </button>
-                                                                </div>
-                                                                {g.tradeName && <div style={{ fontSize: '0.75rem', color: 'var(--text-color)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.tradeName}>{g.tradeName}</div>}
-                                                                {g.legalName && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.legalName}>{g.legalName}</div>}
+                                                        {/* Count badge when PAN has multiple GSTINs */}
+                                                        {panObj.gstins.length > 1 && (
+                                                            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary-color)', marginBottom: '-0.2rem' }}>
+                                                                {panObj.gstins.length} GSTINs
                                                             </div>
-                                                        ))}
+                                                        )}
+                                                        {/* Show ALL GSTINs; highlight the one(s) matching search */}
+                                                        {panObj.gstins.map(g => {
+                                                            const isMatch = searchQuery.trim() &&
+                                                                g.gstin?.toUpperCase().includes(searchQuery.trim().toUpperCase());
+                                                            return (
+                                                                <div key={g.gstin} style={{
+                                                                    display: 'flex', flexDirection: 'column',
+                                                                    padding: '0.4rem 0.6rem',
+                                                                    border: isMatch ? '1.5px solid var(--primary-color)' : '1px solid var(--border-color)',
+                                                                    borderRadius: '6px',
+                                                                    background: isMatch ? 'rgba(37,150,190,0.08)' : 'white',
+                                                                    transition: 'background 0.2s, border-color 0.2s'
+                                                                }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                                                                        <span style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.8rem', color: isMatch ? 'var(--primary-color)' : 'var(--primary-color)' }}>{g.gstin}</span>
+                                                                        {isMatch && <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.05rem 0.35rem', borderRadius: '8px', fontWeight: 700 }}>match</span>}
+                                                                        <button className="ghost-btn" onClick={(e) => handleCopyPan(e, g.gstin)} title="Copy GSTIN" style={{ padding: '0.15rem', color: 'var(--text-light)', border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex' }}>
+                                                                            {copiedPans[g.gstin] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
+                                                                        </button>
+                                                                    </div>
+                                                                    {g.tradeName && <div style={{ fontSize: '0.75rem', color: 'var(--text-color)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.tradeName}>{g.tradeName}</div>}
+                                                                    {g.legalName && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.legalName}>{g.legalName}</div>}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </td>
                                                 <td>
