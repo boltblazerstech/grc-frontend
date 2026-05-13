@@ -1030,7 +1030,7 @@ const Gstr7Management = ({ isTab }) => {
                                 <tr>
                                     <th style={{ width: '50px' }}>#</th>
                                     <th>PAN Number</th>
-                                    <th style={{ width: '80px', textAlign: 'center' }}>GSTINs</th>
+                                    <th style={{ minWidth: '220px', textAlign: 'left' }}>GSTINs</th>
                                     <th>HSN Category</th>
                                     <th style={{ width: '140px' }}>Action</th>
                                 </tr>
@@ -1071,10 +1071,21 @@ const Gstr7Management = ({ isTab }) => {
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td style={{ textAlign: 'center' }}>
-                                                    <span style={{ backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.15rem 0.55rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>
-                                                        {panObj.gstins.length}
-                                                    </span>
+                                                <td style={{ verticalAlign: 'top', paddingTop: '0.5rem' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                                        {panObj.gstins.map(g => (
+                                                            <div key={g.gstin} style={{ display: 'flex', flexDirection: 'column', padding: '0.4rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'white' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                                                                    <span style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.8rem', color: 'var(--primary-color)' }}>{g.gstin}</span>
+                                                                    <button className="ghost-btn" onClick={(e) => handleCopyPan(e, g.gstin)} title="Copy GSTIN" style={{ padding: '0.15rem', color: 'var(--text-light)', border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex' }}>
+                                                                        {copiedPans[g.gstin] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
+                                                                    </button>
+                                                                </div>
+                                                                {g.tradeName && <div style={{ fontSize: '0.75rem', color: 'var(--text-color)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.tradeName}>{g.tradeName}</div>}
+                                                                {g.legalName && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.legalName}>{g.legalName}</div>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     {categories.length === 0

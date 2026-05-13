@@ -373,11 +373,11 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                 <div style={{ display: 'flex', gap: '1.25rem' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Missed</span>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#dc2626' }}>{gst.gstr7MissedCount || 0}</span>
+                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (!gst.gstr7MissedCount || gst.gstr7MissedCount === 0) ? '#16a34a' : '#dc2626' }}>{gst.gstr7MissedCount || 0}</span>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Delayed</span>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>{gst.gstr7DelayCount || 0}</span>
+                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (!gst.gstr7DelayCount || gst.gstr7DelayCount === 0) ? '#16a34a' : '#d97706' }}>{gst.gstr7DelayCount || 0}</span>
                                     </div>
                                 </div>
                             )}
