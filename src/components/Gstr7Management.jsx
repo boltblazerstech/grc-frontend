@@ -678,6 +678,7 @@ const Gstr7Management = ({ isTab }) => {
     const [successMsg, setSuccessMsg] = useState('');
     const [showManage, setShowManage] = useState(false);
     const [sortEligibleFirst, setSortEligibleFirst] = useState(true);
+    const [sortByNewest, setSortByNewest] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Modal state for filing history
@@ -704,27 +705,45 @@ const Gstr7Management = ({ isTab }) => {
 
     const sortedPansData = React.useMemo(() => {
         let data;
-        if (!sortEligibleFirst) {
-            data = pansData;
-        } else if (highlightedPan) {
+        if (highlightedPan) {
             // Freeze sort order while a row is highlighted (prevents row from jumping)
             data = [...pansData].sort((a, b) => a.panNumber.localeCompare(b.panNumber));
-        } else {
+        } else if (sortByNewest) {
+            data = [...pansData].sort((a, b) => {
+                const getMaxDate = (panObj) => {
+                    let max = 0;
+                    (panObj.gstins || []).forEach(g => {
+                        if (g.createdAt) {
+                            const t = new Date(g.createdAt).getTime();
+                            if (t > max) max = t;
+                        }
+                    });
+                    return max;
+                };
+                return getMaxDate(b) - getMaxDate(a); // newest first
+            });
+        } else if (sortEligibleFirst) {
             data = [...pansData].sort((a, b) => {
                 const aVal = a.isApplicable ? 1 : 0;
                 const bVal = b.isApplicable ? 1 : 0;
                 if (aVal !== bVal) return bVal - aVal; // Eligible first
                 return a.panNumber.localeCompare(b.panNumber); // then alphabetical
             });
+        } else {
+            data = pansData;
         }
-        // Apply search filter (PAN or any GSTIN)
+        // Apply search filter (PAN or any GSTIN, Trade Name, Legal Name)
         if (!searchQuery.trim()) return data;
         const q = searchQuery.trim().toUpperCase();
         return data.filter(panObj =>
             panObj.panNumber?.toUpperCase().includes(q) ||
-            (panObj.gstins || []).some(g => g.gstin?.toUpperCase().includes(q))
+            (panObj.gstins || []).some(g => 
+                g.gstin?.toUpperCase().includes(q) ||
+                g.tradeName?.toUpperCase().includes(q) ||
+                g.legalName?.toUpperCase().includes(q)
+            )
         );
-    }, [pansData, sortEligibleFirst, highlightedPan, searchQuery]);
+    }, [pansData, sortEligibleFirst, sortByNewest, highlightedPan, searchQuery]);
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -1000,9 +1019,20 @@ const Gstr7Management = ({ isTab }) => {
                     {!showManage && pansData.length > 0 && (
                         <>
                             <button 
-                                onClick={() => setSortEligibleFirst(!sortEligibleFirst)}
+                                onClick={() => {
+                                    setSortEligibleFirst(!sortEligibleFirst);
+                                    if (!sortEligibleFirst) setSortByNewest(false);
+                                }}
                                 style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', backgroundColor: sortEligibleFirst ? '#eff6ff' : 'white', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 {sortEligibleFirst ? '✓ Eligible at Top' : 'Sort: Eligible at Top'}
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setSortByNewest(!sortByNewest);
+                                    if (!sortByNewest) setSortEligibleFirst(false);
+                                }}
+                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', backgroundColor: sortByNewest ? '#eff6ff' : 'white', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {sortByNewest ? '✓ Newest First' : 'Sort: Newest First'}
                             </button>
                             <div style={{ display: 'flex', border: '1px solid var(--primary-color)', borderRadius: '6px', overflow: 'hidden' }}>
                                 <button 
@@ -1136,7 +1166,7 @@ const Gstr7Management = ({ isTab }) => {
                                 type="text"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="Search by PAN or GSTIN…"
+                                placeholder="Search by PAN, GSTIN, Trade or Legal Name…"
                                 style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '2.1rem', paddingRight: searchQuery ? '2rem' : '0.75rem', paddingTop: '0.4rem', paddingBottom: '0.4rem', fontSize: '0.85rem', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'var(--bg-alt-color)', color: 'var(--text-color)', transition: 'border-color 0.2s' }}
                                 onFocus={e => e.target.style.borderColor = 'var(--primary-color)'}
                                 onBlur={e => e.target.style.borderColor = 'var(--border-color)'}
@@ -1226,8 +1256,8 @@ const Gstr7Management = ({ isTab }) => {
                                                                             {copiedPans[g.gstin] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
                                                                         </button>
                                                                     </div>
-                                                                    {g.tradeName && <div style={{ fontSize: '0.75rem', color: 'var(--text-color)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.tradeName}>{g.tradeName}</div>}
-                                                                    {g.legalName && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.legalName}>{g.legalName}</div>}
+                                                                    {g.tradeName && g.tradeName !== panObj.companyName && <div style={{ fontSize: '0.75rem', color: 'var(--text-color)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.tradeName}>{g.tradeName}</div>}
+                                                                    {g.legalName && g.legalName !== panObj.companyName && g.legalName !== g.tradeName && <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={g.legalName}>{g.legalName}</div>}
                                                                 </div>
                                                             );
                                                         })}
