@@ -1,11 +1,10 @@
 [build]
-  base = "frontend"
   command = "npm run build"
   publish = "dist"
 
 [[redirects]]
   from = "/api/*"
-  to = "http://65.2.170.175:8080/api/:splat"
+  to = "https://grc-backend-135177300761.asia-south1.run.app/api/:splat"
   status = 200
   force = true
 
