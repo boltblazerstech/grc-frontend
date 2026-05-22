@@ -37,7 +37,7 @@ const getScoreColor = (score, thresholds) => {
 // ── New Vendors Modal (Home Page) ─────────────────────────────────────────────────────────────
 
 const gstr7BadgeStyle = (status) => {
-  if (!status || status === "NA" || status === "Processing")
+  if (!status || status === "NA")
     return { bg: "#f3f4f6", color: "#6b7280" };
   if (status === "Regular without delay")
     return { bg: "#d4edda", color: "#155724" };
@@ -53,11 +53,19 @@ const gstStatusStyle = (status) => {
   return { bg: "#f3f4f6", color: "#6b7280" };
 };
 
-const NewVendorsModal = ({ onClose }) => {
+const NewVendorsModal = ({ onClose, onSelectGstin }) => {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [copiedGstins, setCopiedGstins] = useState({});
+
+  const handleCopy = (e, gstin) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(gstin);
+    setCopiedGstins((prev) => ({ ...prev, [gstin]: true }));
+    setTimeout(() => setCopiedGstins((prev) => ({ ...prev, [gstin]: false })), 2000);
+  };
 
   useEffect(() => {
     apiClient
@@ -317,7 +325,12 @@ const NewVendorsModal = ({ onClose }) => {
                       style={{
                         borderBottom: "1px solid #f0f0f0",
                         background: i % 2 === 0 ? "white" : "#fafcfd",
+                        cursor: "pointer",
+                        transition: "background 0.15s",
                       }}
+                      onClick={() => onSelectGstin && onSelectGstin(v.gstin)}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#eff6ff")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "white" : "#fafcfd")}
                     >
                       <td
                         style={{
@@ -331,14 +344,21 @@ const NewVendorsModal = ({ onClose }) => {
                       <td
                         style={{
                           padding: "0.55rem 0.85rem",
-                          fontFamily: "'Roboto Mono', monospace",
-                          fontWeight: 600,
-                          color: "var(--primary-color)",
-                          fontSize: "0.8rem",
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {v.gstin}
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <span style={{ fontFamily: "'Roboto Mono', monospace", fontWeight: 600, color: "var(--primary-color)", fontSize: "0.8rem" }}>
+                            {v.gstin}
+                          </span>
+                          <button
+                            onClick={(e) => handleCopy(e, v.gstin)}
+                            title="Copy GSTIN"
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: "0.1rem", color: "var(--text-light)", display: "inline-flex", flexShrink: 0 }}
+                          >
+                            {copiedGstins[v.gstin] ? <Check size={12} color="var(--success-color)" /> : <Copy size={12} />}
+                          </button>
+                        </div>
                       </td>
                       <td
                         style={{
@@ -485,6 +505,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
         apiClient.getDetails(),
         apiClient.getRuleConfig(),
       ]);
+      const scored = data.filter(g => g.grcScore !== null && g.grcScore !== undefined);
+      console.log('[Dashboard] total GSTINs:', data.length, '| with score:', scored.length, '| sample scored:', scored.slice(0,3).map(g => g.gstin + '=' + g.grcScore));
       setGstList(data);
 
       const configMap = {};
@@ -2104,7 +2126,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                           className={`score-badge score-badge-sm ${getScoreColor(gst.grcScore, thresholds)}`}
                           style={{ margin: "0 auto" }}
                         >
-                          {gst.grcScore !== null ? gst.grcScore : "-"}
+                          {gst.grcScore ?? "-"}
                         </span>
                       </td>
                       <td>
@@ -2379,7 +2401,14 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       )}
 
       {showNewVendors && (
-        <NewVendorsModal onClose={() => setShowNewVendors(false)} />
+        <NewVendorsModal
+          onClose={() => setShowNewVendors(false)}
+          onSelectGstin={(gstin) => {
+            setShowNewVendors(false);
+            const gst = gstList.find((g) => g.gstin === gstin);
+            if (gst) setSelectedGst(gst);
+          }}
+        />
       )}
     </div>
   );

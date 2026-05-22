@@ -244,6 +244,22 @@ export const apiClient = {
         return response.json();
     },
 
+    async setTdsApplicable(pan, isApplicable) {
+        const savedUser = localStorage.getItem('grc_user');
+        const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
+
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/tds-applicable/${pan}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Role': 'super_admin'
+            },
+            body: JSON.stringify({ isApplicable, updatedBy: userName })
+        });
+        if (!response.ok) throw new Error('Failed to set TDS status');
+        return response.json();
+    },
+
     async markUnmarkGstd(gstin, gstdNo) {
         const queryParam = gstdNo ? `?gstdNo=${encodeURIComponent(gstdNo)}` : '';
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/gstd/${gstin}${queryParam}`, {

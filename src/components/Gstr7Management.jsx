@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/apiClient';
-import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, Trash2, Tag, History, Sparkles, ClipboardList, Copy, Check } from 'lucide-react';
+import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, History, Sparkles, ClipboardList, Copy, Check } from 'lucide-react';
 import Gstr7ReviewPage from './Gstr7ReviewPage';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -10,7 +10,6 @@ const StatusBadge = ({ status }) => {
         'Regular without delay': { bg: '#d4edda', color: '#155724', label: '✓ Regular' },
         'Regular with Delay':    { bg: '#fff3cd', color: '#856404', label: '⚠ Regular with delay' },
         'Missed':                { bg: '#f8d7da', color: '#721c24', label: '✕ Missed' },
-        'Processing':            { bg: '#e0f2fe', color: '#0369a1', label: '⟳ Processing' },
         'NA':                    { bg: '#f3f4f6', color: '#6b7280', label: 'N/A' },
     }[status] || { bg: '#e2e3e5', color: '#383d41', label: status || '—' };
     return (
@@ -346,7 +345,6 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                                                 <option value="Regular without delay">✓ Regular without delay</option>
                                                 <option value="Regular with Delay">⚠ Regular with Delay</option>
                                                 <option value="Missed">✕ Missed</option>
-                                                <option value="Processing">⟳ Processing</option>
                                                 <option value="NA">N/A</option>
                                             </select>
                                         </div>
@@ -657,7 +655,6 @@ const FilingHistorySection = ({ gstin, onClose }) => {
 
 // ── Module-level cache (survives re-navigation without page refresh) ──────────
 let _cachedPans = null;
-let _cachedCats = null;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -667,31 +664,20 @@ const Gstr7Management = ({ isTab }) => {
 
     const [activeTab, setActiveTab] = useState('pans');
     const [pansData, setPansData] = useState(_cachedPans || []);
-    const [categories, setCategories] = useState(_cachedCats || []);
     const [loading, setLoading] = useState(!_cachedPans);
     const [error, setError] = useState(null);
     const [expandedPans, setExpandedPans] = useState(new Set());
     const [editState, setEditState] = useState({});
-    const [savingCategory, setSavingCategory] = useState(null);
+    const [savingTdsStatus, setSavingTdsStatus] = useState(null);
     const [savingGstd, setSavingGstd] = useState(null);
     const [savingGstinRow, setSavingGstinRow] = useState(null);
     const [successMsg, setSuccessMsg] = useState('');
-    const [showManage, setShowManage] = useState(false);
     const [sortEligibleFirst, setSortEligibleFirst] = useState(true);
     const [sortByNewest, setSortByNewest] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Modal state for filing history
     const [modalGstin, setModalGstin] = useState(null);
-
-    // Manage view state
-    const [expandedCategory, setExpandedCategory] = useState(null);
-    const [newCatName, setNewCatName] = useState('');
-    const [newCatDesc, setNewCatDesc] = useState('');
-    const [savingNewCat, setSavingNewCat] = useState(false);
-    const [newCodeInputs, setNewCodeInputs] = useState({});
-    const [newCodeDescInputs, setNewCodeDescInputs] = useState({});
-    const [savingCode, setSavingCode] = useState(null);
     const [copiedPans, setCopiedPans] = useState({});
     const [highlightedPan, setHighlightedPan] = useState(null);
     const rowRefs = React.useRef({});
@@ -749,16 +735,11 @@ const Gstr7Management = ({ isTab }) => {
 
     const fetchAll = async (showLoader = true) => {
         try {
-            // Only show the spinner if we have no cached data yet
             if (showLoader && !_cachedPans) setLoading(true);
-            const [pans, cats] = await Promise.all([
-                apiClient.getPanGstr7Data(),
-                apiClient.getHsnCategories()
-            ]);
+            const pans = await apiClient.getPanGstr7Data();
+            console.log('[GSTR7] Total PANs:', pans.length, '| Applicable:', pans.filter(p => p.isApplicable).map(p => p.panNumber));
             _cachedPans = pans;
-            _cachedCats = cats;
             setPansData(pans);
-            setCategories(cats);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -790,44 +771,31 @@ const Gstr7Management = ({ isTab }) => {
         return '';
     };
 
-    // ── Category assignment ──────────────────────────────────────────────────
+    // ── TDS Status toggle ────────────────────────────────────────────────────
 
-    const handleToggleCategory = async (pan, categoryId) => {
-        const panObj = pansData.find(p => p.panNumber === pan);
-        const newCategoryId = panObj && panObj.categoryId === categoryId ? null : categoryId;
-        const newCatObj = categories.find(c => c.id === newCategoryId);
-        const isScrap = newCatObj && newCatObj.name.toLowerCase() === 'scrap';
-
-        // Optimistic UI Update for instant feedback
-        setPansData(prev => prev.map(p => {
-            if (p.panNumber === pan) {
-                return { ...p, categoryId: newCategoryId, categoryName: newCatObj ? newCatObj.name : null, isApplicable: !!isScrap };
-            }
-            return p;
-        }));
+    const handleSetTdsStatus = async (pan, isApplicable) => {
+        // Optimistic UI update
+        setPansData(prev => prev.map(p => p.panNumber === pan ? { ...p, isApplicable } : p));
 
         try {
-            setSavingCategory(pan);
+            setSavingTdsStatus(pan);
             setError(null);
             setHighlightedPan(pan);
-            // Disable 'Eligible at Top' automatically when editing to keep position
             setSortEligibleFirst(false);
-            
-            await apiClient.assignCategoryToPan(pan, newCategoryId);
-            showSuccess(newCategoryId ? `Category assigned to PAN ${pan}` : `Category removed from PAN ${pan}`);
+
+            await apiClient.setTdsApplicable(pan, isApplicable);
+            showSuccess(`TDS Status ${isApplicable ? 'enabled' : 'disabled'} for PAN ${pan}`);
             await fetchAll(false);
-            
-            // Scroll into view after data settles
+
             setTimeout(() => {
                 rowRefs.current[pan]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
-            // Highlight now remains until manual page refresh or data re-fetch
         } catch (err) {
-            setError('Failed to update category: ' + err.message);
-            fetchAll(false); // Revert optimistic update on failure
+            setError('Failed to update TDS status: ' + err.message);
+            fetchAll(false);
             setHighlightedPan(null);
         } finally {
-            setSavingCategory(null);
+            setSavingTdsStatus(null);
         }
     };
 
@@ -845,7 +813,7 @@ const Gstr7Management = ({ isTab }) => {
                     panObj.gstins.forEach(g => {
                         initialState.gstins[g.gstin] = {
                             gstdNo: g.gstdNo || '',
-                            status: g.gstr7Status || 'Processing',
+                            status: g.gstr7Status || 'NA',
                             delayCount: g.gstr7DelayCount ?? 0,
                             missedCount: g.gstr7MissedCount ?? 0
                         };
@@ -868,7 +836,7 @@ const Gstr7Management = ({ isTab }) => {
                     panObj.gstins.forEach(g => {
                         initialState.gstins[g.gstin] = {
                             gstdNo: g.gstdNo || '',
-                            status: g.gstr7Status || 'Processing',
+                            status: g.gstr7Status || 'NA',
                             delayCount: g.gstr7DelayCount ?? 0,
                             missedCount: g.gstr7MissedCount ?? 0
                         };
@@ -928,60 +896,6 @@ const Gstr7Management = ({ isTab }) => {
         finally { setSavingGstinRow(null); }
     };
 
-    const toggleFilingSection = (gstin) => {
-        setOpenFilingGstins(prev => {
-            const next = new Set(prev);
-            if (next.has(gstin)) next.delete(gstin); else next.add(gstin);
-            return next;
-        });
-    };
-
-    // ── Manage categories ────────────────────────────────────────────────────
-
-    const handleAddCategory = async () => {
-        if (!newCatName.trim()) return;
-        try {
-            setSavingNewCat(true);
-            await apiClient.addHsnCategory(newCatName.trim(), newCatDesc.trim());
-            setNewCatName(''); setNewCatDesc('');
-            showSuccess('Category added');
-            fetchAll(false);
-        } catch (err) { setError('Failed to add category: ' + err.message); }
-        finally { setSavingNewCat(false); }
-    };
-
-    const handleDeleteCategory = async (id, name) => {
-        if (!window.confirm(`Delete category "${name}"? All its HSN codes will also be removed.`)) return;
-        try {
-            await apiClient.deleteHsnCategory(id);
-            showSuccess('Category deleted');
-            fetchAll(false);
-        } catch (err) { setError('Failed to delete category: ' + err.message); }
-    };
-
-    const handleAddCode = async (categoryId) => {
-        const code = (newCodeInputs[categoryId] || '').trim();
-        const desc = (newCodeDescInputs[categoryId] || '').trim();
-        if (!code) return;
-        try {
-            setSavingCode(categoryId);
-            await apiClient.addCodeToCategory(categoryId, code, desc);
-            setNewCodeInputs(prev => ({ ...prev, [categoryId]: '' }));
-            setNewCodeDescInputs(prev => ({ ...prev, [categoryId]: '' }));
-            showSuccess(`HSN code ${code} added`);
-            fetchAll(false);
-        } catch (err) { setError('Failed to add code: ' + err.message); }
-        finally { setSavingCode(null); }
-    };
-
-    const handleRemoveCode = async (categoryId, hsnCode) => {
-        if (!window.confirm(`Remove HSN code ${hsnCode}?`)) return;
-        try {
-            await apiClient.removeCodeFromCategory(categoryId, hsnCode);
-            showSuccess(`HSN code ${hsnCode} removed`);
-            fetchAll(false);
-        } catch (err) { setError('Failed to remove code: ' + err.message); }
-    };
 
     if (loading) {
         return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><div className="spinner"></div></div>;
@@ -1016,7 +930,7 @@ const Gstr7Management = ({ isTab }) => {
                 ) : <div />}
                 
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    {!showManage && pansData.length > 0 && (
+                    {pansData.length > 0 && (
                         <>
                             <button 
                                 onClick={() => {
@@ -1058,11 +972,6 @@ const Gstr7Management = ({ isTab }) => {
                             Pending Reviews
                         </button>
                     )}
-                    <button className="btn btn-secondary" onClick={() => setShowManage(!showManage)}
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
-                        <Settings size={14} style={{ marginRight: '6px' }} />
-                        {showManage ? 'Back to PANs' : 'Manage HSN Categories'}
-                    </button>
                 </div>
             </div>
 
@@ -1077,84 +986,7 @@ const Gstr7Management = ({ isTab }) => {
                 </div>
             )}
 
-            {showManage ? (
-                /* ─── Manage HSN Categories ─── */
-                <div className="card" style={{ padding: '1.5rem' }}>
-                    <h4 style={{ marginTop: 0, color: 'var(--primary-color)' }}>HSN Categories</h4>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', marginBottom: '1.5rem' }}>
-                        Group HSN codes into named categories. Each PAN is assigned one category covering all its codes.
-                    </p>
-
-                    <div style={{ backgroundColor: 'var(--bg-alt-color)', padding: '1rem', borderRadius: 'var(--border-radius)', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.35rem' }}>Category Name</label>
-                            <input type="text" className="form-control" value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="e.g. Scrap" />
-                        </div>
-                        <div style={{ flex: 2 }}>
-                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.35rem' }}>Description (Optional)</label>
-                            <input type="text" className="form-control" value={newCatDesc} onChange={e => setNewCatDesc(e.target.value)} placeholder="Enter description" />
-                        </div>
-                        <button className="btn btn-primary" onClick={handleAddCategory} disabled={savingNewCat || !newCatName.trim()} style={{ height: '38px' }}>
-                            <Plus size={16} /> Add Category
-                        </button>
-                    </div>
-
-                    {categories.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-light)', fontStyle: 'italic' }}>No categories yet. Add one above.</div>
-                    ) : categories.map(cat => {
-                        const isOpen = expandedCategory === cat.id;
-                        return (
-                            <div key={cat.id} style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius)', marginBottom: '0.75rem', overflow: 'hidden' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', cursor: 'pointer', backgroundColor: isOpen ? 'rgba(37,150,190,0.07)' : 'var(--bg-alt-color)', borderBottom: isOpen ? '1px solid var(--border-color)' : 'none' }}
-                                    onClick={() => setExpandedCategory(isOpen ? null : cat.id)}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                        <Tag size={15} style={{ color: 'var(--primary-color)' }} />
-                                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{cat.name}</span>
-                                        <span style={{ backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.1rem 0.5rem', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                            {(cat.codes || []).length} codes
-                                        </span>
-                                        {cat.description && <span style={{ fontSize: '0.82rem', color: 'var(--text-light)' }}>— {cat.description}</span>}
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <button className="btn btn-danger" onClick={e => { e.stopPropagation(); handleDeleteCategory(cat.id, cat.name); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
-                                            <Trash2 size={13} /> Delete
-                                        </button>
-                                        {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                    </div>
-                                </div>
-                                {isOpen && (
-                                    <div style={{ padding: '1rem' }}>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-                                            {(cat.codes || []).length === 0
-                                                ? <span style={{ fontSize: '0.82rem', color: 'var(--text-light)', fontStyle: 'italic' }}>No codes yet.</span>
-                                                : cat.codes.map(code => (
-                                                    <div key={code.hsnCode} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(37,150,190,0.1)', border: '1px solid rgba(37,150,190,0.3)', borderRadius: '6px', padding: '0.3rem 0.6rem' }}>
-                                                        <span style={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: "'Roboto Mono', monospace" }}>{code.hsnCode}</span>
-                                                        {code.description && <span style={{ fontSize: '0.78rem', color: 'var(--text-light)' }}>{code.description}</span>}
-                                                        <button onClick={() => handleRemoveCode(cat.id, code.hsnCode)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-color)', padding: 0, lineHeight: 1 }} title="Remove"><Trash2 size={12} /></button>
-                                                    </div>
-                                                ))}
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, marginBottom: '0.25rem' }}>HSN Code</label>
-                                                <input type="text" className="form-control" value={newCodeInputs[cat.id] || ''} onChange={e => setNewCodeInputs(prev => ({ ...prev, [cat.id]: e.target.value }))} placeholder="e.g. 7205" style={{ width: '110px', padding: '0.3rem 0.55rem', fontSize: '0.85rem' }} />
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, marginBottom: '0.25rem' }}>Description (Optional)</label>
-                                                <input type="text" className="form-control" value={newCodeDescInputs[cat.id] || ''} onChange={e => setNewCodeDescInputs(prev => ({ ...prev, [cat.id]: e.target.value }))} placeholder="Enter description" style={{ padding: '0.3rem 0.55rem', fontSize: '0.85rem' }} />
-                                            </div>
-                                            <button className="btn btn-primary" onClick={() => handleAddCode(cat.id)} disabled={savingCode === cat.id || !(newCodeInputs[cat.id] || '').trim()} style={{ padding: '0.3rem 0.75rem', fontSize: '0.82rem', height: '34px' }}>
-                                                <Plus size={14} /> Add Code
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            ) : (
+            {(
                 /* ─── PAN list view ─── */
                 <div className="card">
                     {/* ── Search bar ── */}
@@ -1188,7 +1020,7 @@ const Gstr7Management = ({ isTab }) => {
                                     <th style={{ width: '50px' }}>#</th>
                                     <th>PAN Number</th>
                                     <th style={{ minWidth: '220px', textAlign: 'left' }}>GSTINs</th>
-                                    <th>HSN Category</th>
+                                    <th style={{ width: '160px' }}>TDS Status</th>
                                     <th style={{ width: '140px' }}>Action</th>
                                 </tr>
                             </thead>
@@ -1196,7 +1028,6 @@ const Gstr7Management = ({ isTab }) => {
                                 {sortedPansData.map((panObj, index) => {
                                     const isExpanded = expandedPans.has(panObj.panNumber);
                                     const currentState = editState[panObj.panNumber];
-                                    const assignedCategoryId = panObj.categoryId || null;
 
                                     return (
                                         <React.Fragment key={panObj.panNumber}>
@@ -1264,38 +1095,38 @@ const Gstr7Management = ({ isTab }) => {
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    {categories.length === 0
-                                                        ? <span style={{ fontSize: '0.82rem', color: 'var(--text-light)', fontStyle: 'italic' }}>No categories configured</span>
-                                                        : (
-                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
-                                                                {categories
-                                                                    .filter(cat => assignedCategoryId ? cat.id === assignedCategoryId : true)
-                                                                    .map(cat => {
-                                                                    const isActive = assignedCategoryId === cat.id;
-                                                                    return (
-                                                                        <button key={cat.id}
-                                                                            onClick={() => handleToggleCategory(panObj.panNumber, cat.id)}
-                                                                            disabled={savingCategory === panObj.panNumber}
-                                                                            title={(cat.codes || []).length > 0 ? `HSN: ${cat.codes.map(c => c.hsnCode).join(', ')}` : 'No codes'}
-                                                                            style={{
-                                                                                padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: isActive ? 700 : 500,
-                                                                                borderRadius: '20px',
-                                                                                border: isActive ? '2px solid var(--primary-color)' : '1.5px solid var(--border-color)',
-                                                                                backgroundColor: isActive ? 'var(--primary-color)' : 'transparent',
-                                                                                color: isActive ? 'white' : 'var(--text-color)',
-                                                                                cursor: 'pointer', transition: 'all 0.15s ease'
-                                                                            }}>
-                                                                            {isActive && '✓ '}{cat.name}
-                                                                            {(cat.codes || []).length > 0 && (
-                                                                                <span style={{ marginLeft: '4px', fontSize: '0.7rem', opacity: 0.8 }}>
-                                                                                    ({cat.codes.map(c => c.hsnCode).join(', ')})
-                                                                                </span>
-                                                                            )}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
+                                                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                                        <button
+                                                            onClick={() => handleSetTdsStatus(panObj.panNumber, true)}
+                                                            disabled={savingTdsStatus === panObj.panNumber}
+                                                            style={{
+                                                                padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700,
+                                                                borderRadius: '20px',
+                                                                border: panObj.isApplicable === true ? '2px solid #16a34a' : '1.5px solid var(--border-color)',
+                                                                backgroundColor: panObj.isApplicable === true ? '#16a34a' : 'transparent',
+                                                                color: panObj.isApplicable === true ? 'white' : 'var(--text-color)',
+                                                                cursor: savingTdsStatus === panObj.panNumber ? 'not-allowed' : 'pointer',
+                                                                transition: 'all 0.15s ease',
+                                                                opacity: savingTdsStatus === panObj.panNumber ? 0.6 : 1
+                                                            }}>
+                                                            {panObj.isApplicable === true ? '✓ Yes' : 'Yes'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleSetTdsStatus(panObj.panNumber, false)}
+                                                            disabled={savingTdsStatus === panObj.panNumber}
+                                                            style={{
+                                                                padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700,
+                                                                borderRadius: '20px',
+                                                                border: panObj.isApplicable === false ? '2px solid #dc2626' : '1.5px solid var(--border-color)',
+                                                                backgroundColor: panObj.isApplicable === false ? '#dc2626' : 'transparent',
+                                                                color: panObj.isApplicable === false ? 'white' : 'var(--text-color)',
+                                                                cursor: savingTdsStatus === panObj.panNumber ? 'not-allowed' : 'pointer',
+                                                                transition: 'all 0.15s ease',
+                                                                opacity: savingTdsStatus === panObj.panNumber ? 0.6 : 1
+                                                            }}>
+                                                            {panObj.isApplicable === false ? '✓ No' : 'No'}
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     {panObj.isApplicable ? (
@@ -1306,7 +1137,7 @@ const Gstr7Management = ({ isTab }) => {
                                                         </button>
                                                     ) : (
                                                         <span style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontStyle: 'italic' }}>
-                                                            {panObj.categoryId ? 'GSTR-7 Not Required' : 'Assign Category'}
+                                                            GSTR-7 Not Required
                                                         </span>
                                                     )}
                                                 </td>
@@ -1317,15 +1148,10 @@ const Gstr7Management = ({ isTab }) => {
                                                 <tr>
                                                     <td colSpan="5" style={{ padding: 0, borderBottom: '2px solid var(--primary-color)' }}>
                                                         <div style={{ backgroundColor: '#f8fbfd', padding: '1.25rem 1.5rem', borderLeft: '3px solid var(--primary-color)' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+                                                            <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
                                                                 <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--primary-color)' }}>
                                                                     GSTR-7 Configuration — PAN {panObj.panNumber}
                                                                 </h4>
-                                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', backgroundColor: 'var(--new-item-bg)', padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
-                                                                    {panObj.categoryName
-                                                                        ? `${panObj.categoryName} — HSN: ${(panObj.hsnCodes || []).join(', ')}`
-                                                                        : 'TDS no Applicable'}
-                                                                </span>
                                                             </div>
 
                                                             {/* GSTIN sub-table */}
@@ -1384,7 +1210,7 @@ const Gstr7Management = ({ isTab }) => {
                                                                                         )}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem' }}>
-                                                                                        {g.gstr7Status === 'Processing' || g.gstr7Status === 'NA' ? (
+                                                                                        {g.gstr7Status === 'NA' ? (
                                                                                             <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>NA</span>
                                                                                         ) : hasGstd && gState.status === 'Regular with Delay' ? (
                                                                                             <input type="number" className="form-control" min="0" value={gState.delayCount} onChange={e => handleGstinChange(panObj.panNumber, g.gstin, 'delayCount', e.target.value)} style={{ width: '70px', padding: '0.35rem 0.5rem', fontSize: '0.83rem' }} />
@@ -1393,7 +1219,7 @@ const Gstr7Management = ({ isTab }) => {
                                                                                         )}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem' }}>
-                                                                                        {g.gstr7Status === 'Processing' || g.gstr7Status === 'NA' ? (
+                                                                                        {g.gstr7Status === 'NA' ? (
                                                                                             <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>NA</span>
                                                                                         ) : hasGstd && gState.status === 'Missed' ? (
                                                                                             <input type="number" className="form-control" min="0" value={gState.missedCount} onChange={e => handleGstinChange(panObj.panNumber, g.gstin, 'missedCount', e.target.value)} style={{ width: '70px', padding: '0.35rem 0.5rem', fontSize: '0.83rem' }} />

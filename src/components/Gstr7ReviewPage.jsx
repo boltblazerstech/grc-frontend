@@ -71,7 +71,7 @@ const Gstr7ReviewPage = () => {
         }));
         initialPreviews[r.id] = r.previewItems || [];
         initialSummaries[r.id] = {
-          summaryStatus: r.summaryStatus || "Processing",
+          summaryStatus: r.summaryStatus || "NA",
           delayCount: r.delayCount || 0,
           missedCount: r.missedCount || 0,
         };
@@ -533,11 +533,10 @@ const Gstr7ReviewPage = () => {
                         </div>
                         <div style={{ display: "flex", alignItems: "center", background: "#e2e3e5", color: "#383d41", padding: "0.2rem 0.5rem", borderRadius: "6px", fontSize: "0.75rem" }}>
                           <span style={{ fontWeight: 600, marginRight: "6px" }}>Status:</span>
-                          <select value={summaryOverrides[rev.id]?.summaryStatus || "Processing"} onChange={(e) => handleSummaryChange(rev.id, "summaryStatus", e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, color: "#383d41", outline: "none", cursor: "pointer" }}>
+                          <select value={summaryOverrides[rev.id]?.summaryStatus || "NA"} onChange={(e) => handleSummaryChange(rev.id, "summaryStatus", e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, color: "#383d41", outline: "none", cursor: "pointer" }}>
                             <option value="Regular without delay">Regular</option>
                             <option value="Regular with Delay">Regular with delay</option>
                             <option value="Missed">Missed</option>
-                            <option value="Processing">Processing</option>
                             <option value="NA">N/A</option>
                           </select>
                         </div>
@@ -860,9 +859,6 @@ const Gstr7ReviewPage = () => {
                                       Regular with delay
                                     </option>
                                     <option value="Missed">Missed</option>
-                                    <option value="Processing">
-                                      Processing
-                                    </option>
                                     <option value="NA">NA</option>
                                   </select>
                                 </td>

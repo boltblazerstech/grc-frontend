@@ -99,10 +99,6 @@ const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus }
         return <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid #e5e7eb' }}>N/A</span>;
     }
     
-    if (rawStatus === 'Processing') {
-        return <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid #bae6fd' }}>⟳ Processing</span>;
-    }
-
     let bg, color, text;
     if (missedCount > 0) {
         bg = '#fef2f2'; color = '#dc2626';
