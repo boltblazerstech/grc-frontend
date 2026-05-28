@@ -881,13 +881,12 @@ const Gstr7Management = ({ isTab, initialSearchQuery, onClearSearch }) => {
             setSavingGstinRow(g.gstin);
             setError(null);
             if (currentGstd !== newGstd) await apiClient.markUnmarkGstd(g.gstin, newGstd);
-            if (newGstd) {
-                await apiClient.updateGstr7Status(
-                    g.gstin, gState.status,
-                    gState.status === 'Regular with Delay' ? parseInt(gState.delayCount || 0, 10) : 0,
-                    gState.status === 'Missed' ? parseInt(gState.missedCount || 0, 10) : 0
-                );
-            }
+            
+            await apiClient.updateGstr7Status(
+                g.gstin, gState.status,
+                gState.status === 'Regular with Delay' ? parseInt(gState.delayCount || 0, 10) : 0,
+                gState.status === 'Missed' ? parseInt(gState.missedCount || 0, 10) : 0
+            );
             showSuccess(`Saved GSTR-7 config for ${g.gstin}`);
             fetchAll(false);
         } catch (err) { setError(err.message); }
