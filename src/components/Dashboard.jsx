@@ -53,7 +53,7 @@ const gstStatusStyle = (status) => {
   return { bg: "#f3f4f6", color: "#6b7280" };
 };
 
-const NewVendorsModal = ({ onClose, onSelectGstin }) => {
+const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -92,10 +92,16 @@ const NewVendorsModal = ({ onClose, onSelectGstin }) => {
   };
 
   const filtered = vendors.filter(
-    (v) =>
-      !search ||
-      v.gstin?.toLowerCase().includes(search.toLowerCase()) ||
-      v.companyName?.toLowerCase().includes(search.toLowerCase()),
+    (v) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const pan = v.panNumber || (v.gstin ? v.gstin.substring(2, 12) : "");
+      return (
+        v.gstin?.toLowerCase().includes(q) ||
+        pan.toLowerCase().includes(q) ||
+        v.companyName?.toLowerCase().includes(q)
+      );
+    }
   );
 
   return (
@@ -180,7 +186,7 @@ const NewVendorsModal = ({ onClose, onSelectGstin }) => {
         >
           <input
             type="text"
-            placeholder="Search by GSTIN or company name..."
+            placeholder="Search by PAN or company name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="form-control"
@@ -251,7 +257,7 @@ const NewVendorsModal = ({ onClose, onSelectGstin }) => {
                       textTransform: "uppercase",
                     }}
                   >
-                    GSTIN
+                    PAN
                   </th>
                   <th
                     style={{
@@ -319,6 +325,7 @@ const NewVendorsModal = ({ onClose, onSelectGstin }) => {
                 {filtered.map((v, i) => {
                   const gstr7Style = gstr7BadgeStyle(v.gstr7Status);
                   const gstStyle = gstStatusStyle(v.gstStatus);
+                  const pan = v.panNumber || (v.gstin ? v.gstin.substring(2, 12) : "");
                   return (
                     <tr
                       key={v.gstin}
@@ -348,15 +355,36 @@ const NewVendorsModal = ({ onClose, onSelectGstin }) => {
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                          <span style={{ fontFamily: "'Roboto Mono', monospace", fontWeight: 600, color: "var(--primary-color)", fontSize: "0.8rem" }}>
-                            {v.gstin}
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenGstr7 && pan) {
+                                onOpenGstr7(pan);
+                              }
+                            }}
+                            title={`Jump to GSTR-7 Master for PAN: ${pan}`}
+                            style={{
+                              fontFamily: "'Roboto Mono', monospace",
+                              fontWeight: 600,
+                              color: "var(--primary-color)",
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.textDecoration = "underline";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.textDecoration = "none";
+                            }}
+                          >
+                            {pan}
                           </span>
                           <button
-                            onClick={(e) => handleCopy(e, v.gstin)}
-                            title="Copy GSTIN"
+                            onClick={(e) => handleCopy(e, pan)}
+                            title="Copy PAN"
                             style={{ background: "none", border: "none", cursor: "pointer", padding: "0.1rem", color: "var(--text-light)", display: "inline-flex", flexShrink: 0 }}
                           >
-                            {copiedGstins[v.gstin] ? <Check size={12} color="var(--success-color)" /> : <Copy size={12} />}
+                            {copiedGstins[pan] ? <Check size={12} color="var(--success-color)" /> : <Copy size={12} />}
                           </button>
                         </div>
                       </td>
@@ -686,6 +714,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             : "N/A",
           updated_by: gst.updatedBy || "N/A",
           // ── GSTR-7 Fields ──
+          tds_applicable: (gst.gstdNo || gst.categoryName) ? "Yes" : "No",
           tds_no: gst.gstdNo || "N/A",
           hsn_category: gst.categoryName || "N/A",
           gstr7_status: gst.gstr7Status || "N/A",
@@ -693,6 +722,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             gst.gstr7DelayCount != null ? gst.gstr7DelayCount : "N/A",
           gstr7_missed_count:
             gst.gstr7MissedCount != null ? gst.gstr7MissedCount : "N/A",
+          gstr7_last_updated:
+            gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleString("en-IN") : "N/A",
         };
 
         // Add monthly filing columns
@@ -2407,6 +2438,10 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             setShowNewVendors(false);
             const gst = gstList.find((g) => g.gstin === gstin);
             if (gst) setSelectedGst(gst);
+          }}
+          onOpenGstr7={(pan) => {
+            setShowNewVendors(false);
+            onOpenGstr7 && onOpenGstr7(pan);
           }}
         />
       )}

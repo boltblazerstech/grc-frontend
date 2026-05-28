@@ -31,6 +31,10 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
     apiClient
       .getGstr7FilingDetails(gstin)
       .then((data) => {
+        if (!data || data.length === 0) {
+          setHistory([]);
+          return;
+        }
         const relevantPeriods = getRelevantPeriods();
         const fetchedMap = {};
         (data || []).forEach((item) => {
@@ -147,13 +151,20 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
       ) : history.length === 0 ? (
         <div
           style={{
-            color: "var(--text-light)",
+            color: "#856404",
             fontSize: "0.8rem",
             textAlign: "center",
-            fontStyle: "italic",
+            padding: "1.25rem 1rem",
+            backgroundColor: "#fffbeb",
+            border: "1px dashed #ffeeba",
+            borderRadius: "8px",
+            lineHeight: 1.5,
           }}
         >
-          No filing history available.
+          <strong>⚠️ No monthly filing history has been imported yet for this vendor.</strong>
+          <div style={{ fontSize: "0.72rem", color: "#666", marginTop: "6px" }}>
+            To show details here, go to <strong>GSTR-7 Master</strong>, click <strong>Manage GSTR-7</strong>, and import/paste the filing history table.
+          </div>
         </div>
       ) : (
         <>

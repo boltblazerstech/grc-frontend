@@ -100,15 +100,29 @@ const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus }
     }
     
     let bg, color, text;
-    if (missedCount > 0) {
+    
+    const status = rawStatus ? rawStatus.trim() : "";
+    if (missedCount > 0 || status === "Missed") {
         bg = '#fef2f2'; color = '#dc2626';
-        text = 'Missed';
-    } else if (delayCount > 0) {
+    } else if (delayCount > 0 || status === "Regular with Delay") {
         bg = '#fff7ed'; color = '#d97706';
-        text = `Regular with ${delayCount} delay${delayCount > 1 ? 's' : ''}`;
     } else {
         bg = '#dcfce7'; color = '#16a34a';
-        text = 'Regular';
+    }
+
+    if (!status || status === "NA") {
+        text = "NA";
+        bg = '#f3f4f6'; color = '#9ca3af';
+    } else if (missedCount > 0 && delayCount > 0) {
+        text = `${missedCount} missed and ${delayCount} delayed`;
+    } else if (status === "Regular without delay") {
+        text = "Regular with no delays";
+    } else if (status === "Regular with Delay") {
+        text = `Regular with ${delayCount} delay${delayCount === 1 ? '' : 's'}`;
+    } else if (status === "Missed") {
+        text = `${missedCount} missed`;
+    } else {
+        text = status;
     }
     return <span style={{ background: bg, color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${color}20`, whiteSpace: 'nowrap' }}>{text}</span>;
 };
@@ -139,6 +153,7 @@ const InfoRow = ({ icon: Icon, label, value }) => (
 const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
     const [copied, setCopied] = useState(false);
     const [copiedPan, setCopiedPan] = useState(false);
+    const [copiedGstr7, setCopiedGstr7] = useState(false);
     const [showTimeline, setShowTimeline] = useState(false);
 
     const handleCopy = (e) => {
@@ -155,6 +170,15 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
             navigator.clipboard.writeText(pan);
             setCopiedPan(true);
             setTimeout(() => setCopiedPan(false), 2000);
+        }
+    };
+
+    const handleCopyGstr7 = (e) => {
+        e.stopPropagation();
+        if (gst.gstdNo) {
+            navigator.clipboard.writeText(gst.gstdNo);
+            setCopiedGstr7(true);
+            setTimeout(() => setCopiedGstr7(false), 2000);
         }
     };
 
@@ -348,8 +372,18 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
-                            <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Applicability</span>
-                            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: isGstr7Applicable ? '#16a34a' : '#6b7280' }}>{isGstr7Applicable ? 'Yes' : 'No'}</span>
+                            <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>GSTR 7</span>
+                            {isGstr7Applicable && gst.gstdNo ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a' }}>{gst.gstdNo}</span>
+                                    <button onClick={handleCopyGstr7} title="Copy GSTR-7 No."
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', display: 'inline-flex', color: '#9ca3af' }}>
+                                        {copiedGstr7 ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}
+                                    </button>
+                                </div>
+                            ) : (
+                                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#6b7280' }}>NA</span>
+                            )}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
                             <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Status</span>
@@ -366,16 +400,39 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                     Applicable only for TDS vendors.
                                 </div>
                             ) : (
-                                <div style={{ display: 'flex', gap: '1.25rem' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Missed</span>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (!gst.gstr7MissedCount || gst.gstr7MissedCount === 0) ? '#16a34a' : '#dc2626' }}>{gst.gstr7MissedCount || 0}</span>
+                                <>
+                                    <div style={{ display: 'flex', gap: '1.25rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Missed</span>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (!gst.gstr7MissedCount || gst.gstr7MissedCount === 0) ? '#16a34a' : '#dc2626' }}>{gst.gstr7MissedCount || 0}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Delayed</span>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (!gst.gstr7DelayCount || gst.gstr7DelayCount === 0) ? '#16a34a' : '#d97706' }}>{gst.gstr7DelayCount || 0}</span>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Delayed</span>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: (!gst.gstr7DelayCount || gst.gstr7DelayCount === 0) ? '#16a34a' : '#d97706' }}>{gst.gstr7DelayCount || 0}</span>
+
+                                    <div style={{ marginTop: '0.2rem', paddingTop: '0.4rem', borderTop: '1px dashed #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <Calendar size={11} color="#94a3b8" />
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '0.55rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Last Filled Month</span>
+                                                <span style={{ fontSize: '0.65rem', color: '#475569', fontWeight: 600 }}>
+                                                    {gst.gstr7LastReturnPeriod ? formatPeriod(gst.gstr7LastReturnPeriod) : 'N/A'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <History size={11} color="#94a3b8" />
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '0.55rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Last Updated</span>
+                                                <span style={{ fontSize: '0.65rem', color: '#475569', fontWeight: 600 }}>
+                                                    {gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'Never'}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                </>
                             )}
                         </div>
 

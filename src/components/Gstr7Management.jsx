@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/apiClient';
-import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, History, Sparkles, ClipboardList, Copy, Check } from 'lucide-react';
+import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, History, Sparkles, ClipboardList, Copy, Check, X } from 'lucide-react';
 import Gstr7ReviewPage from './Gstr7ReviewPage';
+import GstCard from './GstCard';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -82,34 +83,23 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
 
     const handleParse = async () => {
         if (!text.trim()) return;
-        setParsing(true); setPreview(null); setErr('');
+        setParsing(true); setErr('');
         try {
             const data = await apiClient.parseGstr7Filing(gstin, text);
-            if (!data || !data.items || data.items.length === 0) { showMsg('AI could not extract any records. Check the pasted text.', true); return; }
-            setPreview(data);
-        } catch (e) { showMsg('AI parsing failed: ' + e.message, true); }
-        finally { setParsing(false); }
-    };
-
-    const handleSave = async () => {
-        if (!preview) return;
-        setSaving(true);
-        try {
-            const records = preview.items.map(p => ({ returnPeriod: p.returnPeriod, dateOfFiling: p.dateOfFiling }));
-            const res = await apiClient.saveGstr7Filing(gstin, records);
-            
-            if (res && res.status === 'submitted_for_review') {
-                setPreview(null); setText('');
-                showMsg('Submitted to Super Admin for review successfully!');
-            } else {
-                const updated = await apiClient.getGstr7FilingDetails(gstin);
-                setHistory(updated);
-                setPreview(null); setText('');
-                showMsg('Filing history saved! Status & delay count recalculated.');
-                if (onSaved) onSaved();
+            if (!data || !data.items || data.items.length === 0) { 
+                showMsg('AI could not extract any records. Check the pasted text.', true); 
+                return; 
             }
-        } catch (e) { showMsg('Save failed: ' + e.message, true); }
-        finally { setSaving(false); }
+            
+            const records = data.items.map(p => ({ returnPeriod: p.returnPeriod, dateOfFiling: p.dateOfFiling }));
+            await apiClient.saveGstr7Filing(gstin, records);
+            
+            if (onSaved) onSaved();
+            onClose();
+        } catch (e) { 
+            showMsg('AI parsing failed: ' + e.message, true); 
+        }
+        finally { setParsing(false); }
     };
 
     const handleSaveManual = async () => {
@@ -289,33 +279,8 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
 
                         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                             <button className="btn btn-primary" onClick={handleParse} disabled={parsing || !text.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {parsing ? <><span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></span>Parsing with AI...</> : <><Sparkles size={15} />Parse with AI</>}
+                                {parsing ? <><span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></span>Submitting...</> : <><Sparkles size={15} />Submit</>}
                             </button>
-                            <button 
-                                className="btn btn-secondary" 
-                                onClick={async () => {
-                                    if (!text.trim()) return;
-                                    try {
-                                        await apiClient.parseAndSaveGstr7FilingAsync(gstin, text);
-                                        if (onSaved) onSaved();
-                                        onClose();
-                                    } catch (e) {
-                                        showMsg('Async Start Failed: ' + e.message, true);
-                                    }
-                                }} 
-                                disabled={parsing || !text.trim()} 
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eef2f6', color: '#333' }}>
-                                <Save size={15} /> Close & Auto Save (Background)
-                            </button>
-                            {preview && (
-                                <>
-                                    <button className="btn btn-primary" onClick={handleSave} disabled={saving}
-                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#28a745', borderColor: '#28a745' }}>
-                                        {saving ? <><span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></span>Saving...</> : <><Save size={15} />Confirm & Save</>}
-                                    </button>
-                                    <button className="btn btn-secondary" onClick={() => setPreview(null)} style={{ fontSize: '0.83rem' }}>Discard Preview</button>
-                                </>
-                            )}
                         </div>
 
                         {/* ── Fill Manually (fallback) ── */}
@@ -658,7 +623,7 @@ let _cachedPans = null;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const Gstr7Management = ({ isTab }) => {
+const Gstr7Management = ({ isTab, initialSearchQuery, onClearSearch }) => {
     const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
     const isSuperAdmin = savedUser.role === 'super_admin';
 
@@ -678,6 +643,24 @@ const Gstr7Management = ({ isTab }) => {
 
     // Modal state for filing history
     const [modalGstin, setModalGstin] = useState(null);
+
+    // Modal state for GST Card
+    const [cardModalGstin, setCardModalGstin] = useState(null);
+    const [cardModalData, setCardModalData] = useState(null);
+    const [loadingCard, setLoadingCard] = useState(false);
+
+    const handleOpenCardModal = async (gstin) => {
+        setCardModalGstin(gstin);
+        setLoadingCard(true);
+        try {
+            const data = await apiClient.getGstDetailsAdmin(gstin);
+            setCardModalData(data);
+        } catch (err) {
+            console.error('Failed to load card details', err);
+        } finally {
+            setLoadingCard(false);
+        }
+    };
     const [copiedPans, setCopiedPans] = useState({});
     const [highlightedPan, setHighlightedPan] = useState(null);
     const rowRefs = React.useRef({});
@@ -732,6 +715,21 @@ const Gstr7Management = ({ isTab }) => {
     }, [pansData, sortEligibleFirst, sortByNewest, highlightedPan, searchQuery]);
 
     useEffect(() => { fetchAll(); }, []);
+
+    useEffect(() => {
+        if (initialSearchQuery) {
+            setSearchQuery(initialSearchQuery);
+            setExpandedPans(new Set([initialSearchQuery]));
+            setHighlightedPan(initialSearchQuery);
+            
+            // Scroll to the row after a brief delay to allow data to render
+            setTimeout(() => {
+                rowRefs.current[initialSearchQuery]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 600);
+
+            if (onClearSearch) onClearSearch();
+        }
+    }, [initialSearchQuery]);
 
     const fetchAll = async (showLoader = true) => {
         try {
@@ -1021,6 +1019,7 @@ const Gstr7Management = ({ isTab }) => {
                                     <th>PAN Number</th>
                                     <th style={{ minWidth: '220px', textAlign: 'left' }}>GSTINs</th>
                                     <th style={{ width: '160px' }}>TDS Status</th>
+                                    <th style={{ width: '180px' }}>TDS No.</th>
                                     <th style={{ width: '140px' }}>Action</th>
                                 </tr>
                             </thead>
@@ -1081,7 +1080,19 @@ const Gstr7Management = ({ isTab }) => {
                                                                     transition: 'background 0.2s, border-color 0.2s'
                                                                 }}>
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
-                                                                        <span style={{ fontWeight: 600, fontFamily: "'Roboto Mono', monospace", fontSize: '0.8rem', color: isMatch ? 'var(--primary-color)' : 'var(--primary-color)' }}>{g.gstin}</span>
+                                                                        <span 
+                                                                            onClick={() => handleOpenCardModal(g.gstin)}
+                                                                            title="View Details"
+                                                                            style={{ 
+                                                                                fontWeight: 600, 
+                                                                                fontFamily: "'Roboto Mono', monospace", 
+                                                                                fontSize: '0.8rem', 
+                                                                                color: isMatch ? 'var(--primary-color)' : 'var(--primary-color)',
+                                                                                cursor: 'pointer',
+                                                                                textDecoration: 'underline',
+                                                                                textUnderlineOffset: '2px'
+                                                                            }}
+                                                                        >{g.gstin}</span>
                                                                         {isMatch && <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.05rem 0.35rem', borderRadius: '8px', fontWeight: 700 }}>match</span>}
                                                                         <button className="ghost-btn" onClick={(e) => handleCopyPan(e, g.gstin)} title="Copy GSTIN" style={{ padding: '0.15rem', color: 'var(--text-light)', border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex' }}>
                                                                             {copiedPans[g.gstin] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
@@ -1129,6 +1140,37 @@ const Gstr7Management = ({ isTab }) => {
                                                     </div>
                                                 </td>
                                                 <td>
+                                                    {(() => {
+                                                        const tdsNos = [...new Set(
+                                                            (panObj.gstins || [])
+                                                                .map(g => g.gstdNo)
+                                                                .filter(no => no && no.trim() !== '')
+                                                        )];
+                                                        if (panObj.isApplicable && tdsNos.length > 0) {
+                                                            return (
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                                    {tdsNos.map(tdsNo => (
+                                                                        <div key={tdsNo} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                            <span style={{ fontFamily: "'Roboto Mono', monospace", fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-color)' }}>
+                                                                                {tdsNo}
+                                                                            </span>
+                                                                            <button
+                                                                                className="ghost-btn"
+                                                                                onClick={(e) => handleCopyPan(e, tdsNo)}
+                                                                                title="Copy TDS No"
+                                                                                style={{ padding: '0.15rem', color: 'var(--text-light)', display: 'inline-flex', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                                                                            >
+                                                                                {copiedPans[tdsNo] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
+                                                                            </button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                </td>
+                                                <td>
                                                     {panObj.isApplicable ? (
                                                         <button className="btn btn-secondary" onClick={() => handleExpand(panObj)} style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}>
                                                             <FileText size={14} />
@@ -1146,10 +1188,10 @@ const Gstr7Management = ({ isTab }) => {
                                             {/* Expanded GSTR-7 Config Panel */}
                                             {isExpanded && currentState && (
                                                 <tr>
-                                                    <td colSpan="5" style={{ padding: 0, borderBottom: '2px solid var(--primary-color)' }}>
-                                                        <div style={{ backgroundColor: '#f8fbfd', padding: '1.25rem 1.5rem', borderLeft: '3px solid var(--primary-color)' }}>
-                                                            <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
-                                                                <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--primary-color)' }}>
+                                                    <td colSpan="6" style={{ padding: 0, borderBottom: '2px solid #ef4444' }}>
+                                                        <div style={{ backgroundColor: '#f8fbfd', padding: '1.25rem 1.5rem', borderLeft: '3px solid #ef4444' }}>
+                                                            <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                                                <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#b91c1c' }}>
                                                                     GSTR-7 Configuration — PAN {panObj.panNumber}
                                                                 </h4>
                                                             </div>
@@ -1293,6 +1335,29 @@ const Gstr7Management = ({ isTab }) => {
                     onClose={() => setModalGstin(null)}
                     onSaved={() => fetchAll(false)}
                 />
+            )}
+
+            {/* ── GST Card Modal ── */}
+            {cardModalGstin && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => { setCardModalGstin(null); setCardModalData(null); }}>
+                    <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => { setCardModalGstin(null); setCardModalData(null); }} style={{ position: 'absolute', top: '-12px', right: '-12px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                            <X size={16} color="#64748b" />
+                        </button>
+                        <div style={{ width: '800px', maxWidth: '95vw' }}>
+                            {loadingCard ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0', gap: '1rem', background: 'white', borderRadius: '12px' }}>
+                                    <div className="spinner" style={{ width: '32px', height: '32px', borderWidth: '3px' }}></div>
+                                    <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>Loading Vendor Profile...</div>
+                                </div>
+                            ) : cardModalData ? (
+                                <GstCard gst={cardModalData} />
+                            ) : (
+                                <div style={{ color: '#ef4444', textAlign: 'center', padding: '2rem', background: 'white', borderRadius: '12px' }}>Failed to load data.</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
             <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px' }}>
                 Build Version: 1.1.0 - GSTR7 Sync Fix

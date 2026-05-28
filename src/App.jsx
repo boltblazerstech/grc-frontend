@@ -15,6 +15,7 @@ function App() {
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
   const [showGstr7, setShowGstr7] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [gstr7SearchQuery, setGstr7SearchQuery] = useState('');
 
   // Check simple local storage on mount
   useEffect(() => {
@@ -116,12 +117,19 @@ function App() {
         {showSuperAdmin && currentUser?.role === 'super_admin' ? (
           <SuperAdmin currentUser={currentUser} />
         ) : showGstr7 && currentUser ? (
-          <Gstr7Management />
+          <Gstr7Management 
+            initialSearchQuery={gstr7SearchQuery} 
+            onClearSearch={() => setGstr7SearchQuery('')} 
+          />
         ) : (
           <Dashboard 
             forceRefreshFlag={forceRefreshFlag} 
             currentUser={currentUser} 
-            onOpenGstr7={() => { setShowGstr7(true); setShowSuperAdmin(false); }}
+            onOpenGstr7={(pan) => { 
+              if (pan) setGstr7SearchQuery(pan);
+              setShowGstr7(true); 
+              setShowSuperAdmin(false); 
+            }}
           />
         )}
       </main>
