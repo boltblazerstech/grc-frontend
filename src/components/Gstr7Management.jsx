@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiClient } from '../api/apiClient';
 import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, History, Sparkles, ClipboardList, Copy, Check, X } from 'lucide-react';
 import Gstr7ReviewPage from './Gstr7ReviewPage';
@@ -623,7 +624,9 @@ let _cachedPans = null;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const Gstr7Management = ({ isTab, initialSearchQuery, onClearSearch }) => {
+const Gstr7Management = ({ isTab }) => {
+    const { state } = useLocation();
+    const initialSearchQuery = state?.searchQuery || '';
     const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
     const isSuperAdmin = savedUser.role === 'super_admin';
 
@@ -721,13 +724,9 @@ const Gstr7Management = ({ isTab, initialSearchQuery, onClearSearch }) => {
             setSearchQuery(initialSearchQuery);
             setExpandedPans(new Set([initialSearchQuery]));
             setHighlightedPan(initialSearchQuery);
-            
-            // Scroll to the row after a brief delay to allow data to render
             setTimeout(() => {
                 rowRefs.current[initialSearchQuery]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 600);
-
-            if (onClearSearch) onClearSearch();
         }
     }, [initialSearchQuery]);
 

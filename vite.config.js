@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    historyApiFallback: true,
     proxy: {
       '/api': {
         target: 'https://grc-backend-135177300761.asia-south1.run.app',

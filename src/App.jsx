@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -13,9 +14,8 @@ function App() {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [forceRefreshFlag, setForceRefreshFlag] = useState(0);
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
-  const [showGstr7, setShowGstr7] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [gstr7SearchQuery, setGstr7SearchQuery] = useState('');
+  const navigate = useNavigate();
 
   // Check simple local storage on mount
   useEffect(() => {
@@ -82,8 +82,8 @@ function App() {
 
   const handleHomeClick = () => {
     setShowSuperAdmin(false);
-    setShowGstr7(false);
     setShowLogin(false);
+    navigate('/');
   };
 
   if (showLogin && !currentUser) {
@@ -106,32 +106,29 @@ function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         showSuperAdmin={showSuperAdmin}
-        setShowSuperAdmin={(val) => { setShowSuperAdmin(val); if (val) setShowGstr7(false); }}
-        showGstr7={showGstr7}
-        setShowGstr7={(val) => { setShowGstr7(val); if (val) setShowSuperAdmin(false); }}
+        setShowSuperAdmin={(val) => { setShowSuperAdmin(val); }}
         onLoginClick={() => setShowLogin(true)}
         onHomeClick={handleHomeClick}
       />
 
       <main className="main-content">
-        {showSuperAdmin && currentUser?.role === 'super_admin' ? (
-          <SuperAdmin currentUser={currentUser} />
-        ) : showGstr7 && currentUser ? (
-          <Gstr7Management 
-            initialSearchQuery={gstr7SearchQuery} 
-            onClearSearch={() => setGstr7SearchQuery('')} 
-          />
-        ) : (
-          <Dashboard 
-            forceRefreshFlag={forceRefreshFlag} 
-            currentUser={currentUser} 
-            onOpenGstr7={(pan) => { 
-              if (pan) setGstr7SearchQuery(pan);
-              setShowGstr7(true); 
-              setShowSuperAdmin(false); 
-            }}
-          />
-        )}
+        <Routes>
+          <Route path="/gstr7-master" element={<Gstr7Management />} />
+          <Route path="*" element={
+            showSuperAdmin && currentUser?.role === 'super_admin' ? (
+              <SuperAdmin currentUser={currentUser} />
+            ) : (
+              <Dashboard
+                forceRefreshFlag={forceRefreshFlag}
+                currentUser={currentUser}
+                onOpenGstr7={(pan) => {
+                  navigate('/gstr7-master', { state: { searchQuery: pan || '' } });
+                  setShowSuperAdmin(false);
+                }}
+              />
+            )
+          } />
+        </Routes>
       </main>
 
       <footer style={{ 

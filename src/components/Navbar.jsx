@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown } from 'lucide-react';
 import UserProfileModal from './UserProfileModal';
 import SettingsModal from './SettingsModal';
 
-const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, showSuperAdmin, setShowSuperAdmin, showGstr7, setShowGstr7, onLoginClick, onHomeClick }) => {
+const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, showSuperAdmin, setShowSuperAdmin, onLoginClick, onHomeClick }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const onGstr7Page = location.pathname === '/gstr7-master';
     const [showProfile, setShowProfile] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [scrolled, setScrolled] = useState(false);
@@ -127,10 +131,10 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                         <>
                             {currentUser.role === 'super_admin' && (
                                 <button
-                                    className={`navbar-btn ${(showSuperAdmin || showGstr7) ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                    className={`navbar-btn ${(showSuperAdmin || onGstr7Page) ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
                                     onClick={() => {
-                                        if (showGstr7) {
-                                            setShowGstr7(false);
+                                        if (onGstr7Page) {
+                                            navigate('/');
                                         } else {
                                             setShowSuperAdmin(!showSuperAdmin);
                                         }
@@ -138,18 +142,28 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                                     title="Super Admin Control Center"
                                 >
                                     <ShieldAlert size={15} />
-                                    <span className="btn-text">{(showSuperAdmin || showGstr7) ? 'Back to Dashboard' : 'Super Admin'}</span>
+                                    <span className="btn-text">{(showSuperAdmin || onGstr7Page) ? 'Back to Dashboard' : 'Super Admin'}</span>
                                 </button>
                             )}
 
-                            {!showSuperAdmin && currentUser.role !== 'super_admin' && (
+                            {currentUser.role !== 'super_admin' && (
                                 <button
-                                    className={`navbar-btn ${showGstr7 ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
-                                    onClick={() => setShowGstr7(!showGstr7)}
+                                    className={`navbar-btn ${onGstr7Page ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                    onClick={() => onGstr7Page ? navigate('/') : navigate('/gstr7-master')}
                                     title="Manage GSTR-7"
                                 >
                                     <FileText size={15} />
-                                    <span className="btn-text">{showGstr7 ? 'Back' : 'GSTR-7'}</span>
+                                    <span className="btn-text">{onGstr7Page ? 'Back' : 'GSTR-7'}</span>
+                                </button>
+                            )}
+
+                            {onGstr7Page && currentUser.role === 'super_admin' && (
+                                <button
+                                    className="navbar-btn navbar-btn-ghost"
+                                    onClick={() => navigate('/')}
+                                    title="Back to Dashboard"
+                                >
+                                    ← Dashboard
                                 </button>
                             )}
 

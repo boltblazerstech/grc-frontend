@@ -308,6 +308,12 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                         <div style={{ borderBottom: '1px dotted #e2e8f0' }}>
                             <InfoRow icon={IndianRupee} label="Aggregate Turnover" value={formatTurnover(gst.aggregateTurnover)} />
                         </div>
+                        <div style={{ borderBottom: '1px dotted #e2e8f0' }}>
+                            <InfoRow icon={CheckCircle} label="Aadhar Verification Status" value={gst.aadhaarValidation || 'N/A'} />
+                        </div>
+                        <div style={{ borderBottom: '1px dotted #e2e8f0' }}>
+                            <InfoRow icon={Building2} label="Core Activity" value={gst.coreActivity || 'N/A'} />
+                        </div>
                     </div>
                 </div>
 
@@ -395,11 +401,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                             />
                         </div>
                         <div style={{ padding: '0.6rem 0', borderBottom: '1px dotted #e2e8f0' }}>
-                            {!isGstr7Applicable ? (
-                                <div style={{ background: '#f0f9ff', borderRadius: '4px', padding: '0.35rem', fontSize: '0.58rem', color: '#0369a1', lineHeight: 1.2 }}>
-                                    Applicable only for TDS vendors.
-                                </div>
-                            ) : (
+                            {!isGstr7Applicable ? null : (
                                 <>
                                     <div style={{ display: 'flex', gap: '1.25rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>

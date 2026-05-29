@@ -1033,7 +1033,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                   <Users size={16} /> New Vendors
                 </button>
                 <button
-                  onClick={onOpenGstr7}
+                  onClick={() => onOpenGstr7()}
                   className="btn"
                   style={{
                     whiteSpace: "nowrap",
