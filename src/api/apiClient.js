@@ -1,6 +1,6 @@
-// Use relative paths to allow Netlify Proxy to handle HTTP/HTTPS issues
-const API_BASE_URL = '/api/grc';
-const API_USER_URL = '/api/users';
+const _BACKEND = 'https://grc-backend-135177300761.asia-south1.run.app';
+const API_BASE_URL = `${_BACKEND}/api/grc`;
+const API_USER_URL = `${_BACKEND}/api/users`;
 
 export const apiClient = {
     async getDetails() {
