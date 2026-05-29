@@ -256,7 +256,11 @@ export const apiClient = {
             },
             body: JSON.stringify({ isApplicable, updatedBy: userName })
         });
-        if (!response.ok) throw new Error('Failed to set TDS status');
+        if (!response.ok) {
+            let msg = 'Failed to set TDS status';
+            try { const b = await response.json(); msg = b.details || b.message || msg; } catch {}
+            throw new Error(msg);
+        }
         return response.json();
     },
 
