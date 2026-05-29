@@ -248,8 +248,8 @@ export const apiClient = {
         const savedUser = localStorage.getItem('grc_user');
         const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
 
-        const response = await fetch(`${API_BASE_URL}/admin/gstr7/tds-applicable/${pan}`, {
-            method: 'PUT',
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/tds/${pan}`, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Role': 'super_admin'
