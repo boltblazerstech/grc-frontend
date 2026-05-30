@@ -124,7 +124,15 @@ const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus }
     } else {
         text = status;
     }
-    return <span style={{ background: bg, color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${color}20`, whiteSpace: 'nowrap' }}>{text}</span>;
+    return (
+        <span style={{ 
+            background: bg, color, padding: '0.15rem 0.5rem', borderRadius: '4px', 
+            fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${color}20`, 
+            whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'right', maxWidth: '70%', lineHeight: '1.2'
+        }}>
+            {text}
+        </span>
+    );
 };
 
 const SectionHeader = ({ icon: Icon, title, color }) => (
@@ -381,7 +389,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                             <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>GSTR 7</span>
                             {isGstr7Applicable && gst.gstdNo ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a' }}>{gst.gstdNo}</span>
+                                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a', wordBreak: 'break-all', textAlign: 'right', maxWidth: '100px', lineHeight: '1.2' }}>{gst.gstdNo}</span>
                                     <button onClick={handleCopyGstr7} title="Copy GSTR-7 No."
                                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', display: 'inline-flex', color: '#9ca3af' }}>
                                         {copiedGstr7 ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}

@@ -162,9 +162,6 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
           }}
         >
           <strong>⚠️ No monthly filing history has been imported yet for this vendor.</strong>
-          <div style={{ fontSize: "0.72rem", color: "#666", marginTop: "6px" }}>
-            To show details here, go to <strong>GSTR-7 Master</strong>, click <strong>Manage GSTR-7</strong>, and import/paste the filing history table.
-          </div>
         </div>
       ) : (
         <>
