@@ -84,25 +84,41 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
 
     const handleParse = async () => {
         if (!text.trim()) return;
-        setParsing(true); setErr('');
+        setParsing(true);
+        setPreview(null);
+        setErr('');
         try {
             const data = await apiClient.parseGstr7Filing(gstin, text);
             if (!data || !data.items || data.items.length === 0) { 
                 showMsg('AI could not extract any records. Check the pasted text.', true); 
                 return; 
             }
-            
-            const records = data.items.map(p => ({ returnPeriod: p.returnPeriod, dateOfFiling: p.dateOfFiling }));
-            await apiClient.saveGstr7Filing(gstin, records);
-            
-            if (onSaved) onSaved();
-            onClose();
+            setPreview(data);
         } catch (e) { 
             showMsg('AI parsing failed: ' + e.message, true); 
         }
         finally { setParsing(false); }
     };
 
+    const handleSave = async () => {
+        if (!preview || !preview.items) return;
+        setSaving(true);
+        try {
+            const records = preview.items.map(p => ({ returnPeriod: p.returnPeriod, dateOfFiling: p.dateOfFiling }));
+            await apiClient.saveGstr7Filing(gstin, records);
+            const updated = await apiClient.getGstr7FilingDetails(gstin);
+            setHistory(updated);
+            setPreview(null);
+            setText('');
+            showMsg('Filing history saved and status recalculated.');
+            if (onSaved) onSaved();
+            onClose();
+        } catch (e) {
+            showMsg('Save failed: ' + e.message, true);
+        } finally {
+            setSaving(false);
+        }
+    };
     const handleSaveManual = async () => {
         setSavingManual(true);
         try {
@@ -394,6 +410,12 @@ const FilingModal = ({ gstin, onClose, onSaved }) => {
                                             ))}
                                         </tbody>
                                     </table>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
+                                    <button onClick={() => setPreview(null)} style={{ background: 'none', border: '1px solid #9ca3af', padding: '0.4rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, color: '#4b5563' }}>Cancel</button>
+                                    <button onClick={handleSave} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.4rem 1.1rem', backgroundColor: '#1d4ed8', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                                        {saving ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>Saving...</> : <><Save size={14} />Confirm & Save</>}
+                                    </button>
                                 </div>
                             </div>
                         )}
