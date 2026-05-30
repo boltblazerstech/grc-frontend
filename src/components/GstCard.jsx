@@ -296,7 +296,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
             </div>
 
             {/* ── 3-COLUMN BODY ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr 1.1fr', gap: 0, flex: 1 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.1fr)', gap: 0, flex: 1 }}>
                 {/* Column 1 - VENDOR PROFILE */}
                 <div style={{ padding: '0.75rem', borderRight: '1px solid #f3f4f6' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
@@ -497,10 +497,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                 </div>
             )}
 
-            <div style={{ borderTop: '1px solid #f3f4f6', padding: '0.35rem 0.75rem', background: '#fafafa', fontSize: '0.58rem', color: '#9ca3af', display: 'flex', justifyContent: 'space-between' }}>
-                <span>◎ Auto-fetched from GST Portal</span>
-                <span>{gst.scoreCalculatedAt ? new Date(gst.scoreCalculatedAt).toLocaleDateString('en-IN') : ''}</span>
-            </div>
+          
         </div>
     );
 };
