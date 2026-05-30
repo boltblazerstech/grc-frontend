@@ -65,6 +65,18 @@ const SECTIONS = [
             { key: 'G3B_OK_MULT',    label: 'On-time Multiplier',   hint: '0.0 = safe' },
             { key: 'G3B_DELAY_MULT', label: 'Delayed Multiplier',   hint: '1.0 = risky' },
         ]
+    },
+    {
+        title: 'Rule 7 — GSTR-7 Filing',
+        max: 'G7_MAX',
+        keys: [
+            { key: 'G7_MAX',                 label: 'Max Score',                       hint: '' },
+            { key: 'G7_REGULAR_MULT',        label: 'Regular Multiplier',              hint: '0.0 = safest' },
+            { key: 'G7_DELAYED_MULT',        label: 'Delayed Multiplier',              hint: '0.3' },
+            { key: 'G7_MISSED_MULT',         label: 'Missed Multiplier',               hint: '0.5' },
+            { key: 'G7_MISSED_DELAYED_MULT', label: 'Missed & Delayed Multiplier',     hint: '0.8 = riskier' },
+            { key: 'G7_NA_MULT',             label: 'NA Status Multiplier',            hint: '0.3' },
+        ]
     }
 ];
 
