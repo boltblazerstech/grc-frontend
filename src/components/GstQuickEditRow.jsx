@@ -173,4 +173,4 @@ const GstQuickEditRow = ({ gst, getScoreColor, onUpdate, index, currentUser }) =
     );
 };
 
-export default GstQuickEditRow;
+export default React.memo(GstQuickEditRow);

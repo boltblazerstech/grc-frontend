@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -17,9 +17,10 @@ import {
   FileText,
   Users,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { apiClient } from "../api/apiClient";
-import * as XLSX from "xlsx";
 import GstCard from "./GstCard";
 import GstDetailsModal from "./GstDetailsModal";
 import GstQuickEditRow from "./GstQuickEditRow";
@@ -520,6 +521,10 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [showNewVendors, setShowNewVendors] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 30;
+
   const handleCopy = (gstin) => {
     navigator.clipboard.writeText(gstin);
     setCopiedGstin(gstin);
@@ -741,6 +746,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
         return row;
       });
 
+      const XLSX = await import("xlsx");
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "GRC Details");
@@ -905,6 +911,19 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       ),
     [processedList],
   );
+
+  // Reset pagination when list changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [processedList]);
+
+  // Derived paginated lists
+  const paginatedNormalList = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return normalList.slice(startIndex, startIndex + itemsPerPage);
+  }, [normalList, currentPage]);
+
+  const totalPages = Math.ceil(normalList.length / itemsPerPage);
 
   // Only non-error GSTINs from both lists are selectable
   const allSelectableGstins = useMemo(
@@ -2063,8 +2082,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                 </tr>
               </thead>
               <tbody>
-                {normalList.length > 0 ? (
-                  normalList.map((gst, index) => (
+                {paginatedNormalList.length > 0 ? (
+                  paginatedNormalList.map((gst, index) => (
                     <tr
                       key={gst.gstin}
                       className={`gst-table-row ${recentlyAdded.has(gst.gstin) ? "new-item" : ""}`}
@@ -2100,7 +2119,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                           textAlign: "center",
                         }}
                       >
-                        {index + 1}
+                        {(currentPage - 1) * itemsPerPage + index + 1}
                       </td>
                       <td
                         className="gstin-cell"
@@ -2209,8 +2228,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
           </div>
         ) : viewMode === "grid" ? (
           <div className="gst-grid">
-            {normalList.length > 0 ? (
-              normalList.map((gst, index) => (
+            {paginatedNormalList.length > 0 ? (
+              paginatedNormalList.map((gst, index) => (
                 <div key={gst.gstin} style={{ position: "relative" }}>
                   {showRefreshPanel && (
                     <input
@@ -2233,7 +2252,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                   )}
                   <GstCard
                     gst={gst}
-                    index={index + 1}
+                    index={(currentPage - 1) * itemsPerPage + index + 1}
                     isNew={recentlyAdded.has(gst.gstin)}
                     isFirstFetch={false}
                     onClick={
@@ -2260,8 +2279,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
           </div>
         ) : (
           <div className="gst-quick-edit-list">
-            {normalList.length > 0 ? (
-              normalList.map((gst, index) => (
+            {paginatedNormalList.length > 0 ? (
+              paginatedNormalList.map((gst, index) => (
                 <div
                   key={gst.gstin}
                   style={{
@@ -2288,7 +2307,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                   )}
                   <div style={{ flex: 1 }}>
                     <GstQuickEditRow
-                      index={index + 1}
+                      index={(currentPage - 1) * itemsPerPage + index + 1}
                       gst={gst}
                       getScoreColor={(score) =>
                         getScoreColor(score, thresholds)
@@ -2310,6 +2329,30 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                 <p>No GST numbers found matching your criteria.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "1rem", marginTop: "2rem", padding: "1rem" }}>
+            <button 
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}
+            >
+              <ChevronLeft size={16} /> Previous
+            </button>
+            <span style={{ fontSize: "0.9rem", color: "var(--text-light)" }}>
+              Page <span style={{ fontWeight: "600", color: "var(--text-color)" }}>{currentPage}</span> of {totalPages}
+            </span>
+            <button 
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}
+            >
+              Next <ChevronRight size={16} />
+            </button>
           </div>
         )}
       </div>

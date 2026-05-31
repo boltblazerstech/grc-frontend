@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
-import Login from './components/Login';
-import SuperAdmin from './components/SuperAdmin';
-import Gstr7Management from './components/Gstr7Management';
-import AdminCenter from './components/AdminCenter';
 import { apiClient } from './api/apiClient';
 import './App.css';
+
+const Login = React.lazy(() => import('./components/Login'));
+const SuperAdmin = React.lazy(() => import('./components/SuperAdmin'));
+const Gstr7Management = React.lazy(() => import('./components/Gstr7Management'));
+const AdminCenter = React.lazy(() => import('./components/AdminCenter'));
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -112,23 +113,25 @@ function App() {
       />
 
       <main className="main-content">
-        <Routes>
-          <Route path="/gstr7-master" element={<Gstr7Management />} />
-          <Route path="*" element={
-            showSuperAdmin && currentUser?.role === 'super_admin' ? (
-              <SuperAdmin currentUser={currentUser} />
-            ) : (
-              <Dashboard
-                forceRefreshFlag={forceRefreshFlag}
-                currentUser={currentUser}
-                onOpenGstr7={(pan) => {
-                  navigate('/gstr7-master', { state: { searchQuery: pan || '' } });
-                  setShowSuperAdmin(false);
-                }}
-              />
-            )
-          } />
-        </Routes>
+        <Suspense fallback={<div style={{display: 'flex', justifyContent: 'center', padding: '3rem'}}><div className="spinner"></div></div>}>
+          <Routes>
+            <Route path="/gstr7-master" element={<Gstr7Management />} />
+            <Route path="*" element={
+              showSuperAdmin && currentUser?.role === 'super_admin' ? (
+                <SuperAdmin currentUser={currentUser} />
+              ) : (
+                <Dashboard
+                  forceRefreshFlag={forceRefreshFlag}
+                  currentUser={currentUser}
+                  onOpenGstr7={(pan) => {
+                    navigate('/gstr7-master', { state: { searchQuery: pan || '' } });
+                    setShowSuperAdmin(false);
+                  }}
+                />
+              )
+            } />
+          </Routes>
+        </Suspense>
       </main>
 
       <footer style={{ 

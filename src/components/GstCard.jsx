@@ -15,7 +15,7 @@ const calculateAge = (dateString) => {
     return `${years} yr${years > 1 ? 's' : ''}`;
 };
 
-const formatGstType = (type) => { if (!type) return 'N/A'; return type.trim().split(/\s+/)[0]; };
+const formatGstType = (type) => { if (!type) return 'N/A'; return type.trim(); };
 const formatTurnover = (t) => (!t || t === '0' || t === 0) ? 'N/A' : t;
 const formatPeriod = (period) => {
     if (!period) return period;
@@ -502,4 +502,4 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
     );
 };
 
-export default GstCard;
+export default React.memo(GstCard);
