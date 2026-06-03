@@ -774,10 +774,14 @@ const Gstr7Management = ({ isTab }) => {
     const isValidGstin = (gstin) =>
         /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin.toUpperCase());
 
-    const isValidGstd = (gstd) =>
-        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]D[0-9A-Z]$/.test(gstd.toUpperCase());
+    const isValidGstd = (gstd, pan) => {
+        const isValidFormat = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]D[0-9A-Z]$/.test(gstd.toUpperCase());
+        if (!isValidFormat) return false;
+        if (pan && gstd.toUpperCase().substring(2, 12) !== pan.toUpperCase()) return false;
+        return true;
+    };
 
-    const getGstdValidationMessage = (gstd) => {
+    const getGstdValidationMessage = (gstd, pan) => {
         if (!gstd) return '';
         const val = gstd.toUpperCase();
         if (val.length !== 15) return "Must be exactly 15 characters.";
@@ -786,7 +790,8 @@ const Gstr7Management = ({ isTab }) => {
         if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}/.test(val)) return "Characters 8-11 must be numbers.";
         if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]/.test(val)) return "Character 12 must be a letter.";
         if (val.charAt(13) !== 'D') return "The 14th character (second to last) must be 'D'.";
-        if (!isValidGstd(val)) return "Invalid TDS no format.";
+        if (pan && val.substring(2, 12) !== pan.toUpperCase()) return `PAN inside TDS no must match ${pan.toUpperCase()}.`;
+        if (!isValidGstd(val, pan)) return "Invalid TDS no format.";
         return '';
     };
 
@@ -883,7 +888,7 @@ const Gstr7Management = ({ isTab }) => {
         try {
             const gState = editState[pan]?.gstins[gstin];
             const newGstd = gState.gstdNo.trim().toUpperCase();
-            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid TDS no format. Must end with 'D' followed by one character.`);
+            if (newGstd !== '' && !isValidGstd(newGstd, pan)) throw new Error(`Invalid TDS no format: ${getGstdValidationMessage(newGstd, pan)}`);
             setSavingGstd(gstin);
             setError(null);
             await apiClient.markUnmarkGstd(gstin, newGstd);
@@ -898,7 +903,7 @@ const Gstr7Management = ({ isTab }) => {
             const gState = editState[pan]?.gstins[g.gstin];
             const currentGstd = g.gstdNo || '';
             const newGstd = gState.gstdNo.trim().toUpperCase();
-            if (newGstd !== '' && !isValidGstd(newGstd)) throw new Error(`Invalid TDS no format: "${newGstd}". Must end with 'D' followed by one character.`);
+            if (newGstd !== '' && !isValidGstd(newGstd, pan)) throw new Error(`Invalid TDS no format: ${getGstdValidationMessage(newGstd, pan)}`);
             setSavingGstinRow(g.gstin);
             setError(null);
             if (currentGstd !== newGstd) await apiClient.markUnmarkGstd(g.gstin, newGstd);
@@ -1166,28 +1171,38 @@ const Gstr7Management = ({ isTab }) => {
                                                                 .map(g => g.gstdNo)
                                                                 .filter(no => no && no.trim() !== '')
                                                         )];
-                                                        if (panObj.isApplicable && tdsNos.length > 0) {
-                                                            return (
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                                                    {tdsNos.map(tdsNo => (
-                                                                        <div key={tdsNo} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                                            <span style={{ fontFamily: "'Roboto Mono', monospace", fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-color)' }}>
-                                                                                {tdsNo}
-                                                                            </span>
-                                                                            <button
-                                                                                className="ghost-btn"
-                                                                                onClick={(e) => handleCopyPan(e, tdsNo)}
-                                                                                title="Copy TDS No"
-                                                                                style={{ padding: '0.15rem', color: 'var(--text-light)', display: 'inline-flex', border: 'none', background: 'transparent', cursor: 'pointer' }}
-                                                                            >
-                                                                                {copiedPans[tdsNo] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
-                                                                            </button>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            );
+                                                        
+                                                        if (panObj.isApplicable === false) {
+                                                            return <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.8rem' }}>Not Registered</span>;
                                                         }
-                                                        return null;
+                                                        
+                                                        if (panObj.isApplicable === true) {
+                                                            if (tdsNos.length > 0) {
+                                                                return (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                                        {tdsNos.map(tdsNo => (
+                                                                            <div key={tdsNo} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                                <span style={{ fontFamily: "'Roboto Mono', monospace", fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-color)' }}>
+                                                                                    {tdsNo}
+                                                                                </span>
+                                                                                <button
+                                                                                    className="ghost-btn"
+                                                                                    onClick={(e) => handleCopyPan(e, tdsNo)}
+                                                                                    title="Copy TDS No"
+                                                                                    style={{ padding: '0.15rem', color: 'var(--text-light)', display: 'inline-flex', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                                                                                >
+                                                                                    {copiedPans[tdsNo] ? <Check size={13} color="var(--success-color)" /> : <Copy size={13} />}
+                                                                                </button>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                );
+                                                            } else {
+                                                                return <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.8rem' }}>Registered</span>;
+                                                            }
+                                                        }
+                                                        
+                                                        return <span style={{ color: 'var(--text-light)', fontWeight: 600, fontSize: '0.8rem' }}>NA</span>;
                                                     })()}
                                                 </td>
                                                 <td>
@@ -1247,16 +1262,16 @@ const Gstr7Management = ({ isTab }) => {
                                                                                                     placeholder="Enter TDS no" 
                                                                                                     value={currentGstd} 
                                                                                                     onChange={e => handleGstinChange(panObj.panNumber, g.gstin, 'gstdNo', e.target.value)}
-                                                                                                    style={{ width: '150px', padding: '0.35rem 0.5rem', fontSize: '0.83rem', fontFamily: "'Roboto Mono', monospace", border: (currentGstd !== '' && !isValidGstd(currentGstd)) ? '2px solid #ef4444' : '1px solid var(--border-color)' }}
+                                                                                                    style={{ width: '150px', padding: '0.35rem 0.5rem', fontSize: '0.83rem', fontFamily: "'Roboto Mono', monospace", border: (currentGstd !== '' && !isValidGstd(currentGstd, panObj.panNumber)) ? '2px solid #ef4444' : '1px solid var(--border-color)' }}
                                                                                                 />
                                                                                                 {currentGstd !== savedGstd && (
-                                                                                                    <button className="btn btn-primary" onClick={() => handleSaveGstd(panObj.panNumber, g.gstin)} disabled={savingGstd === g.gstin || (currentGstd !== '' && !isValidGstd(currentGstd))} title="Confirm & Save" style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem' }}>
+                                                                                                    <button className="btn btn-primary" onClick={() => handleSaveGstd(panObj.panNumber, g.gstin)} disabled={savingGstd === g.gstin || (currentGstd !== '' && !isValidGstd(currentGstd, panObj.panNumber))} title="Confirm & Save" style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem' }}>
                                                                                                         <Save size={13} />
                                                                                                     </button>
                                                                                                 )}
                                                                                             </div>
-                                                                                            {currentGstd !== '' && !isValidGstd(currentGstd) && (
-                                                                                                <span style={{ color: '#ef4444', fontSize: '0.65rem', lineHeight: 1.1, maxWidth: '180px' }}>{getGstdValidationMessage(currentGstd)}</span>
+                                                                                            {currentGstd !== '' && !isValidGstd(currentGstd, panObj.panNumber) && (
+                                                                                                <span style={{ color: '#ef4444', fontSize: '0.65rem', lineHeight: 1.1, maxWidth: '180px' }}>{getGstdValidationMessage(currentGstd, panObj.panNumber)}</span>
                                                                                             )}
                                                                                         </div>
                                                                                     </td>

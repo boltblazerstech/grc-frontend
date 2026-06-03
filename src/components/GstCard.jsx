@@ -94,7 +94,7 @@ const DelayBadge = ({ count }) => {
     );
 };
 
-const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus }) => {
+const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus, hasGstd = true }) => {
     if (!isApplicable) {
         return <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid #e5e7eb' }}>N/A</span>;
     }
@@ -111,8 +111,13 @@ const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus }
     }
 
     if (!status || status === "NA") {
-        text = "NA";
-        bg = '#f3f4f6'; color = '#9ca3af';
+        if (!hasGstd) {
+            text = "NA";
+            bg = '#f3f4f6'; color = '#9ca3af';
+        } else {
+            text = "Not Filed";
+            bg = '#f3f4f6'; color = '#6b7280';
+        }
     } else if (missedCount > 0 && delayCount > 0) {
         text = `${missedCount} missed and ${delayCount} delayed`;
     } else if (status === "Regular without delay") {
@@ -192,7 +197,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
 
     const scoreInfo = getScoreInfo(gst.grcScore, thresholds);
     const riskInsight = getRiskInsight(gst.grcScore, thresholds, gst);
-    const isGstr7Applicable = gst.categoryName?.toLowerCase() === 'scrap' || (gst.gstr7Status && gst.gstr7Status !== 'NA');
+    const isGstr7Applicable = gst.categoryName?.toLowerCase() === 'scrap' || !!gst.gstdNo || (gst.gstr7Status && gst.gstr7Status !== 'NA');
 
     return (
         <div
@@ -396,7 +401,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                     </button>
                                 </div>
                             ) : (
-                                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#6b7280' }}>NA</span>
+                                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#dc2626' }}>Not Registered</span>
                             )}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
@@ -406,6 +411,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                 delayCount={gst.gstr7DelayCount ?? 0} 
                                 isApplicable={isGstr7Applicable} 
                                 rawStatus={gst.gstr7Status}
+                                hasGstd={!!gst.gstdNo}
                             />
                         </div>
                         <div style={{ padding: '0.6rem 0', borderBottom: '1px dotted #e2e8f0' }}>

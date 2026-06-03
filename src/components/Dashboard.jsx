@@ -37,15 +37,18 @@ const getScoreColor = (score, thresholds) => {
 
 // ── New Vendors Modal (Home Page) ─────────────────────────────────────────────────────────────
 
-const gstr7BadgeStyle = (status) => {
-  if (!status || status === "NA")
-    return { bg: "#f3f4f6", color: "#6b7280" };
+const gstr7BadgeStyle = (status, hasGstd) => {
+  if (!status || status === "NA") {
+    if (hasGstd) return { bg: "#f3f4f6", color: "#6b7280", text: "Not Filed" };
+    return { bg: "#f3f4f6", color: "#9ca3af", text: "NA" };
+  }
   if (status === "Regular without delay")
-    return { bg: "#d4edda", color: "#155724" };
+    return { bg: "#dcfce7", color: "#16a34a", text: "✓ Regular" };
   if (status === "Regular with Delay")
-    return { bg: "#fff3cd", color: "#856404" };
-  if (status === "Missed") return { bg: "#f8d7da", color: "#721c24" };
-  return { bg: "#e2e3e5", color: "#383d41" };
+    return { bg: "#fff7ed", color: "#d97706", text: "⚠️ Regular with delay" };
+  if (status === "Missed") 
+    return { bg: "#fef2f2", color: "#dc2626", text: "✕ Missed" };
+  return { bg: "#f3f4f6", color: "#6b7280", text: status };
 };
 
 const gstStatusStyle = (status) => {
@@ -324,7 +327,7 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
               </thead>
               <tbody>
                 {filtered.map((v, i) => {
-                  const gstr7Style = gstr7BadgeStyle(v.gstr7Status);
+                  const gstr7Style = gstr7BadgeStyle(v.gstr7Status, !!v.gstdNo);
                   const gstStyle = gstStatusStyle(v.gstStatus);
                   const pan = v.panNumber || (v.gstin ? v.gstin.substring(2, 12) : "");
                   return (
@@ -442,15 +445,10 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
                             borderRadius: "4px",
                             fontSize: "0.75rem",
                             fontWeight: 600,
+                            border: `1px solid ${gstr7Style.color}20`
                           }}
                         >
-                          {v.gstr7Status === "Regular without delay"
-                            ? "✓ Regular"
-                            : v.gstr7Status === "Regular with Delay"
-                              ? "⚠ Regular with delay"
-                              : v.gstr7Status === "Missed"
-                                ? "✕ Missed"
-                                : v.gstr7Status || "Not Set"}
+                          {gstr7Style.text}
                         </span>
                       </td>
                       <td style={{ padding: "0.55rem 0.85rem" }}>
@@ -912,10 +910,10 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     [processedList],
   );
 
-  // Reset pagination when list changes
+  // Reset pagination only when search or filter criteria change
   useEffect(() => {
     setCurrentPage(1);
-  }, [processedList]);
+  }, [searchTerm, scoreFilter, sourceFilter, turnoverFilter]);
 
   // Derived paginated lists
   const paginatedNormalList = useMemo(() => {
