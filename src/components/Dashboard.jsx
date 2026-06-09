@@ -694,6 +694,8 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
           email: gst.email || "N/A",
           mobile: gst.mobile || "N/A",
           promoters: gst.promoters || "N/A",
+          core_activity: gst.coreActivity || "N/A",
+          aadhaar_verification_status: gst.aadhaarValidation || "N/A",
           aggregate_turnover: gst.aggregateTurnover || "N/A",
           delay_count_gstr1:
             gst.delayCountGstr1 != null ? gst.delayCountGstr1 : "N/A",
@@ -797,10 +799,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       list = list.filter(
-        (g) =>
-          g.gstin.toLowerCase().includes(term) ||
-          (g.tradeName && g.tradeName.toLowerCase().includes(term)) ||
-          (g.legalName && g.legalName.toLowerCase().includes(term)),
+        (g) => {
+          const pan = g.panNumber || (g.gstin ? g.gstin.substring(2, 12) : "");
+          return g.gstin.toLowerCase().includes(term) ||
+                 (g.tradeName && g.tradeName.toLowerCase().includes(term)) ||
+                 (g.legalName && g.legalName.toLowerCase().includes(term)) ||
+                 pan.toLowerCase().includes(term);
+        }
       );
     }
 
@@ -903,11 +908,12 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const normalList = useMemo(
     () =>
       processedList.filter(
-        (g) =>
-          g.updatedBy !== "Dummy" &&
-          !(g.apiError === true && g.dataSource !== "Manual"),
+        (g) => {
+          if (searchTerm) return true; // If actively searching, show all matched items, even pending/error ones
+          return g.updatedBy !== "Dummy" && !(g.apiError === true && g.dataSource !== "Manual");
+        }
       ),
-    [processedList],
+    [processedList, searchTerm],
   );
 
   // Reset pagination only when search or filter criteria change
