@@ -24,6 +24,7 @@ import { apiClient } from "../api/apiClient";
 import GstCard from "./GstCard";
 import GstDetailsModal from "./GstDetailsModal";
 import GstQuickEditRow from "./GstQuickEditRow";
+import { getGstr7UpdateStatus } from "../utils/gstr7UpdateStatus";
 
 const getScoreColor = (score, thresholds) => {
   if (score === null || score === undefined) return "";
@@ -729,6 +730,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             gst.gstr7MissedCount != null ? gst.gstr7MissedCount : "N/A",
           gstr7_last_updated:
             gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleString("en-IN") : "N/A",
+          gstr7_update_status: getGstr7UpdateStatus(gst).label,
         };
 
         // Add monthly filing columns

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, Copy, Check, AlertCircle, History, Building2, Calendar, User, IndianRupee, ShieldCheck, FileText, Lightbulb, Info, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import Gstr7Timeline from './Gstr7Timeline';
+import { getGstr7UpdateStatus } from '../utils/gstr7UpdateStatus';
 
 const calculateAge = (dateString) => {
     if (!dateString) return 'N/A';
@@ -406,13 +407,24 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
                             <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Status</span>
-                            <Gstr7Badge 
-                                missedCount={gst.gstr7MissedCount ?? 0} 
-                                delayCount={gst.gstr7DelayCount ?? 0} 
-                                isApplicable={isGstr7Applicable} 
+                            <Gstr7Badge
+                                missedCount={gst.gstr7MissedCount ?? 0}
+                                delayCount={gst.gstr7DelayCount ?? 0}
+                                isApplicable={isGstr7Applicable}
                                 rawStatus={gst.gstr7Status}
                                 hasGstd={!!gst.gstdNo}
                             />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Update Status</span>
+                            {(() => {
+                                const upd = getGstr7UpdateStatus(gst);
+                                return (
+                                    <span style={{ background: upd.bg, color: upd.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${upd.border}` }}>
+                                        {upd.label}
+                                    </span>
+                                );
+                            })()}
                         </div>
                         <div style={{ padding: '0.6rem 0', borderBottom: '1px dotted #e2e8f0' }}>
                             {!isGstr7Applicable ? null : (

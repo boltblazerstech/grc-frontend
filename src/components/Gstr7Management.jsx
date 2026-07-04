@@ -4,6 +4,7 @@ import { apiClient } from '../api/apiClient';
 import { Save, ChevronDown, ChevronUp, FileText, Settings, Plus, History, Sparkles, ClipboardList, Copy, Check, X } from 'lucide-react';
 import Gstr7ReviewPage from './Gstr7ReviewPage';
 import GstCard from './GstCard';
+import { getGstr7UpdateStatus } from '../utils/gstr7UpdateStatus';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -1235,8 +1236,8 @@ const Gstr7Management = ({ isTab }) => {
                                                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                                 <thead>
                                                                     <tr style={{ backgroundColor: 'rgba(37,150,190,0.08)' }}>
-                                                                        {['GSTIN', 'TDS no', 'Filing Status', 'Delay Count', 'Missed Count', 'Last Updated', 'Action', 'History'].map((h, i) => (
-                                                                            <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: i >= 6 ? 'right' : 'left', fontSize: '0.75rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{h}</th>
+                                                                        {['GSTIN', 'TDS no', 'Filing Status', 'Delay Count', 'Missed Count', 'Update Status', 'Last Updated', 'Action', 'History'].map((h, i) => (
+                                                                            <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: i >= 7 ? 'right' : 'left', fontSize: '0.75rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{h}</th>
                                                                         ))}
                                                                     </tr>
                                                                 </thead>
@@ -1303,6 +1304,16 @@ const Gstr7Management = ({ isTab }) => {
                                                                                         ) : (
                                                                                             <span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{g.gstr7MissedCount ?? '—'}</span>
                                                                                         )}
+                                                                                    </td>
+                                                                                    <td style={{ padding: '0.75rem' }}>
+                                                                                        {(() => {
+                                                                                            const upd = getGstr7UpdateStatus(g);
+                                                                                            return (
+                                                                                                <span style={{ background: upd.bg, color: upd.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, border: `1px solid ${upd.border}`, whiteSpace: 'nowrap' }}>
+                                                                                                    {upd.label}
+                                                                                                </span>
+                                                                                            );
+                                                                                        })()}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem', fontSize: '0.75rem', color: 'var(--text-light)', whiteSpace: 'nowrap' }}>
                                                                                         {g.gstr7LastUpdated ? new Date(g.gstr7LastUpdated).toLocaleString() : <span style={{ fontStyle: 'italic' }}>Never</span>}
