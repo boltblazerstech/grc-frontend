@@ -199,6 +199,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
     const scoreInfo = getScoreInfo(gst.grcScore, thresholds);
     const riskInsight = getRiskInsight(gst.grcScore, thresholds, gst);
     const isGstr7Applicable = gst.categoryName?.toLowerCase() === 'scrap' || !!gst.gstdNo || (gst.gstr7Status && gst.gstr7Status !== 'NA');
+    const gstr7UpdateStatus = getGstr7UpdateStatus(gst);
 
     return (
         <div
@@ -415,17 +416,14 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                 hasGstd={!!gst.gstdNo}
                             />
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
-                            <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Update Status</span>
-                            {(() => {
-                                const upd = getGstr7UpdateStatus(gst);
-                                return (
-                                    <span style={{ background: upd.bg, color: upd.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${upd.border}` }}>
-                                        {upd.label}
-                                    </span>
-                                );
-                            })()}
-                        </div>
+                        {gstr7UpdateStatus && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Update Status</span>
+                                <span style={{ background: gstr7UpdateStatus.bg, color: gstr7UpdateStatus.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${gstr7UpdateStatus.border}` }}>
+                                    {gstr7UpdateStatus.label}
+                                </span>
+                            </div>
+                        )}
                         <div style={{ padding: '0.6rem 0', borderBottom: '1px dotted #e2e8f0' }}>
                             {!isGstr7Applicable ? null : (
                                 <>

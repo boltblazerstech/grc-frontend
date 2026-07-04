@@ -730,7 +730,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             gst.gstr7MissedCount != null ? gst.gstr7MissedCount : "N/A",
           gstr7_last_updated:
             gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleString("en-IN") : "N/A",
-          gstr7_update_status: getGstr7UpdateStatus(gst).label,
+          gstr7_update_status: getGstr7UpdateStatus(gst)?.label || "—",
         };
 
         // Add monthly filing columns

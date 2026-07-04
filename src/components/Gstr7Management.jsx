@@ -1308,6 +1308,7 @@ const Gstr7Management = ({ isTab }) => {
                                                                                     <td style={{ padding: '0.75rem' }}>
                                                                                         {(() => {
                                                                                             const upd = getGstr7UpdateStatus(g);
+                                                                                            if (!upd) return <span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>—</span>;
                                                                                             return (
                                                                                                 <span style={{ background: upd.bg, color: upd.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, border: `1px solid ${upd.border}`, whiteSpace: 'nowrap' }}>
                                                                                                     {upd.label}
