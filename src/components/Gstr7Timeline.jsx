@@ -281,7 +281,7 @@ const Gstr7Timeline = ({ gstin, onClose }) => {
                       ) : isMissed ? (
                         <XCircle size={18} color="#ef4444" fill="#fef2f2" />
                       ) : isNA ? (
-                        <span style={{ fontSize: "0.8rem", color: "var(--text-light)", fontWeight: 600 }}>NA</span>
+                        <span style={{ fontSize: "0.8rem", color: "var(--text-light)", fontWeight: 600 }}>N/A</span>
                       ) : (
                         <Clock size={18} color="#f59e0b" fill="#fffbeb" />
                       )}

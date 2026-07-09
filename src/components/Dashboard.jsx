@@ -24,7 +24,7 @@ import { apiClient } from "../api/apiClient";
 import GstCard from "./GstCard";
 import GstDetailsModal from "./GstDetailsModal";
 import GstQuickEditRow from "./GstQuickEditRow";
-import { getGstr7UpdateStatus } from "../utils/gstr7UpdateStatus";
+import { getGstr7Display } from "../utils/gstr7Display";
 
 const getScoreColor = (score, thresholds) => {
   if (score === null || score === undefined) return "";
@@ -683,6 +683,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       });
 
       const exportData = processedList.map((gst) => {
+        const gstr7Display = getGstr7Display(gst);
         const row = {
           gstin: gst.gstin,
           pan_number: gst.panNumber || "N/A",
@@ -720,17 +721,17 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             : "N/A",
           updated_by: gst.updatedBy || "N/A",
           // ── GSTR-7 Fields ──
-          tds_applicable: (gst.gstdNo || gst.categoryName) ? "Yes" : "No",
-          tds_no: gst.gstdNo || "N/A",
+          tds_applicable:
+            gst.tdsApplicable === true ? "Yes" : gst.tdsApplicable === false ? "No" : "Not Set",
           hsn_category: gst.categoryName || "N/A",
-          gstr7_status: gst.gstr7Status || "N/A",
+          gstr7: gstr7Display.gstr7.text,
+          status: gstr7Display.status.text,
           gstr7_delay_count:
             gst.gstr7DelayCount != null ? gst.gstr7DelayCount : "N/A",
           gstr7_missed_count:
             gst.gstr7MissedCount != null ? gst.gstr7MissedCount : "N/A",
           gstr7_last_updated:
             gst.gstr7LastUpdated ? new Date(gst.gstr7LastUpdated).toLocaleString("en-IN") : "N/A",
-          gstr7_update_status: getGstr7UpdateStatus(gst)?.label || "—",
         };
 
         // Add monthly filing columns

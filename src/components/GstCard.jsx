@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, Copy, Check, AlertCircle, History, Building2, Calendar, User, IndianRupee, ShieldCheck, FileText, Lightbulb, Info, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import Gstr7Timeline from './Gstr7Timeline';
-import { getGstr7UpdateStatus } from '../utils/gstr7UpdateStatus';
+import { getGstr7Display } from '../utils/gstr7Display';
 
 const calculateAge = (dateString) => {
     if (!dateString) return 'N/A';
@@ -95,52 +95,6 @@ const DelayBadge = ({ count }) => {
     );
 };
 
-const Gstr7Badge = ({ missedCount = 0, delayCount = 0, isApplicable, rawStatus, hasGstd = true }) => {
-    if (!isApplicable) {
-        return <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid #e5e7eb' }}>N/A</span>;
-    }
-    
-    let bg, color, text;
-    
-    const status = rawStatus ? rawStatus.trim() : "";
-    if (missedCount > 0 || status === "Missed") {
-        bg = '#fef2f2'; color = '#dc2626';
-    } else if (delayCount > 0 || status === "Regular with Delay") {
-        bg = '#fff7ed'; color = '#d97706';
-    } else {
-        bg = '#dcfce7'; color = '#16a34a';
-    }
-
-    if (!status || status === "NA") {
-        if (!hasGstd) {
-            text = "NA";
-            bg = '#f3f4f6'; color = '#9ca3af';
-        } else {
-            text = "Not Filed";
-            bg = '#f3f4f6'; color = '#6b7280';
-        }
-    } else if (missedCount > 0 && delayCount > 0) {
-        text = `${missedCount} missed and ${delayCount} delayed`;
-    } else if (status === "Regular without delay") {
-        text = "Regular with no delays";
-    } else if (status === "Regular with Delay") {
-        text = `Regular with ${delayCount} delay${delayCount === 1 ? '' : 's'}`;
-    } else if (status === "Missed") {
-        text = `${missedCount} missed`;
-    } else {
-        text = status;
-    }
-    return (
-        <span style={{ 
-            background: bg, color, padding: '0.15rem 0.5rem', borderRadius: '4px', 
-            fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${color}20`, 
-            whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'right', maxWidth: '70%', lineHeight: '1.2'
-        }}>
-            {text}
-        </span>
-    );
-};
-
 const SectionHeader = ({ icon: Icon, title, color }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
         <div style={{ background: `${color}12`, borderRadius: '6px', padding: '0.35rem', display: 'flex' }}>
@@ -198,8 +152,11 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
 
     const scoreInfo = getScoreInfo(gst.grcScore, thresholds);
     const riskInsight = getRiskInsight(gst.grcScore, thresholds, gst);
-    const isGstr7Applicable = gst.categoryName?.toLowerCase() === 'scrap' || !!gst.gstdNo || (gst.gstr7Status && gst.gstr7Status !== 'NA');
-    const gstr7UpdateStatus = getGstr7UpdateStatus(gst);
+    const gstr7Display = getGstr7Display(gst);
+    // Timeline / monthly-filing view is available once a TDS number is on file (Cases 4-8)
+    const hasGstd = gst.tdsApplicable === true && !!gst.gstdNo;
+    // Missed/Delayed summary + last-filled/last-updated block only makes sense once real filing data exists (Cases 5-8)
+    const hasFilingData = hasGstd && !!gst.gstr7Status && gst.gstr7Status.trim() !== 'NA';
 
     return (
         <div
@@ -394,7 +351,7 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
                             <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>GSTR 7</span>
-                            {isGstr7Applicable && gst.gstdNo ? (
+                            {hasGstd ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                                     <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a', wordBreak: 'break-all', textAlign: 'right', maxWidth: '100px', lineHeight: '1.2' }}>{gst.gstdNo}</span>
                                     <button onClick={handleCopyGstr7} title="Copy GSTR-7 No."
@@ -403,29 +360,24 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                     </button>
                                 </div>
                             ) : (
-                                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#dc2626' }}>Not Registered</span>
+                                <span style={{ background: gstr7Display.gstr7.bg, color: gstr7Display.gstr7.color, padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.62rem', fontWeight: 700, border: `1px solid ${gstr7Display.gstr7.border}` }}>
+                                    {gstr7Display.gstr7.text}
+                                </span>
                             )}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
                             <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Status</span>
-                            <Gstr7Badge
-                                missedCount={gst.gstr7MissedCount ?? 0}
-                                delayCount={gst.gstr7DelayCount ?? 0}
-                                isApplicable={isGstr7Applicable}
-                                rawStatus={gst.gstr7Status}
-                                hasGstd={!!gst.gstdNo}
-                            />
+                            <span style={{
+                                background: gstr7Display.status.bg, color: gstr7Display.status.color,
+                                padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700,
+                                border: `1px solid ${gstr7Display.status.border}`,
+                                whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'right', maxWidth: '70%', lineHeight: '1.2'
+                            }}>
+                                {gstr7Display.status.text}
+                            </span>
                         </div>
-                        {gstr7UpdateStatus && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0', borderBottom: '1px dotted #e2e8f0' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700 }}>Update Status</span>
-                                <span style={{ background: gstr7UpdateStatus.bg, color: gstr7UpdateStatus.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${gstr7UpdateStatus.border}` }}>
-                                    {gstr7UpdateStatus.label}
-                                </span>
-                            </div>
-                        )}
                         <div style={{ padding: '0.6rem 0', borderBottom: '1px dotted #e2e8f0' }}>
-                            {!isGstr7Applicable ? null : (
+                            {!hasFilingData ? null : (
                                 <>
                                     <div style={{ display: 'flex', gap: '1.25rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -464,8 +416,8 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
 
                         {/* View Monthly Filing button — always visible, disabled if not applicable */}
                         <button
-                            onClick={(e) => { e.stopPropagation(); if (isGstr7Applicable) setShowTimeline(!showTimeline); }}
-                            title={isGstr7Applicable ? (showTimeline ? 'Hide monthly filing history' : 'View monthly filing history') : 'Only available for GSTR-7 applicable GSTINs'}
+                            onClick={(e) => { e.stopPropagation(); if (hasGstd) setShowTimeline(!showTimeline); }}
+                            title={hasGstd ? (showTimeline ? 'Hide monthly filing history' : 'View monthly filing history') : 'Only available for GSTR-7 applicable GSTINs'}
                             style={{
                                 marginTop: '0.3rem',
                                 width: '100%',
@@ -478,14 +430,14 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                 fontSize: '0.62rem',
                                 fontWeight: 700,
                                 fontFamily: 'inherit',
-                                border: isGstr7Applicable ? '1px solid #c4b5fd' : '1px solid #e5e7eb',
-                                background: isGstr7Applicable
+                                border: hasGstd ? '1px solid #c4b5fd' : '1px solid #e5e7eb',
+                                background: hasGstd
                                     ? (showTimeline ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#f5f3ff')
                                     : '#f9fafb',
-                                color: isGstr7Applicable ? (showTimeline ? 'white' : '#7c3aed') : '#9ca3af',
-                                cursor: isGstr7Applicable ? 'pointer' : 'not-allowed',
+                                color: hasGstd ? (showTimeline ? 'white' : '#7c3aed') : '#9ca3af',
+                                cursor: hasGstd ? 'pointer' : 'not-allowed',
                                 transition: 'all 0.2s ease',
-                                boxShadow: isGstr7Applicable && showTimeline ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
+                                boxShadow: hasGstd && showTimeline ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
                             }}
                         >
                             <History size={11} />

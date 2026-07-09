@@ -859,7 +859,7 @@ const Gstr7ReviewPage = () => {
                                       Regular with delay
                                     </option>
                                     <option value="Missed">Missed</option>
-                                    <option value="NA">NA</option>
+                                    <option value="NA">N/A</option>
                                   </select>
                                 </td>
                                 <td
