@@ -38,20 +38,6 @@ const getScoreColor = (score, thresholds) => {
 
 // ── New Vendors Modal (Home Page) ─────────────────────────────────────────────────────────────
 
-const gstr7BadgeStyle = (status, hasGstd) => {
-  if (!status || status === "NA") {
-    if (hasGstd) return { bg: "#f3f4f6", color: "#6b7280", text: "Not Filed" };
-    return { bg: "#f3f4f6", color: "#9ca3af", text: "NA" };
-  }
-  if (status === "Regular without delay")
-    return { bg: "#dcfce7", color: "#16a34a", text: "✓ Regular" };
-  if (status === "Regular with Delay")
-    return { bg: "#fff7ed", color: "#d97706", text: "⚠️ Regular with delay" };
-  if (status === "Missed") 
-    return { bg: "#fef2f2", color: "#dc2626", text: "✕ Missed" };
-  return { bg: "#f3f4f6", color: "#6b7280", text: status };
-};
-
 const gstStatusStyle = (status) => {
   if (status === "Active") return { bg: "#d4edda", color: "#155724" };
   if (status === "Cancelled") return { bg: "#f8d7da", color: "#721c24" };
@@ -310,7 +296,19 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
                       textTransform: "uppercase",
                     }}
                   >
-                    GSTR-7 Status
+                    GSTR 7
+                  </th>
+                  <th
+                    style={{
+                      padding: "0.6rem 0.85rem",
+                      textAlign: "left",
+                      borderBottom: "2px solid var(--border-color)",
+                      color: "var(--text-light)",
+                      fontSize: "0.72rem",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Status
                   </th>
                   <th
                     style={{
@@ -328,7 +326,7 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
               </thead>
               <tbody>
                 {filtered.map((v, i) => {
-                  const gstr7Style = gstr7BadgeStyle(v.gstr7Status, !!v.gstdNo);
+                  const gstr7Display = getGstr7Display(v);
                   const gstStyle = gstStatusStyle(v.gstStatus);
                   const pan = v.panNumber || (v.gstin ? v.gstin.substring(2, 12) : "");
                   return (
@@ -440,16 +438,31 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
                       <td style={{ padding: "0.55rem 0.85rem" }}>
                         <span
                           style={{
-                            background: gstr7Style.bg,
-                            color: gstr7Style.color,
+                            background: gstr7Display.gstr7.bg,
+                            color: gstr7Display.gstr7.color,
                             padding: "0.15rem 0.5rem",
                             borderRadius: "4px",
                             fontSize: "0.75rem",
                             fontWeight: 600,
-                            border: `1px solid ${gstr7Style.color}20`
+                            border: `1px solid ${gstr7Display.gstr7.border}`
                           }}
                         >
-                          {gstr7Style.text}
+                          {gstr7Display.gstr7.text}
+                        </span>
+                      </td>
+                      <td style={{ padding: "0.55rem 0.85rem" }}>
+                        <span
+                          style={{
+                            background: gstr7Display.status.bg,
+                            color: gstr7Display.status.color,
+                            padding: "0.15rem 0.5rem",
+                            borderRadius: "4px",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            border: `1px solid ${gstr7Display.status.border}`
+                          }}
+                        >
+                          {gstr7Display.status.text}
                         </span>
                       </td>
                       <td style={{ padding: "0.55rem 0.85rem" }}>
