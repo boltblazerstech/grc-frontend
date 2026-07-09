@@ -36,7 +36,7 @@ export function getGstr7Display(gst) {
     // Case 2: TDS Status = No
     if (tdsApplicable === false) {
         return {
-            gstr7: { text: 'Not Registered', ...RED },
+            gstr7: { text: 'Not Registered', ...GRAY },
             status: { text: 'N/A', ...GRAY },
         };
     }
