@@ -9,6 +9,8 @@ const Login = React.lazy(() => import('./components/Login'));
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin'));
 const Gstr7Management = React.lazy(() => import('./components/Gstr7Management'));
 const AdminCenter = React.lazy(() => import('./components/AdminCenter'));
+const MasterView = React.lazy(() => import('./components/MasterView'));
+const Gstr7DataEntryRedirect = React.lazy(() => import('./components/Gstr7DataEntryRedirect'));
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -116,6 +118,8 @@ function App() {
         <Suspense fallback={<div style={{display: 'flex', justifyContent: 'center', padding: '3rem'}}><div className="spinner"></div></div>}>
           <Routes>
             <Route path="/gstr7-master" element={<Gstr7Management />} />
+            <Route path="/grc/master-view" element={<MasterView currentUser={currentUser} />} />
+            <Route path="/grc/gstr7/:gstin" element={<Gstr7DataEntryRedirect />} />
             <Route path="*" element={
               showSuperAdmin && currentUser?.role === 'super_admin' ? (
                 <SuperAdmin currentUser={currentUser} />

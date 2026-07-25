@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Plus,
@@ -18,7 +19,8 @@ import {
   Users,
   ShieldCheck,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Table2
 } from "lucide-react";
 import { apiClient } from "../api/apiClient";
 import GstCard from "./GstCard";
@@ -502,6 +504,7 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
 };
 
 const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
+  const navigate = useNavigate();
   const [gstList, setGstList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1146,6 +1149,14 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                 disabled={showRefreshPanel}
               >
                 <LayoutGrid size={18} />
+              </button>
+              <button
+                className="view-toggle-btn"
+                onClick={() => navigate("/grc/master-view")}
+                title="Master View"
+                disabled={showRefreshPanel}
+              >
+                <Table2 size={18} />
               </button>
             </div>
           )}

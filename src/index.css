@@ -132,6 +132,7 @@ textarea {
 /* Main Content */
 .main-content {
   flex: 1;
+  min-width: 0; /* allow shrinking below content's intrinsic width so wide children (e.g. tables) scroll locally instead of blowing out the page */
   padding: 1rem 1.25rem; /* Reduced from 2rem */
   max-width: 1400px; /* Increased from 1200px */
   margin: 0 auto;
