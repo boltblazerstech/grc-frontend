@@ -1089,6 +1089,21 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                 >
                   <ShieldCheck size={16} /> GSTR-7 Master
                 </button>
+                <button
+                  onClick={() => navigate("/grc/master-view")}
+                  className="btn"
+                  style={{
+                    whiteSpace: "nowrap",
+                    background: "#0f766e",
+                    color: "white",
+                    border: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Table2 size={16} /> Master View
+                </button>
               </>
             )}
           </div>
@@ -1149,14 +1164,6 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                 disabled={showRefreshPanel}
               >
                 <LayoutGrid size={18} />
-              </button>
-              <button
-                className="view-toggle-btn"
-                onClick={() => navigate("/grc/master-view")}
-                title="Master View"
-                disabled={showRefreshPanel}
-              >
-                <Table2 size={18} />
               </button>
             </div>
           )}

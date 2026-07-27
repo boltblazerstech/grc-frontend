@@ -33,6 +33,24 @@ const SORT_FIELD_KEYS = {
   gstr7LastUpdated: "gstr7LastUpdated",
 };
 
+const GSTR7_FILTER_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "toBeUpdated", label: "To Be Updated" },
+  { value: "notRegistered", label: "Not Registered" },
+  { value: "registered", label: "Registered" },
+  { value: "others", label: "Others" },
+];
+
+// Buckets a company into one of the GSTR7 filter categories using the same
+// text getGstr7Display renders in the "GSTR7 No" column.
+const getGstr7Category = (c) => {
+  const text = getGstr7Display(c).gstr7.text;
+  if (text === "To Be Updated") return "toBeUpdated";
+  if (text === "Not Registered") return "notRegistered";
+  if (text === "Registered") return "registered";
+  return "others";
+};
+
 const MasterView = ({ currentUser }) => {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
@@ -40,6 +58,7 @@ const MasterView = ({ currentUser }) => {
   const [error, setError] = useState(null);
   const [refreshStatus, setRefreshStatus] = useState({}); // { [gstin]: 'loading' | 'success' | 'error' }
   const [searchTerm, setSearchTerm] = useState("");
+  const [gstr7Filter, setGstr7Filter] = useState("all");
   const [sortField, setSortField] = useState("gstLastUpdated"); // 'gstLastUpdated' | 'gstr7LastUpdated'
   const [sortDirection, setSortDirection] = useState("desc"); // 'asc' | 'desc'
   const [showRefreshPanel, setShowRefreshPanel] = useState(false);
@@ -109,8 +128,9 @@ const MasterView = ({ currentUser }) => {
 
   const filteredCompanies = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return sortedCompanies;
     return sortedCompanies.filter((c) => {
+      if (gstr7Filter !== "all" && getGstr7Category(c) !== gstr7Filter) return false;
+      if (!q) return true;
       const pan = c.panNumber || (c.gstin ? c.gstin.substring(2, 12) : "");
       return (
         c.tradeName?.toLowerCase().includes(q) ||
@@ -120,7 +140,7 @@ const MasterView = ({ currentUser }) => {
         c.gstdNo?.toLowerCase().includes(q)
       );
     });
-  }, [sortedCompanies, searchTerm]);
+  }, [sortedCompanies, searchTerm, gstr7Filter]);
 
   const allSelectableGstins = useMemo(
     () => filteredCompanies.filter((c) => !c.apiError).map((c) => c.gstin),
@@ -247,6 +267,20 @@ const MasterView = ({ currentUser }) => {
             />
           </div>
         </div>
+
+        <select
+          className="form-control"
+          value={gstr7Filter}
+          onChange={(e) => setGstr7Filter(e.target.value)}
+          style={{ maxWidth: "200px" }}
+          title="Filter by GSTR7 registration status"
+        >
+          {GSTR7_FILTER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
 
         {currentUser?.role === "super_admin" && (
           <button
