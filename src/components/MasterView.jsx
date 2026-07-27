@@ -268,20 +268,6 @@ const MasterView = ({ currentUser }) => {
           </div>
         </div>
 
-        <select
-          className="form-control"
-          value={gstr7Filter}
-          onChange={(e) => setGstr7Filter(e.target.value)}
-          style={{ maxWidth: "200px" }}
-          title="Filter by GSTR7 registration status"
-        >
-          {GSTR7_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-
         {currentUser?.role === "super_admin" && (
           <button
             className="btn btn-secondary"
@@ -303,6 +289,19 @@ const MasterView = ({ currentUser }) => {
             {showRefreshPanel ? "Cancel Refresh" : "Refresh from API"}
           </button>
         )}
+      </div>
+
+      <div className="view-toggle" style={{ marginBottom: "1rem", width: "fit-content" }}>
+        {GSTR7_FILTER_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            className={`view-toggle-btn ${gstr7Filter === opt.value ? "active" : ""}`}
+            onClick={() => setGstr7Filter(opt.value)}
+            style={{ padding: "0.5rem 1rem" }}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       {showRefreshPanel && currentUser?.role === "super_admin" && (
