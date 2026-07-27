@@ -649,6 +649,7 @@ let _cachedPans = null;
 const Gstr7Management = ({ isTab }) => {
     const { state } = useLocation();
     const initialSearchQuery = state?.searchQuery || '';
+    const initialOpenImport = state?.openImport === true;
     const savedUser = JSON.parse(localStorage.getItem('grc_user') || '{}');
     const isSuperAdmin = savedUser.role === 'super_admin';
 
@@ -749,8 +750,11 @@ const Gstr7Management = ({ isTab }) => {
             setTimeout(() => {
                 rowRefs.current[initialSearchQuery]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 600);
+            if (initialOpenImport) {
+                setModalGstin(initialSearchQuery);
+            }
         }
-    }, [initialSearchQuery]);
+    }, [initialSearchQuery, initialOpenImport]);
 
     const fetchAll = async (showLoader = true) => {
         try {

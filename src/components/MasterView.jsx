@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Table2, RefreshCw, Loader2, CheckCircle2, XCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, CloudDownload } from "lucide-react";
+import { ArrowLeft, Table2, RefreshCw, Loader2, CheckCircle2, XCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, CloudDownload, Copy, Check } from "lucide-react";
 import { apiClient } from "../api/apiClient";
 import { getGstr7Display } from "../utils/gstr7Display";
 import GstDetailsModal from "./GstDetailsModal";
@@ -67,6 +67,13 @@ const MasterView = ({ currentUser }) => {
   const [bulkRefreshResult, setBulkRefreshResult] = useState(null);
   const [selectedGst, setSelectedGst] = useState(null);
   const [thresholds, setThresholds] = useState({});
+  const [copiedValue, setCopiedValue] = useState(null);
+
+  const handleCopy = (value) => {
+    navigator.clipboard.writeText(value);
+    setCopiedValue(value);
+    setTimeout(() => setCopiedValue(null), 2000);
+  };
 
   const fetchCompanies = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -486,6 +493,7 @@ const MasterView = ({ currentUser }) => {
                   const pan = c.panNumber || (c.gstin ? c.gstin.substring(2, 12) : "N/A");
                   const status = refreshStatus[c.gstin];
                   const gstr7 = getGstr7Display(c).gstr7;
+                  const gstr7HasValue = getGstr7Category(c) === "others";
 
                   let refreshIcon = <RefreshCw size={14} />;
                   let refreshColor = "var(--text-light)";
@@ -549,6 +557,23 @@ const MasterView = ({ currentUser }) => {
                           </span>
                           <button
                             className="ghost-btn"
+                            onClick={() => handleCopy(c.gstin)}
+                            title="Copy GSTIN"
+                            style={{
+                              padding: "0.2rem",
+                              border: "none",
+                              background: "transparent",
+                              color:
+                                copiedValue === c.gstin
+                                  ? "var(--success-color)"
+                                  : "var(--text-light)",
+                              display: "inline-flex",
+                            }}
+                          >
+                            {copiedValue === c.gstin ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                          <button
+                            className="ghost-btn"
                             onClick={() => handleRefresh(c.gstin)}
                             disabled={!!status}
                             title={refreshTitle}
@@ -565,24 +590,51 @@ const MasterView = ({ currentUser }) => {
                         </div>
                       </td>
                       <td>{pan}</td>
-                      <td>
-                        <span
-                          onClick={() => navigate(`/grc/gstr7/${c.gstin}`)}
-                          style={{
-                            display: "inline-block",
-                            padding: "0.15rem 0.5rem",
-                            borderRadius: "4px",
-                            fontSize: "0.75rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                            background: gstr7.bg,
-                            color: gstr7.color,
-                            border: `1px solid ${gstr7.border}`,
-                          }}
-                        >
-                          {gstr7.text}
-                        </span>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                          <span
+                            onClick={() =>
+                              navigate(
+                                gstr7HasValue
+                                  ? `/grc/gstr7/${c.gstin}?import=1`
+                                  : `/grc/gstr7/${c.gstin}`
+                              )
+                            }
+                            style={{
+                              display: "inline-block",
+                              padding: "0.15rem 0.5rem",
+                              borderRadius: "4px",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              background: gstr7.bg,
+                              color: gstr7.color,
+                              border: `1px solid ${gstr7.border}`,
+                            }}
+                          >
+                            {gstr7.text}
+                          </span>
+                          {gstr7HasValue && (
+                            <button
+                              className="ghost-btn"
+                              onClick={() => handleCopy(gstr7.text)}
+                              title="Copy GSTR7 No"
+                              style={{
+                                padding: "0.2rem",
+                                border: "none",
+                                background: "transparent",
+                                color:
+                                  copiedValue === gstr7.text
+                                    ? "var(--success-color)"
+                                    : "var(--text-light)",
+                                display: "inline-flex",
+                              }}
+                            >
+                              {copiedValue === gstr7.text ? <Check size={14} /> : <Copy size={14} />}
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td>{formatGstLastUpdated(c.scoreCalculatedAt)}</td>
                       <td>{formatGstr7LastUpdated(c.gstr7LastUpdated)}</td>
