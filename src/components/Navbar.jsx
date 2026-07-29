@@ -168,14 +168,24 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                             )}
 
                             {!showSuperAdmin && currentUser.role === 'super_admin' && (
-                                <button
-                                    className="navbar-btn navbar-btn-ghost"
-                                    onClick={() => setShowSettings(true)}
-                                    title="Rule Settings"
-                                >
-                                    <Settings size={15} />
-                                    <span className="btn-text">Settings</span>
-                                </button>
+                                <>
+                                    <button
+                                        className="navbar-btn navbar-btn-ghost"
+                                        onClick={() => navigate('/trash')}
+                                        title="Trash Folder"
+                                    >
+                                        <span style={{ fontSize: '15px' }}>🗑️</span>
+                                        <span className="btn-text">Trash</span>
+                                    </button>
+                                    <button
+                                        className="navbar-btn navbar-btn-ghost"
+                                        onClick={() => setShowSettings(true)}
+                                        title="Rule Settings"
+                                    >
+                                        <Settings size={15} />
+                                        <span className="btn-text">Settings</span>
+                                    </button>
+                                </>
                             )}
 
                             {/* User Pill */}

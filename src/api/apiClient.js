@@ -450,5 +450,33 @@ export const apiClient = {
         });
         if (!response.ok) throw new Error('Failed to fetch new vendors');
         return response.json();
+    },
+
+    // ── Trash Management Endpoints ──────────────────────────────────────────
+
+    async trashGstin(gstin) {
+        const response = await fetch(`${API_BASE_URL}/admin/trash/${gstin}`, {
+            method: 'POST',
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to move GSTIN to trash');
+        return response.text();
+    },
+
+    async restoreGstin(gstin) {
+        const response = await fetch(`${API_BASE_URL}/admin/trash/${gstin}/restore`, {
+            method: 'POST',
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to restore GSTIN from trash');
+        return response.text();
+    },
+
+    async getTrashedGstins() {
+        const response = await fetch(`${API_BASE_URL}/admin/trash`, {
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) throw new Error('Failed to fetch trashed GSTINs');
+        return response.json();
     }
 };

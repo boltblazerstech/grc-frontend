@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Table2, RefreshCw, Loader2, CheckCircle2, XCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, CloudDownload, Copy, Check } from "lucide-react";
+import { ArrowLeft, Table2, RefreshCw, Loader2, CheckCircle2, XCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, CloudDownload, Copy, Check, Trash2 } from "lucide-react";
 import { apiClient } from "../api/apiClient";
 import { getGstr7Display } from "../utils/gstr7Display";
 import GstDetailsModal from "./GstDetailsModal";
@@ -206,6 +206,17 @@ const MasterView = ({ currentUser }) => {
         return next;
       });
     }, REFRESH_ICON_RESET_MS);
+  };
+
+  const handleTrash = async (gstin) => {
+    if (window.confirm(`Are you sure you want to move GSTIN ${gstin} to trash?`)) {
+      try {
+        await apiClient.trashGstin(gstin);
+        await fetchCompanies(true);
+      } catch (err) {
+        alert(err.message || 'Failed to move to trash');
+      }
+    }
   };
 
   return (
@@ -587,6 +598,22 @@ const MasterView = ({ currentUser }) => {
                           >
                             {refreshIcon}
                           </button>
+                          {currentUser?.role === 'super_admin' && (
+                            <button
+                              className="ghost-btn"
+                              onClick={() => handleTrash(c.gstin)}
+                              title="Move to Trash"
+                              style={{
+                                padding: "0.2rem",
+                                border: "none",
+                                background: "transparent",
+                                color: "#ef4444",
+                                display: "inline-flex",
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>

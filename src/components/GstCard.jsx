@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, Copy, Check, AlertCircle, History, Building2, Calendar, User, IndianRupee, ShieldCheck, FileText, Lightbulb, Info, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
+import { Eye, Copy, Check, AlertCircle, History, Building2, Calendar, User, IndianRupee, ShieldCheck, FileText, Lightbulb, Info, CheckCircle, AlertTriangle, XCircle, RefreshCw, Trash2 } from 'lucide-react';
 import Gstr7Timeline from './Gstr7Timeline';
 import { getGstr7Display } from '../utils/gstr7Display';
+import { apiClient } from '../api/apiClient';
 
 const calculateAge = (dateString) => {
     if (!dateString) return 'N/A';
@@ -150,6 +151,22 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
         }
     };
 
+    const handleTrash = async (e) => {
+        e.stopPropagation();
+        if (window.confirm(`Are you sure you want to move GSTIN ${gst.gstin} to trash?`)) {
+            try {
+                await apiClient.trashGstin(gst.gstin);
+                window.location.reload();
+            } catch (err) {
+                alert(err.message || 'Failed to move to trash');
+            }
+        }
+    };
+
+    const savedUser = localStorage.getItem('grc_user');
+    const currentUser = savedUser ? JSON.parse(savedUser) : null;
+    const isSuperAdmin = currentUser && currentUser.role === 'super_admin';
+
     const scoreInfo = getScoreInfo(gst.grcScore, thresholds);
     const riskInsight = getRiskInsight(gst.grcScore, thresholds, gst);
     const gstr7Display = getGstr7Display(gst);
@@ -217,6 +234,13 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                 style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '3px', cursor: 'pointer', padding: '0.05rem 0.35rem', color: '#3b82f6', fontSize: '0.58rem', fontWeight: 700 }}>
                                 View Details
                             </button>
+                            {isSuperAdmin && (
+                                <button onClick={handleTrash}
+                                    style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '3px', cursor: 'pointer', padding: '0.05rem 0.35rem', color: '#ef4444', fontSize: '0.58rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                                    title="Move to Trash">
+                                    <Trash2 size={9} /> Trash
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

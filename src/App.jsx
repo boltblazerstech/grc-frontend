@@ -11,6 +11,7 @@ const Gstr7Management = React.lazy(() => import('./components/Gstr7Management'))
 const AdminCenter = React.lazy(() => import('./components/AdminCenter'));
 const MasterView = React.lazy(() => import('./components/MasterView'));
 const Gstr7DataEntryRedirect = React.lazy(() => import('./components/Gstr7DataEntryRedirect'));
+const TrashFolder = React.lazy(() => import('./components/TrashFolder'));
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -120,6 +121,7 @@ function App() {
             <Route path="/gstr7-master" element={<Gstr7Management />} />
             <Route path="/grc/master-view" element={<MasterView currentUser={currentUser} />} />
             <Route path="/grc/gstr7/:gstin" element={<Gstr7DataEntryRedirect />} />
+            <Route path="/trash" element={<TrashFolder currentUser={currentUser} />} />
             <Route path="*" element={
               showSuperAdmin && currentUser?.role === 'super_admin' ? (
                 <SuperAdmin currentUser={currentUser} />
