@@ -589,7 +589,25 @@ const MasterView = ({ currentUser }) => {
                           </button>
                         </div>
                       </td>
-                      <td>{pan}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                          <span>{pan}</span>
+                          <button
+                            className="ghost-btn"
+                            onClick={() => handleCopy(pan)}
+                            title="Copy PAN"
+                            style={{
+                              padding: "0.2rem",
+                              border: "none",
+                              background: "transparent",
+                              color: copiedValue === pan ? "var(--success-color)" : "var(--text-light)",
+                              display: "inline-flex",
+                            }}
+                          >
+                            {copiedValue === pan ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                           <span
