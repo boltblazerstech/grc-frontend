@@ -184,6 +184,7 @@ const VendorReportView = () => {
                     onClose={() => setSelectedGst(null)}
                     thresholds={thresholds}
                     currentUser={null}
+                    isReadOnly={true}
                 />
             )}
         </div>

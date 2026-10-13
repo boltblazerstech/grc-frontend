@@ -40,7 +40,7 @@ const getConditionLabel = (ruleName, gst) => {
 
 const REQUIRED_LABEL_STYLE = { color: 'var(--danger-color)', marginLeft: '2px' };
 
-const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresholds }) => {
+const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresholds, isReadOnly }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({ ...gst });
     const [loading, setLoading] = useState(false);
@@ -49,6 +49,7 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
     const [ruleConfig, setRuleConfig] = useState({});
 
     const isAdmin = currentUser?.role === 'super_admin';
+    const canEdit = !!currentUser && !isReadOnly;
 
     const [copiedPan, setCopiedPan] = useState(false);
 
@@ -267,17 +268,19 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                 </div>
                             </div>
                         </div>
-                        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                            <button className="btn btn-primary" onClick={handleRecalculate} disabled={loading} style={{ flex: 1, justifyContent: 'center' }}>
-                                {loading ? <span className="spinner" style={{ width: '16px', height: '16px' }} /> : <><RefreshCw size={15} /> Recalculate</>}
-                            </button>
-                        </div>
+                        {canEdit && (
+                            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn btn-primary" onClick={handleRecalculate} disabled={loading} style={{ flex: 1, justifyContent: 'center' }}>
+                                    {loading ? <span className="spinner" style={{ width: '16px', height: '16px' }} /> : <><RefreshCw size={15} /> Recalculate</>}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
                             <h3>GST Details</h3>
-                            {!isEditing && (
+                            {canEdit && !isEditing && (
                                 <button className="btn btn-secondary" onClick={() => { setIsEditing(true); setError(''); }} style={{ padding: '0.2rem 0.75rem' }}>
                                     <Edit2 size={14} /> Edit
                                 </button>
