@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import { apiClient } from './api/apiClient';
@@ -12,6 +12,7 @@ const AdminCenter = React.lazy(() => import('./components/AdminCenter'));
 const MasterView = React.lazy(() => import('./components/MasterView'));
 const Gstr7DataEntryRedirect = React.lazy(() => import('./components/Gstr7DataEntryRedirect'));
 const TrashFolder = React.lazy(() => import('./components/TrashFolder'));
+const VendorReportView = React.lazy(() => import('./components/VendorReportView'));
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -20,6 +21,8 @@ function App() {
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isReportView = location.pathname.startsWith('/vendor-report');
 
   // Check simple local storage on mount
   useEffect(() => {
@@ -104,20 +107,23 @@ function App() {
 
   return (
     <div className="app-container">
-      <Navbar
-        onRecalculateAll={handleRecalculateAll}
-        isRecalculating={isRecalculating}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        showSuperAdmin={showSuperAdmin}
-        setShowSuperAdmin={(val) => { setShowSuperAdmin(val); }}
-        onLoginClick={() => setShowLogin(true)}
-        onHomeClick={handleHomeClick}
-      />
+      {!isReportView && (
+        <Navbar
+          onRecalculateAll={handleRecalculateAll}
+          isRecalculating={isRecalculating}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          showSuperAdmin={showSuperAdmin}
+          setShowSuperAdmin={(val) => { setShowSuperAdmin(val); }}
+          onLoginClick={() => setShowLogin(true)}
+          onHomeClick={handleHomeClick}
+        />
+      )}
 
       <main className="main-content">
         <Suspense fallback={<div style={{display: 'flex', justifyContent: 'center', padding: '3rem'}}><div className="spinner"></div></div>}>
           <Routes>
+            <Route path="/vendor-report/:gstin" element={<VendorReportView />} />
             <Route path="/gstr7-master" element={<Gstr7Management />} />
             <Route path="/grc/master-view" element={<MasterView currentUser={currentUser} />} />
             <Route path="/grc/gstr7/:gstin" element={<Gstr7DataEntryRedirect />} />
@@ -140,21 +146,23 @@ function App() {
         </Suspense>
       </main>
 
-      <footer style={{ 
-        textAlign: 'center', 
-        padding: '1.5rem 1rem 3rem', 
-        fontSize: '0.75rem', 
-        color: 'var(--text-light)', 
-        opacity: 0.8,
-        lineHeight: 1.5,
-        borderTop: '1px solid var(--border-color)',
-        marginTop: '2rem'
-      }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          All figures and data on this website are for reference purposes only; 
-          some information may be approximate or subject to change and should be independently verified.
-        </div>
-      </footer>
+      {!isReportView && (
+        <footer style={{ 
+          textAlign: 'center', 
+          padding: '1.5rem 1rem 3rem', 
+          fontSize: '0.75rem', 
+          color: 'var(--text-light)', 
+          opacity: 0.8,
+          lineHeight: 1.5,
+          borderTop: '1px solid var(--border-color)',
+          marginTop: '2rem'
+        }}>
+          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            All figures and data on this website are for reference purposes only; 
+            some information may be approximate or subject to change and should be independently verified.
+          </div>
+        </footer>
+      )}
     </div>
   );
 }

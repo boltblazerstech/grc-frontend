@@ -234,6 +234,15 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds }) => {
                                 style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '3px', cursor: 'pointer', padding: '0.05rem 0.35rem', color: '#3b82f6', fontSize: '0.58rem', fontWeight: 700 }}>
                                 View Details
                             </button>
+                            <a 
+                                href={`/vendor-report/${gst.gstin}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                onClick={(e) => e.stopPropagation()}
+                                title="Open unique Vendor Assessment Report"
+                                style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '3px', padding: '0.05rem 0.35rem', color: '#7c3aed', fontSize: '0.58rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem', textDecoration: 'none' }}>
+                                Report ↗
+                            </a>
                             {isSuperAdmin && (
                                 <button onClick={handleTrash}
                                     style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '3px', cursor: 'pointer', padding: '0.05rem 0.35rem', color: '#ef4444', fontSize: '0.58rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
