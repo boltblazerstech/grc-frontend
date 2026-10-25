@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, Users, Plus, Search, Trash2, Edit2, Upload, 
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
-  ChevronRight, RefreshCw, CheckSquare, Square
+  ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
+  UploadCloud, ChevronDown, ChevronUp, AlertTriangle
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { apiClient } from '../api/apiClient';
 
 export default function ClientVendorMapping({ currentUser }) {
@@ -33,6 +35,14 @@ export default function ClientVendorMapping({ currentUser }) {
   const [mapSearch, setMapSearch] = useState('');
   const [selectedGstinsToMap, setSelectedGstinsToMap] = useState(new Set());
   const [mappingSubmitting, setMappingSubmitting] = useState(false);
+
+  // Import Sheet Modal
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importParsing, setImportParsing] = useState(false);
+  const [parsedImportData, setParsedImportData] = useState([]); // array of { clientName, clientGstin, vendors: [{name, gstin}], duplicateVendors: [] }
+  const [importSubmitting, setImportSubmitting] = useState(false);
+  const [expandedClientIndex, setExpandedClientIndex] = useState(null);
 
   // Global Alert / Toast
   const [notification, setNotification] = useState(null);
@@ -307,6 +317,172 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
+  // ── Import Sheet Handlers ─────────────────────────────────────────────────
+
+  const openImportModal = () => {
+    setImportFile(null);
+    setParsedImportData([]);
+    setExpandedClientIndex(null);
+    setShowImportModal(true);
+  };
+
+  const handleSheetFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFile(file);
+    setImportParsing(true);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      if (!rows || rows.length < 2) {
+        throw new Error('Sheet is empty or missing header rows.');
+      }
+
+      const headerRow = rows[0] || [];
+      const subHeaderRow = rows[1] || [];
+
+      // 1. Identify client blocks along row 0
+      const detectedBlocks = [];
+      for (let col = 0; col < headerRow.length; col++) {
+        const rawName = String(headerRow[col] || '').trim();
+        if (rawName && !rawName.toLowerCase().startsWith('vendor') && !rawName.toLowerCase().startsWith('gst')) {
+          let vendorCol = col;
+          let gstnCol = col + 1;
+          for (let c = col; c < col + 8 && c < subHeaderRow.length; c++) {
+            const h = String(subHeaderRow[c] || '').trim().toLowerCase();
+            if (h === 'gstn' || h === 'gstin' || h.includes('gst')) gstnCol = c;
+            if (h === 'vendor' || h.includes('vendor name') || h.includes('supplier')) vendorCol = c;
+          }
+          detectedBlocks.push({
+            clientName: rawName,
+            startCol: col,
+            vendorCol,
+            gstnCol
+          });
+        }
+      }
+
+      if (detectedBlocks.length === 0) {
+        throw new Error('Could not detect any client columns in row 1. Make sure row 1 has client names.');
+      }
+
+      // Fetch existing GRC records to auto-resolve client GSTIN if possible
+      let grcDetails = [];
+      try {
+        grcDetails = await apiClient.getDetails();
+      } catch {
+        grcDetails = [];
+      }
+
+      // Track all vendor GSTINs globally across the sheet to maintain 1-to-many
+      const seenVendors = new Map(); // gstin -> clientName where first seen
+
+      const parsedClients = detectedBlocks.map(block => {
+        // Resolve client GSTIN
+        let resolvedGstin = '';
+        const existingClient = clients.find(c => 
+          c.clientName && c.clientName.trim().toLowerCase() === block.clientName.toLowerCase()
+        );
+
+        if (existingClient) {
+          resolvedGstin = existingClient.clientGstin;
+        } else {
+          // Check if there is an exact or contains match in grcDetails
+          const matchedGrc = grcDetails.find(g => 
+            (g.tradeName && g.tradeName.toLowerCase().includes(block.clientName.toLowerCase())) ||
+            (g.legalName && g.legalName.toLowerCase().includes(block.clientName.toLowerCase()))
+          );
+          if (matchedGrc) {
+            resolvedGstin = matchedGrc.gstin;
+          }
+        }
+
+        // Extract vendors
+        const validVendors = [];
+        const duplicateVendors = [];
+
+        for (let r = 2; r < rows.length; r++) {
+          const row = rows[r];
+          if (!row) continue;
+          const vName = String(row[block.vendorCol] || '').trim();
+          const vGstn = String(row[block.gstnCol] || '').trim().toUpperCase();
+
+          if (vGstn && vGstn.length === 15 && /^[0-9A-Z]{15}$/.test(vGstn)) {
+            if (seenVendors.has(vGstn)) {
+              duplicateVendors.push({
+                name: vName || vGstn,
+                gstin: vGstn,
+                firstClient: seenVendors.get(vGstn)
+              });
+            } else {
+              seenVendors.set(vGstn, block.clientName);
+              validVendors.push({
+                name: vName || vGstn,
+                gstin: vGstn
+              });
+            }
+          }
+        }
+
+        return {
+          clientName: block.clientName,
+          clientGstin: resolvedGstin,
+          vendors: validVendors,
+          duplicateVendors: duplicateVendors
+        };
+      });
+
+      setParsedImportData(parsedClients);
+    } catch (err) {
+      alert(err.message || 'Failed to parse sheet');
+      setImportFile(null);
+    } finally {
+      setImportParsing(false);
+    }
+  };
+
+  const handleUpdateClientGstin = (index, newGstin) => {
+    setParsedImportData(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], clientGstin: newGstin.toUpperCase() };
+      return next;
+    });
+  };
+
+  const handleConfirmImport = async () => {
+    if (!parsedImportData || parsedImportData.length === 0) return;
+
+    setImportSubmitting(true);
+    try {
+      const payload = {
+        clients: parsedImportData.map(c => ({
+          clientName: c.clientName,
+          clientGstin: c.clientGstin,
+          vendorGstins: c.vendors.map(v => v.gstin)
+        }))
+      };
+
+      const result = await apiClient.bulkImportClients(payload);
+      showToast(`Sheet imported successfully! ${result.clientsCreated} client(s) created, ${result.vendorsMapped} vendor(s) mapped.`);
+      setShowImportModal(false);
+      setParsedImportData([]);
+      await fetchClients();
+      if (selectedClient) {
+        await fetchMappedVendors(selectedClient.id);
+      }
+    } catch (err) {
+      alert(err.message || 'Import failed');
+    } finally {
+      setImportSubmitting(false);
+    }
+  };
+
   // ── Derived Data & Filtering ──────────────────────────────────────────────
 
   const filteredClients = useMemo(() => {
@@ -362,6 +538,10 @@ export default function ClientVendorMapping({ currentUser }) {
       </span>
     );
   };
+
+  const totalVendorsInSheet = useMemo(() => {
+    return parsedImportData.reduce((acc, c) => acc + (c.vendors?.length || 0), 0);
+  }, [parsedImportData]);
 
   return (
     <div className="client-mapping-container">
@@ -530,6 +710,28 @@ export default function ClientVendorMapping({ currentUser }) {
           opacity: 0.6;
           cursor: not-allowed;
           transform: none;
+        }
+
+        .btn-outline-purple {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          padding: 0.5rem 1rem;
+          border-radius: 10px;
+          background: #f5f3ff;
+          color: #6d28d9;
+          border: 1px solid #c4b5fd;
+          font-size: 0.85rem;
+          font-weight: 700;
+          font-family: inherit;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+        .btn-outline-purple:hover {
+          background: #ede9fe;
+          border-color: #a78bfa;
+          transform: translateY(-1px);
         }
 
         .btn-ghost-sm {
@@ -827,6 +1029,9 @@ export default function ClientVendorMapping({ currentUser }) {
         .modal-wide {
           max-width: 820px;
         }
+        .modal-xl {
+          max-width: 960px;
+        }
         @keyframes modalPop {
           from { opacity: 0; transform: scale(0.96); }
           to { opacity: 1; transform: scale(1); }
@@ -883,7 +1088,7 @@ export default function ClientVendorMapping({ currentUser }) {
         .upload-dropzone {
           border: 2px dashed #cbd5e1;
           border-radius: 12px;
-          padding: 1.25rem;
+          padding: 1.5rem;
           text-align: center;
           cursor: pointer;
           transition: all 0.2s;
@@ -906,6 +1111,26 @@ export default function ClientVendorMapping({ currentUser }) {
           opacity: 0.65;
           cursor: not-allowed;
           background: #f8fafc !important;
+        }
+
+        /* Import Preview Cards */
+        .client-preview-card {
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          background: #fafbfc;
+          padding: 0.9rem 1.1rem;
+          margin-bottom: 0.85rem;
+          transition: all 0.2s;
+        }
+        .client-preview-card:hover {
+          border-color: #c4b5fd;
+        }
+        .client-preview-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.6rem;
         }
       `}</style>
 
@@ -936,10 +1161,17 @@ export default function ClientVendorMapping({ currentUser }) {
           </p>
         </div>
 
-        <button className="btn-primary-gradient" onClick={openAddClientModal}>
-          <Plus size={16} />
-          Add New Client
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <button className="btn-outline-purple" onClick={openImportModal} title="Upload Excel/CSV sheet with horizontal client columns">
+            <FileSpreadsheet size={16} />
+            Import from Sheet
+          </button>
+
+          <button className="btn-primary-gradient" onClick={openAddClientModal}>
+            <Plus size={16} />
+            Add New Client
+          </button>
+        </div>
       </div>
 
       {/* Main Two-Pane Grid */}
@@ -979,12 +1211,17 @@ export default function ClientVendorMapping({ currentUser }) {
                   {clientSearch ? 'No matching clients' : 'No clients added yet'}
                 </div>
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.3rem 0 0.8rem' }}>
-                  {clientSearch ? 'Try adjusting your search query' : 'Create your first corporate buyer to begin mapping'}
+                  {clientSearch ? 'Try adjusting your search query' : 'Create a client or import from sheet to begin mapping'}
                 </p>
                 {!clientSearch && (
-                  <button className="btn-ghost-sm" onClick={openAddClientModal}>
-                    <Plus size={14} /> Add Client
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn-ghost-sm" onClick={openAddClientModal}>
+                      <Plus size={14} /> Add Client
+                    </button>
+                    <button className="btn-ghost-sm" onClick={openImportModal}>
+                      <FileSpreadsheet size={14} /> Import Sheet
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
@@ -1237,6 +1474,240 @@ export default function ClientVendorMapping({ currentUser }) {
         </div>
 
       </div>
+
+      {/* =================================================================== */}
+      {/* BULK IMPORT FROM SHEET MODAL                                        */}
+      {/* =================================================================== */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => !importSubmitting && setShowImportModal(false)}>
+          <div className="modal-content-box modal-xl" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileSpreadsheet size={20} color="#7c3aed" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                    Bulk Import Clients & Mapped Vendors
+                  </h3>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
+                    Upload an Excel (.xlsx, .xls) or CSV sheet with horizontal client columns to auto-create clients and map vendors.
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowImportModal(false)}
+                disabled={importSubmitting}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* File Dropzone */}
+              {!parsedImportData.length ? (
+                <div 
+                  className="upload-dropzone"
+                  onClick={() => document.getElementById('sheet-file-input')?.click()}
+                  style={{ padding: '2.5rem 1.5rem' }}
+                >
+                  <input
+                    id="sheet-file-input"
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    style={{ display: 'none' }}
+                    onChange={handleSheetFileSelected}
+                  />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{
+                      width: '48px', height: '48px', borderRadius: '50%',
+                      background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed'
+                    }}>
+                      <UploadCloud size={24} />
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
+                      {importParsing ? 'Analyzing sheet format...' : 'Click or drag Excel / CSV file here to upload'}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', maxWidth: '480px', lineHeight: 1.5 }}>
+                      Expected format: Row 1 contains Client Names side-by-side horizontally. Below each client are their respective Vendor & GSTN columns.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {/* Parsing Summary Header */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.75rem 1rem',
+                    background: '#f5f3ff',
+                    border: '1px solid #ddd6fe',
+                    borderRadius: '10px',
+                    marginBottom: '1.25rem',
+                    flexWrap: 'wrap',
+                    gap: '0.5rem'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: '#5b21b6', fontSize: '0.88rem' }}>
+                      <Check size={16} color="#7c3aed" />
+                      Detected {parsedImportData.length} Client(s) • Total {totalVendorsInSheet} Vendor(s) to map
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-ghost-sm"
+                      onClick={() => { setParsedImportData([]); setImportFile(null); }}
+                    >
+                      Choose Different File
+                    </button>
+                  </div>
+
+                  {/* Client Cards Preview */}
+                  <div style={{ maxHeight: '440px', overflowY: 'auto', paddingRight: '0.3rem' }}>
+                    {parsedImportData.map((clientItem, idx) => {
+                      const isExpanded = expandedClientIndex === idx;
+                      const hasDuplicates = clientItem.duplicateVendors && clientItem.duplicateVendors.length > 0;
+
+                      return (
+                        <div key={idx} className="client-preview-card">
+                          <div className="client-preview-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                              <Building2 size={16} color="#7c3aed" />
+                              <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
+                                {clientItem.clientName}
+                              </span>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '6px',
+                                background: '#ede9fe',
+                                color: '#6d28d9',
+                                fontWeight: 700
+                              }}>
+                                {clientItem.vendors.length} vendors
+                              </span>
+
+                              {hasDuplicates && (
+                                <span style={{
+                                  fontSize: '0.7rem',
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '6px',
+                                  background: '#fef3c7',
+                                  color: '#b45309',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem'
+                                }} title="These vendors appeared under multiple clients in the sheet and will be mapped to their first occurrence.">
+                                  <AlertTriangle size={12} />
+                                  {clientItem.duplicateVendors.length} duplicate(s) omitted
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Client GSTIN:</span>
+                                <input
+                                  type="text"
+                                  maxLength={15}
+                                  placeholder="Auto-match or enter GSTIN"
+                                  value={clientItem.clientGstin}
+                                  onChange={e => handleUpdateClientGstin(idx, e.target.value)}
+                                  className="form-control"
+                                  style={{
+                                    width: '180px',
+                                    padding: '0.25rem 0.5rem',
+                                    fontSize: '0.78rem',
+                                    fontFamily: 'monospace',
+                                    fontWeight: 700
+                                  }}
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                className="btn-ghost-sm"
+                                onClick={() => setExpandedClientIndex(isExpanded ? null : idx)}
+                                title="Toggle vendors list"
+                              >
+                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                {isExpanded ? 'Hide' : 'Preview Vendors'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Expanded Vendor List */}
+                          {isExpanded && (
+                            <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.4rem' }}>
+                                Vendors to be mapped under {clientItem.clientName}:
+                              </div>
+
+                              <div style={{ maxHeight: '180px', overflowY: 'auto', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <table className="vendor-table" style={{ fontSize: '0.78rem' }}>
+                                  <thead>
+                                    <tr>
+                                      <th style={{ padding: '0.4rem 0.75rem' }}>#</th>
+                                      <th style={{ padding: '0.4rem 0.75rem' }}>Vendor Name</th>
+                                      <th style={{ padding: '0.4rem 0.75rem' }}>GSTIN</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {clientItem.vendors.map((v, vIdx) => (
+                                      <tr key={v.gstin + vIdx}>
+                                        <td style={{ padding: '0.4rem 0.75rem', color: '#94a3b8' }}>{vIdx + 1}</td>
+                                        <td style={{ padding: '0.4rem 0.75rem', fontWeight: 600 }}>{v.name}</td>
+                                        <td style={{ padding: '0.4rem 0.75rem', fontFamily: 'monospace', fontWeight: 700, color: '#4338ca' }}>
+                                          {v.gstin}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                {parsedImportData.length > 0 && (
+                  <span>
+                    Ready to create/update <strong>{parsedImportData.length}</strong> clients and map <strong>{totalVendorsInSheet}</strong> vendors.
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn-ghost-sm"
+                  onClick={() => setShowImportModal(false)}
+                  disabled={importSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary-gradient"
+                  disabled={importSubmitting || !parsedImportData.length}
+                  onClick={handleConfirmImport}
+                >
+                  {importSubmitting ? 'Importing Sheet...' : `Import & Map All (${parsedImportData.length} Clients)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* ADD / EDIT CLIENT MODAL                                             */}

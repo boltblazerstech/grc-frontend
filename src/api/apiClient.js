@@ -622,5 +622,24 @@ export const apiClient = {
             throw new Error(msg);
         }
         return response.json();
+    },
+
+    async bulkImportClients(data) {
+        const response = await fetch(`${API_CLIENTS_URL}/bulk-import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            let msg = 'Failed to import sheet data';
+            try {
+                const b = await response.json();
+                msg = b.details || b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
     }
 };
