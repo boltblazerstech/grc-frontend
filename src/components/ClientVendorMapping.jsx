@@ -461,6 +461,7 @@ export default function ClientVendorMapping({ currentUser }) {
     setImportSubmitting(true);
     try {
       const payload = {
+        replaceExisting: true,
         clients: parsedImportData.map(c => ({
           clientName: c.clientName,
           clientGstin: c.clientGstin,
@@ -469,13 +470,12 @@ export default function ClientVendorMapping({ currentUser }) {
       };
 
       const result = await apiClient.bulkImportClients(payload);
-      showToast(`Sheet imported successfully! ${result.clientsCreated} client(s) created, ${result.vendorsMapped} vendor(s) mapped.`);
+      showToast(`Sheet imported successfully! Replaced with ${result.clientsCreated} client(s) and ${result.vendorsMapped} vendor(s) mapped.`);
       setShowImportModal(false);
       setParsedImportData([]);
+      setSelectedClient(null);
+      setMappedVendors([]);
       await fetchClients();
-      if (selectedClient) {
-        await fetchMappedVendors(selectedClient.id);
-      }
     } catch (err) {
       alert(err.message || 'Import failed');
     } finally {
@@ -1545,7 +1545,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     background: '#f5f3ff',
                     border: '1px solid #ddd6fe',
                     borderRadius: '10px',
-                    marginBottom: '1.25rem',
+                    marginBottom: '0.75rem',
                     flexWrap: 'wrap',
                     gap: '0.5rem'
                   }}>
@@ -1561,6 +1561,26 @@ export default function ClientVendorMapping({ currentUser }) {
                     >
                       Choose Different File
                     </button>
+                  </div>
+
+                  {/* Replace Existing Notice */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    padding: '0.65rem 0.9rem',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: '8px',
+                    marginBottom: '1rem',
+                    fontSize: '0.82rem',
+                    color: '#92400e',
+                    lineHeight: 1.4
+                  }}>
+                    <AlertTriangle size={18} color="#d97706" style={{ flexShrink: 0 }} />
+                    <span>
+                      <strong>Replace Existing Clients:</strong> All current clients and their mapped vendors will be replaced with the data from this sheet upon import.
+                    </span>
                   </div>
 
                   {/* Client Cards Preview */}
@@ -1701,7 +1721,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   disabled={importSubmitting || !parsedImportData.length}
                   onClick={handleConfirmImport}
                 >
-                  {importSubmitting ? 'Importing Sheet...' : `Import & Map All (${parsedImportData.length} Clients)`}
+                  {importSubmitting ? 'Replacing & Importing...' : `Replace & Import All (${parsedImportData.length} Clients)`}
                 </button>
               </div>
             </div>
