@@ -29,6 +29,7 @@ export default function ClientVendorMapping({ currentUser }) {
   const [showMapModal, setShowMapModal] = useState(false);
   const [allAvailableVendors, setAllAvailableVendors] = useState([]);
   const [allVendorsLoading, setAllVendorsLoading] = useState(false);
+  const [assignedVendorsMap, setAssignedVendorsMap] = useState({});
   const [mapSearch, setMapSearch] = useState('');
   const [selectedGstinsToMap, setSelectedGstinsToMap] = useState(new Set());
   const [mappingSubmitting, setMappingSubmitting] = useState(false);
@@ -212,8 +213,12 @@ export default function ClientVendorMapping({ currentUser }) {
     setAllVendorsLoading(true);
 
     try {
-      const details = await apiClient.getDetails();
+      const [details, assigned] = await Promise.all([
+        apiClient.getDetails(),
+        apiClient.getAssignedVendors().catch(() => ({}))
+      ]);
       setAllAvailableVendors(details || []);
+      setAssignedVendorsMap(assigned || {});
     } catch (err) {
       showToast(err.message || 'Failed to load GRC vendor list', 'error');
     } finally {
@@ -234,11 +239,12 @@ export default function ClientVendorMapping({ currentUser }) {
   };
 
   const handleSelectAllFiltered = (filteredVendors) => {
-    const unmappedFiltered = filteredVendors
-      .filter(v => !isAlreadyMapped(v.gstin))
+    // Only select vendors that are NOT mapped to ANY client
+    const unassignedFiltered = filteredVendors
+      .filter(v => !assignedVendorsMap[v.gstin])
       .map(v => v.gstin);
 
-    setSelectedGstinsToMap(new Set(unmappedFiltered));
+    setSelectedGstinsToMap(new Set(unassignedFiltered));
   };
 
   const handleClearAllSelected = () => {
@@ -254,8 +260,8 @@ export default function ClientVendorMapping({ currentUser }) {
       await apiClient.mapVendorsToClient(selectedClient.id, gstinsArray);
       showToast(`Successfully mapped ${gstinsArray.length} vendor(s) to ${selectedClient.clientName}.`);
       setShowMapModal(false);
-      fetchMappedVendors(selectedClient.id);
-      fetchClients(); // refresh vendor count on client card
+      await fetchMappedVendors(selectedClient.id);
+      await fetchClients(); // refresh vendor count on all client cards
     } catch (err) {
       alert(err.message || 'Failed to map vendors');
     } finally {
@@ -272,8 +278,8 @@ export default function ClientVendorMapping({ currentUser }) {
     try {
       await apiClient.unmapVendorFromClient(selectedClient.id, vendorGstin);
       showToast(`Vendor ${vendorGstin} unmapped.`);
-      fetchMappedVendors(selectedClient.id);
-      fetchClients(); // refresh vendor count
+      await fetchMappedVendors(selectedClient.id);
+      await fetchClients(); // refresh vendor count
     } catch (err) {
       alert(err.message || 'Failed to unmap vendor');
     }
@@ -299,12 +305,6 @@ export default function ClientVendorMapping({ currentUser }) {
       (v.legalName && v.legalName.toLowerCase().includes(q))
     );
   }, [mappedVendors, vendorSearch]);
-
-  const mappedGstinSet = useMemo(() => {
-    return new Set(mappedVendors.map(v => v.vendorGstin));
-  }, [mappedVendors]);
-
-  const isAlreadyMapped = (gstin) => mappedGstinSet.has(gstin);
 
   const availableVendorsFiltered = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
@@ -803,7 +803,7 @@ export default function ClientVendorMapping({ currentUser }) {
           animation: modalPop 0.2s ease-out;
         }
         .modal-wide {
-          max-width: 780px;
+          max-width: 820px;
         }
         @keyframes modalPop {
           from { opacity: 0; transform: scale(0.96); }
@@ -881,7 +881,7 @@ export default function ClientVendorMapping({ currentUser }) {
           background: #f5f3ff !important;
         }
         .selectable-row.already-mapped {
-          opacity: 0.5;
+          opacity: 0.65;
           cursor: not-allowed;
           background: #f8fafc !important;
         }
@@ -910,7 +910,7 @@ export default function ClientVendorMapping({ currentUser }) {
             <span className="page-title-badge">Part 2 Module</span>
           </h1>
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-            Manage corporate buyers (clients) and assign suppliers (vendors) for compliance scoring & assessment reports.
+            Manage corporate buyers (clients) and assign suppliers (vendors). Each vendor can be mapped to one client exclusively.
           </p>
         </div>
 
@@ -1343,7 +1343,7 @@ export default function ClientVendorMapping({ currentUser }) {
       )}
 
       {/* =================================================================== */}
-      {/* MAP VENDORS MODAL (Multi-select from GRC database)                 */}
+      {/* MAP VENDORS MODAL (Strict 1-to-many: one vendor per client only)   */}
       {/* =================================================================== */}
       {showMapModal && selectedClient && (
         <div className="modal-overlay" onClick={() => !mappingSubmitting && setShowMapModal(false)}>
@@ -1355,7 +1355,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   Map Vendors to: {selectedClient.clientName}
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                  Select one or multiple vendors from your GRC directory to map.
+                  Each vendor can only be assigned to one client. Select unassigned vendors below.
                 </div>
               </div>
 
@@ -1386,9 +1386,9 @@ export default function ClientVendorMapping({ currentUser }) {
                     type="button"
                     className="btn-ghost-sm"
                     onClick={() => handleSelectAllFiltered(availableVendorsFiltered)}
-                    title="Select all unmapped vendors shown"
+                    title="Select all unassigned vendors shown"
                   >
-                    Select All Shown
+                    Select All Unassigned
                   </button>
                   <button
                     type="button"
@@ -1424,20 +1424,25 @@ export default function ClientVendorMapping({ currentUser }) {
                     </thead>
                     <tbody>
                       {availableVendorsFiltered.map(vendor => {
-                        const mapped = isAlreadyMapped(vendor.gstin);
+                        const assignedInfo = assignedVendorsMap[vendor.gstin];
+                        const isMappedToThis = assignedInfo && assignedInfo.clientId === selectedClient.id;
+                        const isMappedToOther = assignedInfo && assignedInfo.clientId !== selectedClient.id;
+                        const isMapped = isMappedToThis || isMappedToOther;
                         const isChecked = selectedGstinsToMap.has(vendor.gstin);
 
                         return (
                           <tr
                             key={vendor.gstin}
-                            className={`selectable-row ${mapped ? 'already-mapped' : ''} ${isChecked ? 'selected' : ''}`}
+                            className={`selectable-row ${isMapped ? 'already-mapped' : ''} ${isChecked ? 'selected' : ''}`}
                             onClick={() => {
-                              if (!mapped) toggleVendorSelection(vendor.gstin);
+                              if (!isMapped) toggleVendorSelection(vendor.gstin);
                             }}
                           >
                             <td style={{ textAlign: 'center' }}>
-                              {mapped ? (
+                              {isMappedToThis ? (
                                 <Check size={16} color="#10b981" title="Already mapped to this client" />
+                              ) : isMappedToOther ? (
+                                <X size={15} color="#d97706" title={`Already mapped to client: ${assignedInfo.clientName}`} />
                               ) : isChecked ? (
                                 <CheckSquare size={17} color="#7c3aed" />
                               ) : (
@@ -1448,9 +1453,14 @@ export default function ClientVendorMapping({ currentUser }) {
                               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e293b' }}>
                                 {vendor.gstin}
                               </span>
-                              {mapped && (
+                              {isMappedToThis && (
                                 <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', color: '#059669', background: '#d1fae5', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }}>
-                                  Already Mapped
+                                  Mapped to this client
+                                </span>
+                              )}
+                              {isMappedToOther && (
+                                <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }} title={`Client GSTIN: ${assignedInfo.clientGstin}`}>
+                                  Mapped to: {assignedInfo.clientName}
                                 </span>
                               )}
                             </td>
@@ -1472,7 +1482,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
             <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
               <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>
-                <span style={{ color: '#7c3aed' }}>{selectedGstinsToMap.size}</span> vendor(s) selected
+                <span style={{ color: '#7c3aed' }}>{selectedGstinsToMap.size}</span> unassigned vendor(s) selected
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>

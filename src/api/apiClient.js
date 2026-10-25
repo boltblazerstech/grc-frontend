@@ -281,7 +281,7 @@ export const apiClient = {
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/status/${gstin}`, {
             method: 'PUT',
             headers: { 
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json', 
                 'Role': 'super_admin'
             },
             body: JSON.stringify({ status, delayCount, missedCount })
@@ -359,7 +359,7 @@ export const apiClient = {
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/parse-save-async`, {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json', 
                 'Role': userRole,
                 'Username': userName
             },
@@ -579,6 +579,12 @@ export const apiClient = {
     async getClientVendors(clientId) {
         const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors`);
         if (!response.ok) throw new Error('Failed to fetch mapped vendors');
+        return response.json();
+    },
+
+    async getAssignedVendors() {
+        const response = await fetch(`${API_CLIENTS_URL}/assigned-vendors`);
+        if (!response.ok) throw new Error('Failed to fetch assigned vendors list');
         return response.json();
     },
 
