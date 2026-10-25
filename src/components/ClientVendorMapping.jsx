@@ -213,12 +213,34 @@ export default function ClientVendorMapping({ currentUser }) {
     setAllVendorsLoading(true);
 
     try {
-      const [details, assigned] = await Promise.all([
-        apiClient.getDetails(),
-        apiClient.getAssignedVendors().catch(() => ({}))
-      ]);
+      const details = await apiClient.getDetails();
       setAllAvailableVendors(details || []);
-      setAssignedVendorsMap(assigned || {});
+
+      // Aggregate mapped vendors across all clients to ensure strict 1-to-many
+      const mappingPromises = clients.map(async (c) => {
+        try {
+          const vendors = await apiClient.getClientVendors(c.id);
+          return (vendors || []).map(v => ({
+            vendorGstin: v.vendorGstin,
+            clientId: c.id,
+            clientName: c.clientName,
+            clientGstin: c.clientGstin
+          }));
+        } catch {
+          return [];
+        }
+      });
+
+      const results = await Promise.all(mappingPromises);
+      const assignedMap = {};
+      results.flat().forEach(item => {
+        assignedMap[item.vendorGstin] = {
+          clientId: item.clientId,
+          clientName: item.clientName,
+          clientGstin: item.clientGstin
+        };
+      });
+      setAssignedVendorsMap(assignedMap);
     } catch (err) {
       showToast(err.message || 'Failed to load GRC vendor list', 'error');
     } finally {
