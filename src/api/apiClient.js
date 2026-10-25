@@ -1,4 +1,6 @@
-const _BACKEND = 'https://grc-backend-135177300761.asia-south1.run.app';
+const _BACKEND = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+    ? 'http://localhost:8080'
+    : 'https://grc-backend-135177300761.asia-south1.run.app';
 const API_BASE_URL = `${_BACKEND}/api/grc`;
 const API_USER_URL = `${_BACKEND}/api/users`;
 const API_CLIENTS_URL = `${_BACKEND}/api/admin/clients`;
@@ -505,7 +507,7 @@ export const apiClient = {
             let msg = 'Failed to create client';
             try {
                 const b = await response.json();
-                msg = b.message || b.error || msg;
+                msg = b.details || b.message || b.error || msg;
             } catch {
                 msg = (await response.text()) || msg;
             }
@@ -524,7 +526,7 @@ export const apiClient = {
             let msg = 'Failed to update client';
             try {
                 const b = await response.json();
-                msg = b.message || b.error || msg;
+                msg = b.details || b.message || b.error || msg;
             } catch {
                 msg = (await response.text()) || msg;
             }
@@ -541,7 +543,7 @@ export const apiClient = {
             let msg = 'Failed to delete client';
             try {
                 const b = await response.json();
-                msg = b.message || b.error || msg;
+                msg = b.details || b.message || b.error || msg;
             } catch {
                 msg = (await response.text()) || msg;
             }
@@ -561,7 +563,7 @@ export const apiClient = {
             let msg = 'Failed to upload client logo';
             try {
                 const b = await response.json();
-                msg = b.message || b.error || msg;
+                msg = b.details || b.message || b.error || msg;
             } catch {
                 msg = (await response.text()) || msg;
             }
@@ -590,7 +592,7 @@ export const apiClient = {
             let msg = 'Failed to map vendors';
             try {
                 const b = await response.json();
-                msg = b.message || b.error || msg;
+                msg = b.details || b.message || b.error || msg;
             } catch {
                 msg = (await response.text()) || msg;
             }
@@ -607,7 +609,7 @@ export const apiClient = {
             let msg = 'Failed to unmap vendor';
             try {
                 const b = await response.json();
-                msg = b.message || b.error || msg;
+                msg = b.details || b.message || b.error || msg;
             } catch {
                 msg = (await response.text()) || msg;
             }
