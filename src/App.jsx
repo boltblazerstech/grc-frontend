@@ -13,6 +13,7 @@ const MasterView = React.lazy(() => import('./components/MasterView'));
 const Gstr7DataEntryRedirect = React.lazy(() => import('./components/Gstr7DataEntryRedirect'));
 const TrashFolder = React.lazy(() => import('./components/TrashFolder'));
 const VendorReportView = React.lazy(() => import('./components/VendorReportView'));
+const ClientVendorMapping = React.lazy(() => import('./components/ClientVendorMapping'));
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -124,6 +125,7 @@ function App() {
         <Suspense fallback={<div style={{display: 'flex', justifyContent: 'center', padding: '3rem'}}><div className="spinner"></div></div>}>
           <Routes>
             <Route path="/vendor-report/:gstin" element={<VendorReportView />} />
+            <Route path="/admin/client-mapping" element={<ClientVendorMapping currentUser={currentUser} />} />
             <Route path="/gstr7-master" element={<Gstr7Management />} />
             <Route path="/grc/master-view" element={<MasterView currentUser={currentUser} />} />
             <Route path="/grc/gstr7/:gstin" element={<Gstr7DataEntryRedirect />} />

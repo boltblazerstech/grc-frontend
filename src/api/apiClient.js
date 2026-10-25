@@ -1,6 +1,7 @@
 const _BACKEND = 'https://grc-backend-135177300761.asia-south1.run.app';
 const API_BASE_URL = `${_BACKEND}/api/grc`;
 const API_USER_URL = `${_BACKEND}/api/users`;
+const API_CLIENTS_URL = `${_BACKEND}/api/admin/clients`;
 
 export const apiClient = {
     async getDetails() {
@@ -477,6 +478,141 @@ export const apiClient = {
             headers: { 'Role': 'super_admin' }
         });
         if (!response.ok) throw new Error('Failed to fetch trashed GSTINs');
+        return response.json();
+    },
+
+    // ── Client-Vendor Mapping Endpoints (Part 2) ─────────────────────────────
+
+    async getClients() {
+        const response = await fetch(API_CLIENTS_URL);
+        if (!response.ok) throw new Error('Failed to fetch clients');
+        return response.json();
+    },
+
+    async getClientById(id) {
+        const response = await fetch(`${API_CLIENTS_URL}/${id}`);
+        if (!response.ok) throw new Error('Failed to fetch client');
+        return response.json();
+    },
+
+    async createClient(data) {
+        const response = await fetch(API_CLIENTS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            let msg = 'Failed to create client';
+            try {
+                const b = await response.json();
+                msg = b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
+    async updateClient(id, data) {
+        const response = await fetch(`${API_CLIENTS_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            let msg = 'Failed to update client';
+            try {
+                const b = await response.json();
+                msg = b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
+    async deleteClient(id) {
+        const response = await fetch(`${API_CLIENTS_URL}/${id}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            let msg = 'Failed to delete client';
+            try {
+                const b = await response.json();
+                msg = b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
+    async uploadClientLogo(clientId, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch(`${API_CLIENTS_URL}/${clientId}/logo`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            let msg = 'Failed to upload client logo';
+            try {
+                const b = await response.json();
+                msg = b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
+    getClientLogoUrl(clientId) {
+        return `${API_CLIENTS_URL}/${clientId}/logo`;
+    },
+
+    async getClientVendors(clientId) {
+        const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors`);
+        if (!response.ok) throw new Error('Failed to fetch mapped vendors');
+        return response.json();
+    },
+
+    async mapVendorsToClient(clientId, vendorGstins) {
+        const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendorGstins })
+        });
+        if (!response.ok) {
+            let msg = 'Failed to map vendors';
+            try {
+                const b = await response.json();
+                msg = b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
+    async unmapVendorFromClient(clientId, vendorGstin) {
+        const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors/${encodeURIComponent(vendorGstin)}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            let msg = 'Failed to unmap vendor';
+            try {
+                const b = await response.json();
+                msg = b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
         return response.json();
     }
 };

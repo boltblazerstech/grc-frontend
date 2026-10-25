@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown } from 'lucide-react';
+import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown, Users } from 'lucide-react';
 import UserProfileModal from './UserProfileModal';
 import SettingsModal from './SettingsModal';
 
@@ -8,6 +8,7 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
     const navigate = useNavigate();
     const location = useLocation();
     const onGstr7Page = location.pathname === '/gstr7-master';
+    const onClientMappingPage = location.pathname === '/admin/client-mapping';
     const [showProfile, setShowProfile] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [scrolled, setScrolled] = useState(false);
@@ -129,11 +130,28 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     {currentUser ? (
                         <>
+                            {/* Client-Vendor Mapping Navigation Button */}
+                            <button
+                                className={`navbar-btn ${onClientMappingPage ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                onClick={() => {
+                                    setShowSuperAdmin(false);
+                                    if (onClientMappingPage) {
+                                        navigate('/');
+                                    } else {
+                                        navigate('/admin/client-mapping');
+                                    }
+                                }}
+                                title="Client-Vendor Mapping"
+                            >
+                                <Users size={15} />
+                                <span className="btn-text">Client Mapping</span>
+                            </button>
+
                             {currentUser.role === 'super_admin' && (
                                 <button
                                     className={`navbar-btn ${(showSuperAdmin || onGstr7Page) ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
                                     onClick={() => {
-                                        if (onGstr7Page) {
+                                        if (onGstr7Page || onClientMappingPage) {
                                             navigate('/');
                                         } else {
                                             setShowSuperAdmin(!showSuperAdmin);
@@ -157,7 +175,7 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                                 </button>
                             )}
 
-                            {onGstr7Page && currentUser.role === 'super_admin' && (
+                            {(onGstr7Page || onClientMappingPage) && currentUser.role === 'super_admin' && (
                                 <button
                                     className="navbar-btn navbar-btn-ghost"
                                     onClick={() => navigate('/')}
