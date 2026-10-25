@@ -1004,10 +1004,6 @@ export default function ClientVendorMapping({ currentUser }) {
           background-color: #faf5ff;
         }
 
-        .assessment-table tr.high-risk-row td {
-          background-color: #fff1f2;
-        }
-
         .assessment-table tr:last-child td {
           border-bottom: none;
         }
@@ -1030,14 +1026,6 @@ export default function ClientVendorMapping({ currentUser }) {
           line-height: 1.3;
           white-space: normal;
           word-break: break-word;
-        }
-
-        .company-name-text.red-flagged {
-          background: #dc2626;
-          color: #ffffff;
-          padding: 0.15rem 0.45rem;
-          border-radius: 4px;
-          display: inline-block;
         }
 
         .gstn-cell {
@@ -1593,7 +1581,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     : computeAge(vendor.registrationDate);
 
                   return (
-                    <tr key={gstin} className={isHighRisk ? 'high-risk-row' : ''}>
+                    <tr key={gstin}>
                       {/* Sl. No. */}
                       <td style={{ textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
                         {index + 1}
@@ -1603,15 +1591,9 @@ export default function ClientVendorMapping({ currentUser }) {
                       <td>
                         <div className="company-cell">
                           <span className="company-icon">
-                            {vendor.grcScore >= 70 ? (
-                              <CheckCircle2 size={16} color="#16a34a" />
-                            ) : vendor.grcScore >= 40 ? (
-                              <AlertCircle size={16} color="#d97706" />
-                            ) : (
-                              <AlertTriangle size={16} color="#dc2626" />
-                            )}
+                            <CheckCircle2 size={16} color="#16a34a" />
                           </span>
-                          <span className={`company-name-text ${isHighRisk && vendor.grcScore !== null && vendor.grcScore < 30 ? 'red-flagged' : ''}`}>
+                          <span className="company-name-text">
                             {vendor.tradeName || vendor.legalName || gstin}
                           </span>
                         </div>
@@ -1712,7 +1694,7 @@ export default function ClientVendorMapping({ currentUser }) {
                         {vendor.aadhaarValidation === 'Yes' ? (
                           <span style={{ color: '#16a34a', fontWeight: 800 }}>Yes</span>
                         ) : vendor.aadhaarValidation === 'No' ? (
-                          <span style={{ color: '#dc2626', fontWeight: 800 }}>No</span>
+                          <span style={{ color: '#64748b', fontWeight: 700 }}>No</span>
                         ) : (
                           <span style={{ color: '#94a3b8' }}>-</span>
                         )}
