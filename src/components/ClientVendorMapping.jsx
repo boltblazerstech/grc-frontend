@@ -3,22 +3,29 @@ import {
   Building2, Users, Plus, Search, Trash2, Edit2, Upload, 
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
   ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
-  UploadCloud, ChevronDown, ChevronUp, AlertTriangle
+  UploadCloud, ChevronDown, ChevronUp, AlertTriangle, Download,
+  Copy, CheckCircle2, Loader2, ArrowUpDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { apiClient } from '../api/apiClient';
+import { getGstr7Display } from '../utils/gstr7Display';
 
 export default function ClientVendorMapping({ currentUser }) {
   // State for Clients
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [clientsLoading, setClientsLoading] = useState(true);
-  const [clientSearch, setClientSearch] = useState('');
 
   // State for Mapped Vendors
   const [mappedVendors, setMappedVendors] = useState([]);
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [vendorSearch, setVendorSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'delayed-gstr1' | 'delayed-gstr3b' | 'active' | 'high-risk'
+
+  // Inline Compliance Editing State: { [gstin]: { gstr1: number, gstr3b: number } }
+  const [inlineCompliance, setInlineCompliance] = useState({});
+  const [savingGstins, setSavingGstins] = useState({}); // { [gstin]: 'saving' | 'saved' | 'error' }
+  const [copiedGstin, setCopiedGstin] = useState(null);
 
   // Modals
   const [showClientModal, setShowClientModal] = useState(false);
@@ -40,9 +47,16 @@ export default function ClientVendorMapping({ currentUser }) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importParsing, setImportParsing] = useState(false);
-  const [parsedImportData, setParsedImportData] = useState([]); // array of { clientName, clientGstin, vendors: [{name, gstin}], duplicateVendors: [] }
+  const [parsedImportData, setParsedImportData] = useState([]);
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [expandedClientIndex, setExpandedClientIndex] = useState(null);
+
+  // Logo Upload Modal
+  const [showLogoModal, setShowLogoModal] = useState(false);
+  const [logoTargetClient, setLogoTargetClient] = useState(null);
+  const [directLogoFile, setDirectLogoFile] = useState(null);
+  const [directLogoPreview, setDirectLogoPreview] = useState(null);
+  const [logoSubmitting, setLogoSubmitting] = useState(false);
 
   // Global Alert / Toast
   const [notification, setNotification] = useState(null);
@@ -57,6 +71,22 @@ export default function ClientVendorMapping({ currentUser }) {
     fetchClients();
   }, []);
 
+  // Sync inline compliance dictionary when mappedVendors changes
+  useEffect(() => {
+    if (mappedVendors && mappedVendors.length > 0) {
+      const initial = {};
+      mappedVendors.forEach(v => {
+        initial[v.vendorGstin] = {
+          gstr1: v.delayCountGstr1 ?? 0,
+          gstr3b: v.delayCountGstr3b ?? 0
+        };
+      });
+      setInlineCompliance(initial);
+    } else {
+      setInlineCompliance({});
+    }
+  }, [mappedVendors]);
+
   // Fetch Mapped Vendors when selectedClient changes
   useEffect(() => {
     if (selectedClient?.id) {
@@ -66,17 +96,21 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   }, [selectedClient?.id]);
 
-  const fetchClients = async () => {
+  const fetchClients = async (preferredClientId = null) => {
     setClientsLoading(true);
     try {
       const data = await apiClient.getClients();
-      setClients(data || []);
-      // If a client was previously selected, update its record
-      if (selectedClient) {
-        const updatedSelected = (data || []).find(c => c.id === selectedClient.id);
-        if (updatedSelected) {
-          setSelectedClient(updatedSelected);
-        }
+      const clientList = data || [];
+      setClients(clientList);
+
+      if (preferredClientId) {
+        const found = clientList.find(c => c.id === preferredClientId);
+        setSelectedClient(found || clientList[0] || null);
+      } else if (selectedClient) {
+        const updatedSelected = clientList.find(c => c.id === selectedClient.id);
+        setSelectedClient(updatedSelected || clientList[0] || null);
+      } else if (clientList.length > 0) {
+        setSelectedClient(clientList[0]);
       }
     } catch (err) {
       showToast(err.message || 'Failed to load clients', 'error');
@@ -95,6 +129,80 @@ export default function ClientVendorMapping({ currentUser }) {
     } finally {
       setVendorsLoading(false);
     }
+  };
+
+  // ── Manual Compliance Editing Handlers ────────────────────────────────────
+
+  const handleComplianceChange = (vendorGstin, field, val) => {
+    const num = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+    setInlineCompliance(prev => ({
+      ...prev,
+      [vendorGstin]: {
+        ...(prev[vendorGstin] || { gstr1: 0, gstr3b: 0 }),
+        [field]: num
+      }
+    }));
+  };
+
+  const handleSaveCompliance = async (vendorGstin) => {
+    const values = inlineCompliance[vendorGstin];
+    if (!values) return;
+
+    // Check if changed compared to mappedVendors
+    const original = mappedVendors.find(v => v.vendorGstin === vendorGstin);
+    if (original && original.delayCountGstr1 === values.gstr1 && original.delayCountGstr3b === values.gstr3b) {
+      return; // No change
+    }
+
+    setSavingGstins(prev => ({ ...prev, [vendorGstin]: 'saving' }));
+    try {
+      const payload = {
+        delayCountGstr1: values.gstr1,
+        delayCountGstr3b: values.gstr3b,
+        updatedBy: currentUser?.name || 'Admin'
+      };
+
+      const updated = await apiClient.updateDetails(vendorGstin, payload);
+
+      // Update mappedVendors state in place
+      setMappedVendors(prev => prev.map(v => {
+        if (v.vendorGstin === vendorGstin) {
+          return {
+            ...v,
+            delayCountGstr1: updated.delayCountGstr1,
+            delayCountGstr3b: updated.delayCountGstr3b,
+            grcScore: updated.grcScore
+          };
+        }
+        return v;
+      }));
+
+      setSavingGstins(prev => ({ ...prev, [vendorGstin]: 'saved' }));
+      setTimeout(() => {
+        setSavingGstins(prev => {
+          const next = { ...prev };
+          delete next[vendorGstin];
+          return next;
+        });
+      }, 2000);
+    } catch (err) {
+      setSavingGstins(prev => ({ ...prev, [vendorGstin]: 'error' }));
+      showToast(err.message || 'Failed to update compliance status', 'error');
+      setTimeout(() => {
+        setSavingGstins(prev => {
+          const next = { ...prev };
+          delete next[vendorGstin];
+          return next;
+        });
+      }, 3000);
+    }
+  };
+
+  const handleCopyGstin = (gstin, e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(gstin);
+    setCopiedGstin(gstin);
+    setTimeout(() => setCopiedGstin(null), 1500);
   };
 
   // ── Client CRUD Handlers ──────────────────────────────────────────────────
@@ -118,76 +226,69 @@ export default function ClientVendorMapping({ currentUser }) {
     setShowClientModal(true);
   };
 
-  const handleLogoChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('File size exceeds the 2 MB limit.');
-      return;
-    }
-
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
-    if (!validTypes.includes(file.type.toLowerCase())) {
-      alert('Please upload a PNG, JPEG, or SVG image.');
-      return;
-    }
-
-    setClientForm(prev => ({ ...prev, logoFile: file }));
-
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      setLogoPreview(uploadEvent.target.result);
-    };
-    reader.readAsDataURL(file);
+  const openLogoModal = (client, e) => {
+    e?.stopPropagation();
+    setLogoTargetClient(client);
+    setDirectLogoFile(null);
+    setDirectLogoPreview(client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+    setShowLogoModal(true);
   };
 
-  const handleSaveClient = async (e) => {
-    e.preventDefault();
-    const gstin = (clientForm.clientGstin || '').trim().toUpperCase();
-    const name = (clientForm.clientName || '').trim();
-
-    if (!gstin || gstin.length !== 15) {
-      alert('Client GSTIN must be exactly 15 alphanumeric characters.');
+  const handleDeleteClient = async (clientId, clientName, e) => {
+    e?.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete "${clientName}" and remove all mapped vendors?`)) {
       return;
     }
-    if (!name) {
-      alert('Client legal or trade name is required.');
+    try {
+      await apiClient.deleteClient(clientId);
+      showToast(`Client "${clientName}" deleted successfully`);
+      if (selectedClient?.id === clientId) {
+        setSelectedClient(null);
+        setMappedVendors([]);
+      }
+      fetchClients();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete client', 'error');
+    }
+  };
+
+  const handleClientSubmit = async (e) => {
+    e.preventDefault();
+    const gstin = clientForm.clientGstin.trim().toUpperCase();
+    const name = clientForm.clientName.trim();
+
+    if (!gstin || !name) {
+      alert('Please provide both Client GSTIN and Legal / Business Name.');
+      return;
+    }
+
+    if (gstin.length !== 15 || !/^[0-9A-Z]{15}$/.test(gstin)) {
+      alert('Client GSTIN must be exactly 15 alphanumeric characters.');
       return;
     }
 
     setModalSubmitting(true);
     try {
-      let savedClient;
       if (editingClient) {
-        savedClient = await apiClient.updateClient(editingClient.id, {
-          clientGstin: gstin,
-          clientName: name
-        });
-        showToast(`Client "${name}" updated successfully.`);
-      } else {
-        savedClient = await apiClient.createClient({
-          clientGstin: gstin,
-          clientName: name
-        });
-        showToast(`Client "${name}" created successfully.`);
-      }
-
-      // If a logo file was selected, upload it now
-      if (clientForm.logoFile && savedClient?.id) {
-        try {
-          await apiClient.uploadClientLogo(savedClient.id, clientForm.logoFile);
-        } catch (logoErr) {
-          showToast(`Client saved, but logo upload failed: ${logoErr.message}`, 'error');
+        await apiClient.updateClient(editingClient.id, { clientGstin: gstin, clientName: name });
+        if (clientForm.logoFile) {
+          await apiClient.uploadClientLogo(editingClient.id, clientForm.logoFile);
         }
-      }
-
-      setShowClientModal(false);
-      await fetchClients();
-
-      // Automatically select if newly created or currently active
-      if (!editingClient) {
-        setSelectedClient(savedClient);
+        showToast('Client updated successfully');
+        setShowClientModal(false);
+        fetchClients(editingClient.id);
+      } else {
+        const created = await apiClient.createClient({ clientGstin: gstin, clientName: name });
+        if (clientForm.logoFile && created?.id) {
+          try {
+            await apiClient.uploadClientLogo(created.id, clientForm.logoFile);
+          } catch (logoErr) {
+            console.warn('Logo upload warning:', logoErr);
+          }
+        }
+        showToast('Client created successfully');
+        setShowClientModal(false);
+        fetchClients(created?.id);
       }
     } catch (err) {
       alert(err.message || 'Operation failed');
@@ -196,91 +297,69 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  const handleDeleteClient = async (client, e) => {
-    e?.stopPropagation();
-    const confirmMsg = `Are you sure you want to delete client "${client.clientName}" (${client.clientGstin})?\n\nThis will also remove all its vendor mappings.`;
-    if (!window.confirm(confirmMsg)) return;
+  const handleDirectLogoSubmit = async (e) => {
+    e.preventDefault();
+    if (!directLogoFile || !logoTargetClient) return;
 
+    setLogoSubmitting(true);
     try {
-      await apiClient.deleteClient(client.id);
-      showToast(`Client "${client.clientName}" deleted.`);
-      if (selectedClient?.id === client.id) {
-        setSelectedClient(null);
-      }
-      fetchClients();
+      await apiClient.uploadClientLogo(logoTargetClient.id, directLogoFile);
+      showToast('Logo uploaded successfully');
+      setShowLogoModal(false);
+      fetchClients(logoTargetClient.id);
     } catch (err) {
-      alert(err.message || 'Failed to delete client');
+      alert(err.message || 'Logo upload failed');
+    } finally {
+      setLogoSubmitting(false);
     }
   };
 
-  // ── Vendor Mapping Handlers ───────────────────────────────────────────────
+  // ── Vendor Unmapping Handler ──────────────────────────────────────────────
 
-  const openMapVendorsModal = async () => {
+  const handleUnmapVendor = async (vendorGstin) => {
     if (!selectedClient) return;
-    setShowMapModal(true);
+    if (!window.confirm(`Unmap vendor "${vendorGstin}" from "${selectedClient.clientName}"?`)) {
+      return;
+    }
+    try {
+      await apiClient.unmapVendor(selectedClient.id, vendorGstin);
+      showToast(`Vendor ${vendorGstin} unmapped`);
+      fetchMappedVendors(selectedClient.id);
+      fetchClients(selectedClient.id);
+    } catch (err) {
+      showToast(err.message || 'Failed to unmap vendor', 'error');
+    }
+  };
+
+  // ── Map Vendors Modal Handlers ────────────────────────────────────────────
+
+  const openMapModal = async (client) => {
     setSelectedGstinsToMap(new Set());
     setMapSearch('');
+    setShowMapModal(true);
     setAllVendorsLoading(true);
 
     try {
-      const details = await apiClient.getDetails();
-      setAllAvailableVendors(details || []);
-
-      // Aggregate mapped vendors across all clients to ensure strict 1-to-many
-      const mappingPromises = clients.map(async (c) => {
-        try {
-          const vendors = await apiClient.getClientVendors(c.id);
-          return (vendors || []).map(v => ({
-            vendorGstin: v.vendorGstin,
-            clientId: c.id,
-            clientName: c.clientName,
-            clientGstin: c.clientGstin
-          }));
-        } catch {
-          return [];
-        }
-      });
-
-      const results = await Promise.all(mappingPromises);
-      const assignedMap = {};
-      results.flat().forEach(item => {
-        assignedMap[item.vendorGstin] = {
-          clientId: item.clientId,
-          clientName: item.clientName,
-          clientGstin: item.clientGstin
-        };
-      });
-      setAssignedVendorsMap(assignedMap);
+      const [vendors, assignedMap] = await Promise.all([
+        apiClient.getDetails(),
+        apiClient.getAssignedVendors().catch(() => ({}))
+      ]);
+      setAllAvailableVendors(vendors || []);
+      setAssignedVendorsMap(assignedMap || {});
     } catch (err) {
-      showToast(err.message || 'Failed to load GRC vendor list', 'error');
+      showToast(err.message || 'Failed to load vendor registry', 'error');
     } finally {
       setAllVendorsLoading(false);
     }
   };
 
-  const toggleVendorSelection = (gstin) => {
+  const toggleSelectGstin = (gstin) => {
     setSelectedGstinsToMap(prev => {
       const next = new Set(prev);
-      if (next.has(gstin)) {
-        next.delete(gstin);
-      } else {
-        next.add(gstin);
-      }
+      if (next.has(gstin)) next.delete(gstin);
+      else next.add(gstin);
       return next;
     });
-  };
-
-  const handleSelectAllFiltered = (filteredVendors) => {
-    // Only select vendors that are NOT mapped to ANY client
-    const unassignedFiltered = filteredVendors
-      .filter(v => !assignedVendorsMap[v.gstin])
-      .map(v => v.gstin);
-
-    setSelectedGstinsToMap(new Set(unassignedFiltered));
-  };
-
-  const handleClearAllSelected = () => {
-    setSelectedGstinsToMap(new Set());
   };
 
   const handleConfirmMapping = async () => {
@@ -289,31 +368,15 @@ export default function ClientVendorMapping({ currentUser }) {
     setMappingSubmitting(true);
     try {
       const gstinsArray = Array.from(selectedGstinsToMap);
-      await apiClient.mapVendorsToClient(selectedClient.id, gstinsArray);
-      showToast(`Successfully mapped ${gstinsArray.length} vendor(s) to ${selectedClient.clientName}.`);
+      const res = await apiClient.mapVendors(selectedClient.id, gstinsArray);
+      showToast(`Successfully mapped ${res.mappedCount || gstinsArray.length} vendor(s)`);
       setShowMapModal(false);
-      await fetchMappedVendors(selectedClient.id);
-      await fetchClients(); // refresh vendor count on all client cards
+      fetchMappedVendors(selectedClient.id);
+      fetchClients(selectedClient.id);
     } catch (err) {
-      alert(err.message || 'Failed to map vendors');
+      alert(err.message || 'Mapping failed');
     } finally {
       setMappingSubmitting(false);
-    }
-  };
-
-  const handleUnmapVendor = async (vendorGstin, tradeName) => {
-    if (!selectedClient) return;
-    const displayName = tradeName || vendorGstin;
-    const confirm = window.confirm(`Remove mapping for vendor "${displayName}" from client "${selectedClient.clientName}"?`);
-    if (!confirm) return;
-
-    try {
-      await apiClient.unmapVendorFromClient(selectedClient.id, vendorGstin);
-      showToast(`Vendor ${vendorGstin} unmapped.`);
-      await fetchMappedVendors(selectedClient.id);
-      await fetchClients(); // refresh vendor count
-    } catch (err) {
-      alert(err.message || 'Failed to unmap vendor');
     }
   };
 
@@ -347,7 +410,6 @@ export default function ClientVendorMapping({ currentUser }) {
       const headerRow = rows[0] || [];
       const subHeaderRow = rows[1] || [];
 
-      // 1. Identify client blocks along row 0
       const detectedBlocks = [];
       for (let col = 0; col < headerRow.length; col++) {
         const rawName = String(headerRow[col] || '').trim();
@@ -372,7 +434,6 @@ export default function ClientVendorMapping({ currentUser }) {
         throw new Error('Could not detect any client columns in row 1. Make sure row 1 has client names.');
       }
 
-      // Fetch existing GRC records to auto-resolve client GSTIN if possible
       let grcDetails = [];
       try {
         grcDetails = await apiClient.getDetails();
@@ -380,11 +441,9 @@ export default function ClientVendorMapping({ currentUser }) {
         grcDetails = [];
       }
 
-      // Track all vendor GSTINs globally across the sheet to maintain 1-to-many
-      const seenVendors = new Map(); // gstin -> clientName where first seen
+      const seenVendors = new Map();
 
       const parsedClients = detectedBlocks.map(block => {
-        // Resolve client GSTIN
         let resolvedGstin = '';
         const existingClient = clients.find(c => 
           c.clientName && c.clientName.trim().toLowerCase() === block.clientName.toLowerCase()
@@ -393,7 +452,6 @@ export default function ClientVendorMapping({ currentUser }) {
         if (existingClient) {
           resolvedGstin = existingClient.clientGstin;
         } else {
-          // Check if there is an exact or contains match in grcDetails
           const matchedGrc = grcDetails.find(g => 
             (g.tradeName && g.tradeName.toLowerCase().includes(block.clientName.toLowerCase())) ||
             (g.legalName && g.legalName.toLowerCase().includes(block.clientName.toLowerCase()))
@@ -403,7 +461,6 @@ export default function ClientVendorMapping({ currentUser }) {
           }
         }
 
-        // Extract vendors
         const validVendors = [];
         const duplicateVendors = [];
 
@@ -483,26 +540,100 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  // ── Derived Data & Filtering ──────────────────────────────────────────────
+  // ── Excel Export Handler ──────────────────────────────────────────────────
 
-  const filteredClients = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    if (!q) return clients;
-    return clients.filter(c => 
-      (c.clientName && c.clientName.toLowerCase().includes(q)) ||
-      (c.clientGstin && c.clientGstin.toLowerCase().includes(q))
-    );
-  }, [clients, clientSearch]);
+  const handleExportExcel = () => {
+    if (!filteredMappedVendors || filteredMappedVendors.length === 0) {
+      alert('No vendors available to export.');
+      return;
+    }
+
+    const headers = [
+      'Sl. No.',
+      'Company Name',
+      'GSTN',
+      'Type',
+      'Age',
+      'GST Status',
+      'GSTR1',
+      'GSTR3B (Delayed)',
+      'GSTR7R',
+      'Aadhaar Authenticated',
+      'Core Activity',
+      'Turn over',
+      'GRC Score'
+    ];
+
+    const dataRows = filteredMappedVendors.map((v, idx) => {
+      const gstr7Info = getGstr7Display(v);
+      const gstr1Val = inlineCompliance[v.vendorGstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
+      const gstr3bVal = inlineCompliance[v.vendorGstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+      const ageVal = v.ageYears !== null && v.ageYears !== undefined ? Math.round(v.ageYears) : computeAge(v.registrationDate);
+
+      return [
+        idx + 1,
+        v.tradeName || v.legalName || v.vendorGstin,
+        v.vendorGstin,
+        v.gstType || 'Partnership',
+        ageVal,
+        v.gstStatus || 'Active',
+        gstr1Val,
+        gstr3bVal,
+        gstr7Info?.status?.text || 'N/A',
+        v.aadhaarValidation || 'N/A',
+        v.coreActivity || 'Manufacturer',
+        v.aggregateTurnover || 'N/A',
+        v.grcScore ?? 'N/A'
+      ];
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Assessment');
+    const safeClientName = (selectedClient?.clientName || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
+    XLSX.writeFile(workbook, `${safeClientName}_Vendor_Assessment.xlsx`);
+  };
+
+  // ── Derived Data & Helpers ────────────────────────────────────────────────
+
+  const computeAge = (regDate) => {
+    if (!regDate) return '-';
+    try {
+      const diffDays = (Date.now() - new Date(regDate).getTime()) / (1000 * 60 * 60 * 24);
+      const years = Math.round(diffDays / 365.25);
+      return years >= 0 ? years : 0;
+    } catch {
+      return '-';
+    }
+  };
 
   const filteredMappedVendors = useMemo(() => {
+    let list = mappedVendors;
     const q = vendorSearch.trim().toLowerCase();
-    if (!q) return mappedVendors;
-    return mappedVendors.filter(v => 
-      (v.vendorGstin && v.vendorGstin.toLowerCase().includes(q)) ||
-      (v.tradeName && v.tradeName.toLowerCase().includes(q)) ||
-      (v.legalName && v.legalName.toLowerCase().includes(q))
-    );
-  }, [mappedVendors, vendorSearch]);
+
+    if (q) {
+      list = list.filter(v => 
+        (v.vendorGstin && v.vendorGstin.toLowerCase().includes(q)) ||
+        (v.tradeName && v.tradeName.toLowerCase().includes(q)) ||
+        (v.legalName && v.legalName.toLowerCase().includes(q)) ||
+        (v.gstType && v.gstType.toLowerCase().includes(q)) ||
+        (v.coreActivity && v.coreActivity.toLowerCase().includes(q)) ||
+        (v.aggregateTurnover && v.aggregateTurnover.toLowerCase().includes(q))
+      );
+    }
+
+    if (statusFilter === 'delayed-gstr1') {
+      list = list.filter(v => (inlineCompliance[v.vendorGstin]?.gstr1 ?? v.delayCountGstr1 ?? 0) > 0);
+    } else if (statusFilter === 'delayed-gstr3b') {
+      list = list.filter(v => (inlineCompliance[v.vendorGstin]?.gstr3b ?? v.delayCountGstr3b ?? 0) > 0);
+    } else if (statusFilter === 'active') {
+      list = list.filter(v => (v.gstStatus || '').toLowerCase() === 'active');
+    } else if (statusFilter === 'high-risk') {
+      list = list.filter(v => (v.grcScore !== null && v.grcScore < 40) || (inlineCompliance[v.vendorGstin]?.gstr3b ?? v.delayCountGstr3b ?? 0) >= 2);
+    }
+
+    return list;
+  }, [mappedVendors, vendorSearch, statusFilter, inlineCompliance]);
 
   const availableVendorsFiltered = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
@@ -515,545 +646,679 @@ export default function ClientVendorMapping({ currentUser }) {
     });
   }, [allAvailableVendors, mapSearch]);
 
-  // Badge helpers
-  const getScoreBadge = (score) => {
-    if (score === null || score === undefined) {
-      return <span className="score-badge score-na">N/A</span>;
-    }
-    if (score >= 70) {
-      return <span className="score-badge score-high">{score}</span>;
-    }
-    if (score >= 40) {
-      return <span className="score-badge score-mid">{score}</span>;
-    }
-    return <span className="score-badge score-low">{score}</span>;
-  };
-
-  const getStatusBadge = (status) => {
-    const isActive = (status || '').toLowerCase() === 'active';
-    return (
-      <span className={`status-pill ${isActive ? 'status-active' : 'status-inactive'}`}>
-        <span className="dot"></span>
-        {status || 'Unknown'}
-      </span>
-    );
-  };
-
   const totalVendorsInSheet = useMemo(() => {
     return parsedImportData.reduce((acc, c) => acc + (c.vendors?.length || 0), 0);
   }, [parsedImportData]);
+
+  const getScoreBadge = (score) => {
+    if (score === null || score === undefined) return <span className="score-badge score-na">N/A</span>;
+    if (score >= 70) return <span className="score-badge score-high">{score}</span>;
+    if (score >= 40) return <span className="score-badge score-mid">{score}</span>;
+    return <span className="score-badge score-low">{score}</span>;
+  };
 
   return (
     <div className="client-mapping-container">
       <style>{`
         .client-mapping-container {
           padding: 1.5rem 2rem 4rem;
-          max-width: 1400px;
+          max-width: 1600px;
           margin: 0 auto;
           font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
           color: #1e293b;
         }
 
-        .header-bar {
+        /* Top Bar & Client Selector */
+        .client-top-bar {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 1.5rem;
+          background: #ffffff;
+          padding: 1.1rem 1.4rem;
+          border-radius: 14px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+          margin-bottom: 1.25rem;
           flex-wrap: wrap;
-          gap: 1rem;
+          gap: 1.25rem;
         }
 
-        .page-title {
-          font-size: 1.5rem;
+        .client-selector-group {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .client-label {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          font-size: 0.95rem;
           font-weight: 800;
           color: #0f172a;
-          display: flex;
-          align-items: center;
-          gap: 0.6rem;
-          letter-spacing: -0.02em;
-          margin: 0;
+          letter-spacing: -0.01em;
         }
 
-        .page-title-badge {
-          font-size: 0.72rem;
-          background: linear-gradient(135deg, #ede9fe, #e0e7ff);
-          color: #6d28d9;
+        .client-dropdown-wrapper {
+          position: relative;
+          min-width: 290px;
+        }
+
+        .client-dropdown-select {
+          width: 100%;
+          padding: 0.65rem 2.4rem 0.65rem 1rem;
+          font-family: inherit;
+          font-size: 0.92rem;
           font-weight: 700;
-          padding: 0.2rem 0.6rem;
-          border-radius: 20px;
-          border: 1px solid #c4b5fd;
+          color: #1e293b;
+          background: #f8fafc;
+          border: 1.5px solid #cbd5e1;
+          border-radius: 10px;
+          outline: none;
+          cursor: pointer;
+          appearance: none;
+          transition: all 0.2s ease;
         }
 
-        /* Notifications */
-        .toast-banner {
-          position: fixed;
-          top: 70px;
-          right: 24px;
-          z-index: 1000;
-          padding: 0.8rem 1.25rem;
-          border-radius: 12px;
-          font-weight: 600;
-          font-size: 0.9rem;
+        .client-dropdown-select:hover {
+          border-color: #94a3b8;
+          background: #ffffff;
+        }
+
+        .client-dropdown-select:focus {
+          border-color: #7c3aed;
+          background: #ffffff;
+          box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .dropdown-chevron {
+          position: absolute;
+          right: 0.85rem;
+          top: 50%;
+          transform: translateY(-50%);
+          pointer-events: none;
+          color: #64748b;
+        }
+
+        .client-info-pill {
           display: flex;
           align-items: center;
-          gap: 0.6rem;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
-          animation: slideIn 0.25s ease-out;
-        }
-        .toast-success {
-          background: #ecfdf5;
-          color: #065f46;
-          border: 1px solid #a7f3d0;
-        }
-        .toast-error {
-          background: #fef2f2;
-          color: #991b1b;
-          border: 1px solid #fecaca;
-        }
-        @keyframes slideIn {
-          from { transform: translateX(50px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+          gap: 0.75rem;
+          padding: 0.35rem 0.85rem;
+          background: #f1f5f9;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
         }
 
-        /* Layout Grid */
-        .mapping-grid {
-          display: grid;
-          grid-template-columns: 380px 1fr;
-          gap: 1.5rem;
-          align-items: start;
-        }
-        @media (max-width: 980px) {
-          .mapping-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        /* Cards & Panes */
-        .pane-card {
+        .client-logo-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          object-fit: contain;
           background: #ffffff;
           border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
+          padding: 2px;
         }
 
-        .pane-header {
-          padding: 1.1rem 1.25rem;
-          background: #fafbfc;
-          border-bottom: 1px solid #e2e8f0;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 0.8rem;
-        }
-
-        .pane-title {
-          font-size: 1rem;
+        .client-meta-gstin {
+          font-family: 'SFMono-Regular', Consolas, monospace;
+          font-size: 0.78rem;
           font-weight: 700;
-          color: #1e1b4b;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin: 0;
+          color: #334155;
+          letter-spacing: 0.03em;
         }
 
-        .search-input-box {
-          position: relative;
+        .client-meta-count {
+          font-size: 0.75rem;
+          font-weight: 800;
+          padding: 0.2rem 0.55rem;
+          border-radius: 9999px;
+          background: #ede9fe;
+          color: #6d28d9;
+        }
+
+        .top-action-buttons {
           display: flex;
           align-items: center;
-        }
-        .search-input-box input {
-          width: 100%;
-          padding: 0.5rem 0.75rem 0.5rem 2.1rem;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          font-size: 0.83rem;
-          font-family: inherit;
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .search-input-box input:focus {
-          border-color: #7c3aed;
-          box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-        }
-        .search-input-box .search-icon {
-          position: absolute;
-          left: 0.65rem;
-          color: #94a3b8;
+          gap: 0.6rem;
+          flex-wrap: wrap;
         }
 
         /* Buttons */
         .btn-primary-gradient {
           display: inline-flex;
           align-items: center;
-          gap: 0.4rem;
-          padding: 0.5rem 1rem;
-          border-radius: 10px;
-          background: linear-gradient(135deg, #7c3aed, #4f46e5);
-          color: white;
-          border: none;
-          font-size: 0.85rem;
-          font-weight: 700;
+          gap: 0.45rem;
+          padding: 0.55rem 1rem;
           font-family: inherit;
+          font-size: 0.84rem;
+          font-weight: 700;
+          color: #ffffff;
+          background: linear-gradient(135deg, #7c3aed, #6d28d9);
+          border: none;
+          border-radius: 8px;
           cursor: pointer;
-          transition: all 0.2s ease;
-          box-shadow: 0 3px 10px rgba(124, 58, 237, 0.28);
-          white-space: nowrap;
-        }
-        .btn-primary-gradient:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 5px 14px rgba(124, 58, 237, 0.4);
-        }
-        .btn-primary-gradient:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
+          transition: all 0.2s;
+          box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
         }
 
-        .btn-outline-purple {
+        .btn-primary-gradient:hover {
+          filter: brightness(1.08);
+          transform: translateY(-1px);
+        }
+
+        .btn-success-gradient {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.55rem 1rem;
+          font-family: inherit;
+          font-size: 0.84rem;
+          font-weight: 700;
+          color: #ffffff;
+          background: linear-gradient(135deg, #059669, #047857);
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+        }
+
+        .btn-success-gradient:hover {
+          filter: brightness(1.08);
+          transform: translateY(-1px);
+        }
+
+        .btn-secondary-sm {
           display: inline-flex;
           align-items: center;
           gap: 0.4rem;
-          padding: 0.5rem 1rem;
-          border-radius: 10px;
-          background: #f5f3ff;
-          color: #6d28d9;
-          border: 1px solid #c4b5fd;
-          font-size: 0.85rem;
-          font-weight: 700;
+          padding: 0.5rem 0.85rem;
           font-family: inherit;
+          font-size: 0.82rem;
+          font-weight: 700;
+          color: #334155;
+          background: #f8fafc;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
           cursor: pointer;
-          transition: all 0.2s ease;
-          white-space: nowrap;
-        }
-        .btn-outline-purple:hover {
-          background: #ede9fe;
-          border-color: #a78bfa;
-          transform: translateY(-1px);
+          transition: all 0.15s;
         }
 
-        .btn-ghost-sm {
+        .btn-secondary-sm:hover {
+          background: #f1f5f9;
+          color: #0f172a;
+          border-color: #94a3b8;
+        }
+
+        .btn-danger-sm {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 0.3rem;
-          padding: 0.35rem 0.65rem;
-          border-radius: 8px;
-          border: 1px solid #e2e8f0;
-          background: white;
-          color: #475569;
-          font-size: 0.78rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-        .btn-ghost-sm:hover {
-          background: #f8fafc;
-          border-color: #cbd5e1;
-          color: #1e293b;
-        }
-        .btn-ghost-danger:hover {
+          width: 34px;
+          height: 34px;
+          font-family: inherit;
+          color: #ef4444;
           background: #fef2f2;
-          border-color: #fecaca;
+          border: 1px solid #fecaca;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .btn-danger-sm:hover {
+          background: #fee2e2;
           color: #dc2626;
         }
 
-        /* Client Cards List */
-        .client-list {
-          padding: 0.75rem;
-          max-height: 640px;
-          overflow-y: auto;
+        /* Filter & Toolbar Area */
+        .table-toolbar-card {
+          background: #ffffff;
+          border-radius: 14px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+          padding: 1rem 1.25rem;
+          margin-bottom: 1.25rem;
           display: flex;
-          flex-direction: column;
-          gap: 0.6rem;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 1rem;
         }
 
-        .client-card {
-          padding: 0.85rem;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          transition: all 0.2s ease;
-          cursor: pointer;
+        .search-and-filters {
           display: flex;
           align-items: center;
           gap: 0.75rem;
+          flex-wrap: wrap;
+          flex: 1;
+        }
+
+        .search-input-wrapper {
+          position: relative;
+          min-width: 280px;
+          max-width: 380px;
+          flex: 1;
+        }
+
+        .search-input-wrapper input {
+          width: 100%;
+          padding: 0.55rem 0.8rem 0.55rem 2.3rem;
+          border-radius: 8px;
+          border: 1px solid #cbd5e1;
+          font-size: 0.85rem;
+          outline: none;
+          font-family: inherit;
+          background: #f8fafc;
+        }
+
+        .search-input-wrapper input:focus {
+          border-color: #7c3aed;
+          background: #ffffff;
+          box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+        }
+
+        .filter-chip-group {
+          display: flex;
+          gap: 0.35rem;
+          flex-wrap: wrap;
+        }
+
+        .filter-chip {
+          padding: 0.35rem 0.75rem;
+          font-size: 0.78rem;
+          font-weight: 700;
+          border-radius: 9999px;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .filter-chip:hover {
+          background: #f1f5f9;
+          color: #1e293b;
+        }
+
+        .filter-chip.active {
+          background: #3b1d6e;
+          color: #ffffff;
+          border-color: #3b1d6e;
+        }
+
+        /* Standard Assessment Table */
+        .table-container-card {
+          background: #ffffff;
+          border-radius: 14px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+          overflow: hidden;
+        }
+
+        .table-responsive-wrapper {
+          overflow-x: auto;
+          max-height: calc(100vh - 280px);
           position: relative;
         }
-        .client-card:hover {
-          border-color: #c4b5fd;
-          background: #faf5ff;
-          transform: translateY(-1px);
-        }
-        .client-card.active {
-          background: #f5f3ff;
-          border-color: #8b5cf6;
-          box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.25);
+
+        .assessment-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          font-size: 0.84rem;
+          text-align: left;
+          min-width: 1250px;
         }
 
-        .client-avatar {
-          width: 44px;
-          height: 44px;
-          border-radius: 10px;
-          background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+        /* Dark Purple Header matching Excel screenshot */
+        .assessment-table th {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          background: #3b1d6e;
+          color: #ffffff;
+          font-weight: 700;
+          font-size: 0.82rem;
+          padding: 0.85rem 0.65rem;
+          letter-spacing: 0.01em;
+          white-space: nowrap;
+          border-right: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 2px solid #28124d;
+        }
+
+        .assessment-table th:last-child {
+          border-right: none;
+        }
+
+        .assessment-table td {
+          padding: 0.65rem 0.65rem;
+          border-bottom: 1px solid #f1f5f9;
+          border-right: 1px solid #f8fafc;
+          vertical-align: middle;
+          color: #1e293b;
+        }
+
+        .assessment-table tr:hover td {
+          background-color: #faf5ff;
+        }
+
+        .assessment-table tr.high-risk-row td {
+          background-color: #fff1f2;
+        }
+
+        .assessment-table tr:last-child td {
+          border-bottom: none;
+        }
+
+        /* Cell Specifics */
+        .company-cell {
           display: flex;
           align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          overflow: hidden;
-          border: 1px solid #c4b5fd;
-        }
-        .client-avatar img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .client-avatar .fallback-initials {
-          font-size: 1.1rem;
-          font-weight: 800;
-          color: #6d28d9;
+          gap: 0.55rem;
+          max-width: 250px;
         }
 
-        .client-info {
-          flex: 1;
-          min-width: 0;
+        .company-icon {
+          flex-shrink: 0;
         }
-        .client-name {
-          font-size: 0.92rem;
+
+        .company-name-text {
           font-weight: 700;
-          color: #1e1b4b;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          color: #0f172a;
+          line-height: 1.3;
+          white-space: normal;
+          word-break: break-word;
         }
-        .client-gstin-code {
-          font-size: 0.75rem;
-          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-          color: #64748b;
-          margin-top: 0.15rem;
+
+        .company-name-text.red-flagged {
+          background: #dc2626;
+          color: #ffffff;
+          padding: 0.15rem 0.45rem;
+          border-radius: 4px;
+          display: inline-block;
         }
-        .client-meta-badge {
-          display: inline-flex;
+
+        .gstn-cell {
+          font-family: 'SFMono-Regular', Consolas, monospace;
+          font-size: 0.82rem;
+          font-weight: 700;
+          color: #334155;
+          display: flex;
           align-items: center;
-          gap: 0.3rem;
+          gap: 0.4rem;
+        }
+
+        .copy-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 2px;
+          color: #94a3b8;
+          display: flex;
+          align-items: center;
+          border-radius: 4px;
+        }
+
+        .copy-btn:hover {
+          color: #7c3aed;
+          background: #f1f5f9;
+        }
+
+        /* Editable Compliance Cell */
+        .compliance-cell {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+
+        .compliance-edit-box {
+          width: 38px;
+          height: 30px;
+          border-radius: 6px;
+          text-align: center;
+          font-family: inherit;
+          font-size: 0.88rem;
+          font-weight: 800;
+          outline: none;
+          border: 1.5px solid #cbd5e1;
+          background: #ffffff;
+          transition: all 0.15s ease;
+        }
+
+        .compliance-edit-box:focus {
+          border-color: #7c3aed;
+          box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+          background: #ffffff;
+        }
+
+        .compliance-zero {
+          color: #15803d;
+          border-color: #bbf7d0;
+          background: #f0fdf4;
+        }
+
+        .compliance-has-delay {
+          color: #b45309;
+          border-color: #fde68a;
+          background: #fffbeb;
+        }
+
+        .compliance-high-delay {
+          color: #b91c1c;
+          border-color: #fecaca;
+          background: #fef2f2;
+        }
+
+        .save-indicator {
           font-size: 0.7rem;
           font-weight: 700;
-          color: #5b21b6;
-          background: #ede9fe;
-          padding: 0.15rem 0.5rem;
-          border-radius: 6px;
-          margin-top: 0.35rem;
-        }
-
-        .client-card-actions {
+          color: #16a34a;
           display: flex;
           align-items: center;
-          gap: 0.3rem;
-          opacity: 0.8;
-        }
-        .client-card:hover .client-card-actions {
-          opacity: 1;
+          gap: 2px;
         }
 
-        /* Section B: Mapped Vendors Pane */
-        .vendor-pane-body {
-          padding: 1.25rem;
-          min-height: 480px;
-        }
-
-        .selected-client-banner {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 1rem 1.25rem;
-          background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          margin-bottom: 1.25rem;
-          flex-wrap: wrap;
-          gap: 0.8rem;
-        }
-        .client-banner-left {
-          display: flex;
-          align-items: center;
-          gap: 0.8rem;
-        }
-        .banner-logo {
-          width: 48px;
-          height: 48px;
-          border-radius: 10px;
-          background: white;
-          border: 1px solid #cbd5e1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-        }
-        .banner-logo img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        /* Vendors Table */
-        .table-responsive {
-          overflow-x: auto;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-        }
-        .vendor-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 0.85rem;
-        }
-        .vendor-table th {
-          background: #f8fafc;
-          padding: 0.75rem 1rem;
-          text-align: left;
+        .delay-tag {
+          font-size: 0.72rem;
           font-weight: 700;
-          color: #475569;
-          border-bottom: 1px solid #e2e8f0;
+          color: #dc2626;
           white-space: nowrap;
         }
-        .vendor-table td {
-          padding: 0.85rem 1rem;
-          border-bottom: 1px solid #f1f5f9;
-          vertical-align: middle;
-        }
-        .vendor-table tr:hover {
-          background: #fafbfc;
+
+        /* GSTR7 Badge */
+        .gstr7-badge {
+          display: inline-block;
+          padding: 0.2rem 0.55rem;
+          font-size: 0.76rem;
+          font-weight: 700;
+          border-radius: 6px;
+          white-space: nowrap;
         }
 
-        /* Badges */
+        /* Status Pills */
         .status-pill {
           display: inline-flex;
           align-items: center;
           gap: 0.35rem;
-          padding: 0.2rem 0.55rem;
-          border-radius: 12px;
-          font-size: 0.73rem;
+          font-size: 0.75rem;
           font-weight: 700;
-        }
-        .status-active {
-          background: #ecfdf5;
-          color: #047857;
-          border: 1px solid #a7f3d0;
-        }
-        .status-active .dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #10b981;
-        }
-        .status-inactive {
-          background: #fef2f2;
-          color: #b91c1c;
-          border: 1px solid #fecaca;
-        }
-        .status-inactive .dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #ef4444;
+          padding: 0.2rem 0.55rem;
+          border-radius: 9999px;
         }
 
+        .status-active {
+          background: #dcfce7;
+          color: #15803d;
+        }
+
+        .status-inactive {
+          background: #fee2e2;
+          color: #b91c1c;
+        }
+
+        .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: currentColor;
+        }
+
+        /* Score Badge */
         .score-badge {
-          display: inline-block;
-          min-width: 38px;
-          padding: 0.2rem 0.55rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 32px;
+          height: 24px;
+          padding: 0 0.4rem;
           border-radius: 6px;
           font-weight: 800;
-          text-align: center;
           font-size: 0.8rem;
         }
+
         .score-high {
           background: #dcfce7;
           color: #15803d;
-          border: 1px solid #86efac;
+          border: 1px solid #bbf7d0;
         }
+
         .score-mid {
           background: #fef3c7;
           color: #b45309;
-          border: 1px solid #fcd34d;
+          border: 1px solid #fde68a;
         }
+
         .score-low {
           background: #fee2e2;
           color: #b91c1c;
-          border: 1px solid #fca5a5;
+          border: 1px solid #fecaca;
         }
+
         .score-na {
           background: #f1f5f9;
           color: #64748b;
-          border: 1px solid #cbd5e1;
+          border: 1px solid #e2e8f0;
         }
 
-        /* Empty & Loading Placeholders */
-        .empty-placeholder {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          padding: 3.5rem 1.5rem;
+        .btn-table-action {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 4px;
           color: #64748b;
-        }
-        .placeholder-icon-wrap {
-          width: 56px;
-          height: 56px;
-          border-radius: 14px;
-          background: #f1f5f9;
-          display: flex;
+          border-radius: 6px;
+          transition: all 0.15s;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          margin-bottom: 0.85rem;
-          color: #94a3b8;
+          text-decoration: none;
         }
 
-        /* Modals */
+        .btn-table-action:hover {
+          color: #7c3aed;
+          background: #f1f5f9;
+        }
+
+        .btn-table-danger:hover {
+          color: #ef4444;
+          background: #fef2f2;
+        }
+
+        /* Spin */
+        .spin-icon {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        /* Toast Alert */
+        .toast-notification {
+          position: fixed;
+          bottom: 2rem;
+          right: 2rem;
+          z-index: 1000;
+          padding: 0.85rem 1.35rem;
+          border-radius: 10px;
+          font-size: 0.88rem;
+          font-weight: 700;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          animation: slideUp 0.3s ease;
+        }
+
+        .toast-success {
+          background: #0f172a;
+          color: #ffffff;
+          border-left: 4px solid #10b981;
+        }
+
+        .toast-error {
+          background: #0f172a;
+          color: #ffffff;
+          border-left: 4px solid #ef4444;
+        }
+
+        @keyframes slideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Modal Styles */
         .modal-overlay {
           position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
+          inset: 0;
           background: rgba(15, 23, 42, 0.6);
           backdrop-filter: blur(4px);
+          z-index: 999;
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1050;
           padding: 1.5rem;
         }
-        .modal-content-box {
-          background: white;
+
+        .modal-card {
+          background: #ffffff;
           border-radius: 16px;
-          max-width: 520px;
           width: 100%;
-          box-shadow: 0 20px 40px -5px rgba(0,0,0,0.25);
+          max-width: 520px;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
           overflow: hidden;
-          animation: modalPop 0.2s ease-out;
         }
-        .modal-wide {
-          max-width: 820px;
-        }
-        .modal-xl {
-          max-width: 960px;
-        }
-        @keyframes modalPop {
-          from { opacity: 0; transform: scale(0.96); }
-          to { opacity: 1; transform: scale(1); }
+
+        .modal-card-lg {
+          max-width: 950px;
         }
 
         .modal-header {
-          padding: 1.1rem 1.4rem;
-          background: #fafbfc;
+          padding: 1.25rem 1.5rem;
           border-bottom: 1px solid #e2e8f0;
           display: flex;
           justify-content: space-between;
           align-items: center;
         }
-        .modal-body {
-          padding: 1.4rem;
-          max-height: 70vh;
-          overflow-y: auto;
+
+        .modal-title {
+          font-size: 1.15rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin: 0;
         }
+
+        .modal-body {
+          padding: 1.5rem;
+        }
+
         .modal-footer {
-          padding: 1rem 1.4rem;
-          background: #fafbfc;
+          padding: 1rem 1.5rem;
           border-top: 1px solid #e2e8f0;
+          background: #f8fafc;
           display: flex;
           justify-content: flex-end;
           gap: 0.75rem;
@@ -1062,454 +1327,720 @@ export default function ClientVendorMapping({ currentUser }) {
         .form-group {
           margin-bottom: 1.1rem;
         }
-        .form-group label {
+
+        .form-label {
           display: block;
           font-size: 0.82rem;
           font-weight: 700;
           color: #334155;
           margin-bottom: 0.35rem;
         }
-        .form-control {
+
+        .form-input {
           width: 100%;
-          padding: 0.55rem 0.8rem;
-          border: 1px solid #cbd5e1;
+          padding: 0.6rem 0.85rem;
           border-radius: 8px;
+          border: 1px solid #cbd5e1;
           font-size: 0.88rem;
-          font-family: inherit;
-          box-sizing: border-box;
           outline: none;
+          font-family: inherit;
         }
-        .form-control:focus {
+
+        .form-input:focus {
           border-color: #7c3aed;
           box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
         }
 
-        /* Drag & Drop Upload Zone */
         .upload-dropzone {
           border: 2px dashed #cbd5e1;
           border-radius: 12px;
           padding: 1.5rem;
           text-align: center;
           cursor: pointer;
-          transition: all 0.2s;
           background: #f8fafc;
+          transition: all 0.2s;
         }
+
         .upload-dropzone:hover {
           border-color: #7c3aed;
           background: #f5f3ff;
         }
 
-        /* Vendor Multi-Select Modal Table */
-        .selectable-row {
+        .btn-ghost-sm {
+          padding: 0.5rem 0.85rem;
+          font-family: inherit;
+          font-size: 0.82rem;
+          font-weight: 700;
+          color: #64748b;
+          background: none;
+          border: none;
           cursor: pointer;
-          user-select: none;
-        }
-        .selectable-row.selected {
-          background: #f5f3ff !important;
-        }
-        .selectable-row.already-mapped {
-          opacity: 0.65;
-          cursor: not-allowed;
-          background: #f8fafc !important;
+          border-radius: 8px;
         }
 
-        /* Import Preview Cards */
-        .client-preview-card {
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          background: #fafbfc;
-          padding: 0.9rem 1.1rem;
-          margin-bottom: 0.85rem;
-          transition: all 0.2s;
+        .btn-ghost-sm:hover {
+          background: #e2e8f0;
+          color: #0f172a;
         }
-        .client-preview-card:hover {
-          border-color: #c4b5fd;
-        }
-        .client-preview-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 0.6rem;
+
+        .empty-state-card {
+          padding: 4rem 2rem;
+          text-align: center;
+          color: #64748b;
         }
       `}</style>
 
-      {/* Toast Notification */}
-      {notification && (
-        <div className={`toast-banner ${notification.type === 'error' ? 'toast-error' : 'toast-success'}`}>
-          {notification.type === 'error' ? <AlertCircle size={18} /> : <Check size={18} />}
-          <span>{notification.message}</span>
-          <button 
-            onClick={() => setNotification(null)} 
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginLeft: '0.4rem', color: 'inherit' }}
-          >
-            <X size={15} />
+      {/* ── Top Bar with Client-Wise Filter Dropdown ── */}
+      <div className="client-top-bar">
+        <div className="client-selector-group">
+          <div className="client-label">
+            <Building2 size={18} color="#7c3aed" />
+            <span>Select Client:</span>
+          </div>
+
+          <div className="client-dropdown-wrapper">
+            <select
+              className="client-dropdown-select"
+              value={selectedClient?.id || ''}
+              onChange={(e) => {
+                const c = clients.find(item => item.id === Number(e.target.value));
+                setSelectedClient(c || null);
+              }}
+              disabled={clientsLoading || clients.length === 0}
+            >
+              {clients.length === 0 && (
+                <option value="">No clients found - import or add client</option>
+              )}
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.clientName} ({c.vendorCount ?? 0} vendors)
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} className="dropdown-chevron" />
+          </div>
+
+          {selectedClient && (
+            <div className="client-info-pill">
+              {selectedClient.hasLogo ? (
+                <img
+                  src={apiClient.getClientLogoUrl(selectedClient.id)}
+                  alt={selectedClient.clientName}
+                  className="client-logo-avatar"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              ) : (
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '6px',
+                  background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#7c3aed', fontWeight: 800, fontSize: '0.85rem'
+                }}>
+                  {selectedClient.clientName?.charAt(0)?.toUpperCase()}
+                </div>
+              )}
+              <div>
+                <div className="client-meta-gstin">{selectedClient.clientGstin}</div>
+              </div>
+              <span className="client-meta-count">{mappedVendors.length} Vendors</span>
+            </div>
+          )}
+        </div>
+
+        <div className="top-action-buttons">
+          <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
+            <FileSpreadsheet size={16} /> Import from Sheet
           </button>
+          <button className="btn-primary-gradient" onClick={openAddClientModal}>
+            <Plus size={16} /> Add Client
+          </button>
+          {selectedClient && (
+            <>
+              <button className="btn-secondary-sm" onClick={() => openMapModal(selectedClient)} title="Search and map existing GRC vendors to this client">
+                <Users size={15} /> Map More Vendors
+              </button>
+              <button className="btn-secondary-sm" onClick={(e) => openEditClientModal(selectedClient, e)} title="Edit Client details">
+                <Edit2 size={14} /> Edit
+              </button>
+              <button className="btn-secondary-sm" onClick={(e) => openLogoModal(selectedClient, e)} title="Change or upload Client Logo">
+                <Upload size={14} /> Logo
+              </button>
+              <button className="btn-danger-sm" onClick={(e) => handleDeleteClient(selectedClient.id, selectedClient.clientName, e)} title="Delete Client">
+                <Trash2 size={15} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Table Toolbar (Search, Filter, Export) ── */}
+      <div className="table-toolbar-card">
+        <div className="search-and-filters">
+          <div className="search-input-wrapper">
+            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Search vendor name, GSTIN, activity, turnover..."
+              value={vendorSearch}
+              onChange={(e) => setVendorSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="filter-chip-group">
+            <button
+              className={`filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('all')}
+            >
+              All ({mappedVendors.length})
+            </button>
+            <button
+              className={`filter-chip ${statusFilter === 'delayed-gstr1' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('delayed-gstr1')}
+            >
+              Delayed GSTR-1
+            </button>
+            <button
+              className={`filter-chip ${statusFilter === 'delayed-gstr3b' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('delayed-gstr3b')}
+            >
+              Delayed GSTR-3B
+            </button>
+            <button
+              className={`filter-chip ${statusFilter === 'active' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('active')}
+            >
+              Active GST
+            </button>
+            <button
+              className={`filter-chip ${statusFilter === 'high-risk' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('high-risk')}
+            >
+              High Risk
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <button className="btn-secondary-sm" onClick={handleExportExcel} disabled={!filteredMappedVendors.length}>
+            <Download size={15} /> Export Excel
+          </button>
+        </div>
+      </div>
+
+      {/* ── Standard Assessment Table (Matching Excel Template) ── */}
+      <div className="table-container-card">
+        {vendorsLoading ? (
+          <div className="empty-state-card">
+            <Loader2 size={32} className="spin-icon" style={{ margin: '0 auto 1rem', color: '#7c3aed' }} />
+            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Loading mapped vendors for {selectedClient?.clientName}...</div>
+          </div>
+        ) : !selectedClient ? (
+          <div className="empty-state-card">
+            <Building2 size={44} style={{ margin: '0 auto 1rem', color: '#94a3b8' }} />
+            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', marginBottom: '0.4rem' }}>No Client Selected</div>
+            <div style={{ fontSize: '0.85rem' }}>Select a client from the dropdown above or import an Excel sheet.</div>
+          </div>
+        ) : filteredMappedVendors.length === 0 ? (
+          <div className="empty-state-card">
+            <Users size={44} style={{ margin: '0 auto 1rem', color: '#94a3b8' }} />
+            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', marginBottom: '0.4rem' }}>
+              {mappedVendors.length === 0 ? `No vendors mapped to "${selectedClient.clientName}" yet` : 'No matching vendors found'}
+            </div>
+            <div style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+              {mappedVendors.length === 0 
+                ? 'Upload an Excel sheet or click "Map More Vendors" to associate vendors with this client.' 
+                : 'Try clearing your search query or filter chip.'}
+            </div>
+            {mappedVendors.length === 0 && (
+              <button className="btn-primary-gradient" onClick={() => openMapModal(selectedClient)}>
+                <Users size={16} /> Map Vendors Now
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="table-responsive-wrapper">
+            <table className="assessment-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>Sl. No.</th>
+                  <th style={{ minWidth: '220px' }}>Company Name</th>
+                  <th style={{ minWidth: '150px' }}>GSTN</th>
+                  <th style={{ minWidth: '130px' }}>Type</th>
+                  <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
+                  <th style={{ width: '85px', textAlign: 'center' }}>GST Status</th>
+                  <th style={{ minWidth: '110px' }} title="Editable field — adjustments save immediately">
+                    GSTR1 ✎
+                  </th>
+                  <th style={{ minWidth: '150px' }} title="Editable field — adjustments save immediately">
+                    GSTR3B (Delayed) ✎
+                  </th>
+                  <th style={{ minWidth: '160px' }}>GSTR7R</th>
+                  <th style={{ minWidth: '110px', textAlign: 'center' }}>Aadhaar Authenticated</th>
+                  <th style={{ minWidth: '170px' }}>Core Activity</th>
+                  <th style={{ minWidth: '130px' }}>Turn over</th>
+                  <th style={{ minWidth: '100px', textAlign: 'center' }}>Score & Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMappedVendors.map((vendor, index) => {
+                  const gstin = vendor.vendorGstin;
+                  const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? vendor.delayCountGstr1 ?? 0;
+                  const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? vendor.delayCountGstr3b ?? 0;
+                  const saveStatus = savingGstins[gstin];
+                  const gstr7Info = getGstr7Display(vendor);
+                  const isHighRisk = (vendor.grcScore !== null && vendor.grcScore < 40) || gstr3bVal >= 2;
+                  const ageDisplay = vendor.ageYears !== null && vendor.ageYears !== undefined
+                    ? Math.round(vendor.ageYears)
+                    : computeAge(vendor.registrationDate);
+
+                  return (
+                    <tr key={gstin} className={isHighRisk ? 'high-risk-row' : ''}>
+                      {/* Sl. No. */}
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
+                        {index + 1}
+                      </td>
+
+                      {/* Company Name */}
+                      <td>
+                        <div className="company-cell">
+                          <span className="company-icon">
+                            {vendor.grcScore >= 70 ? (
+                              <CheckCircle2 size={16} color="#16a34a" />
+                            ) : vendor.grcScore >= 40 ? (
+                              <AlertCircle size={16} color="#d97706" />
+                            ) : (
+                              <AlertTriangle size={16} color="#dc2626" />
+                            )}
+                          </span>
+                          <span className={`company-name-text ${isHighRisk && vendor.grcScore !== null && vendor.grcScore < 30 ? 'red-flagged' : ''}`}>
+                            {vendor.tradeName || vendor.legalName || gstin}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* GSTN */}
+                      <td>
+                        <div className="gstn-cell">
+                          <span>{gstin}</span>
+                          <button
+                            type="button"
+                            className="copy-btn"
+                            onClick={(e) => handleCopyGstin(gstin, e)}
+                            title="Copy GSTIN"
+                          >
+                            {copiedGstin === gstin ? <Check size={13} color="#16a34a" /> : <Copy size={13} />}
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Type */}
+                      <td style={{ color: '#475569', fontSize: '0.82rem' }}>
+                        {vendor.gstType || 'Partnership'}
+                      </td>
+
+                      {/* Age */}
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#334155' }} title={vendor.registrationDate ? `Registered: ${vendor.registrationDate}` : ''}>
+                        {ageDisplay}
+                      </td>
+
+                      {/* GST Status */}
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`status-pill ${(vendor.gstStatus || '').toLowerCase() === 'active' ? 'status-active' : 'status-inactive'}`}>
+                          <span className="dot"></span>
+                          {vendor.gstStatus || 'Active'}
+                        </span>
+                      </td>
+
+                      {/* GSTR1 (Directly Editable) */}
+                      <td>
+                        <div className="compliance-cell">
+                          <input
+                            type="number"
+                            min="0"
+                            max="36"
+                            className={`compliance-edit-box ${gstr1Val > 0 ? 'compliance-has-delay' : 'compliance-zero'}`}
+                            value={gstr1Val}
+                            onChange={(e) => handleComplianceChange(gstin, 'gstr1', e.target.value)}
+                            onBlur={() => handleSaveCompliance(gstin)}
+                            onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                            title="Edit GSTR-1 delay count (auto-saves on change)"
+                          />
+                          {saveStatus === 'saving' && <Loader2 size={13} className="spin-icon" color="#7c3aed" />}
+                          {saveStatus === 'saved' && <span className="save-indicator">✓</span>}
+                        </div>
+                      </td>
+
+                      {/* GSTR3B (Delayed) (Directly Editable) */}
+                      <td>
+                        <div className="compliance-cell">
+                          <input
+                            type="number"
+                            min="0"
+                            max="36"
+                            className={`compliance-edit-box ${gstr3bVal >= 2 ? 'compliance-high-delay' : gstr3bVal > 0 ? 'compliance-has-delay' : 'compliance-zero'}`}
+                            value={gstr3bVal}
+                            onChange={(e) => handleComplianceChange(gstin, 'gstr3b', e.target.value)}
+                            onBlur={() => handleSaveCompliance(gstin)}
+                            onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                            title="Edit GSTR-3B delay count (auto-saves on change)"
+                          />
+                          {gstr3bVal > 0 && (
+                            <span className="delay-tag">
+                              {gstr3bVal >= 2 ? 'Delayed' : 'Delay'}
+                            </span>
+                          )}
+                          {saveStatus === 'saving' && <Loader2 size={13} className="spin-icon" color="#7c3aed" />}
+                          {saveStatus === 'saved' && <span className="save-indicator">✓</span>}
+                        </div>
+                      </td>
+
+                      {/* GSTR7R */}
+                      <td>
+                        <span
+                          className="gstr7-badge"
+                          style={{
+                            background: gstr7Info.status.bg,
+                            color: gstr7Info.status.color,
+                            border: `1px solid ${gstr7Info.status.border}`
+                          }}
+                        >
+                          {gstr7Info.status.text}
+                        </span>
+                      </td>
+
+                      {/* Aadhaar Authenticated */}
+                      <td style={{ textAlign: 'center' }}>
+                        {vendor.aadhaarValidation === 'Yes' ? (
+                          <span style={{ color: '#16a34a', fontWeight: 800 }}>Yes</span>
+                        ) : vendor.aadhaarValidation === 'No' ? (
+                          <span style={{ color: '#dc2626', fontWeight: 800 }}>No</span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>-</span>
+                        )}
+                      </td>
+
+                      {/* Core Activity */}
+                      <td style={{ color: '#475569', fontSize: '0.82rem' }}>
+                        {vendor.coreActivity || 'Manufacturer'}
+                      </td>
+
+                      {/* Turn over */}
+                      <td style={{ color: '#334155', fontWeight: 600, fontSize: '0.82rem' }}>
+                        {vendor.aggregateTurnover || 'N/A'}
+                      </td>
+
+                      {/* Score & Actions */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                          {getScoreBadge(vendor.grcScore)}
+                          <a
+                            href={vendor.reportUrl || `/vendor-report/${gstin}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-table-action"
+                            title="View Standalone Vendor Assessment Report"
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                          <button
+                            type="button"
+                            className="btn-table-action btn-table-danger"
+                            onClick={() => handleUnmapVendor(gstin)}
+                            title="Unmap Vendor from Client"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Toast Notification ── */}
+      {notification && (
+        <div className={`toast-notification ${notification.type === 'error' ? 'toast-error' : 'toast-success'}`}>
+          {notification.type === 'error' ? <AlertCircle size={18} color="#ef4444" /> : <Check size={18} color="#10b981" />}
+          <span>{notification.message}</span>
         </div>
       )}
 
-      {/* Page Title Bar */}
-      <div className="header-bar">
-        <div>
-          <h1 className="page-title">
-            <Building2 size={24} color="#7c3aed" />
-            Client-Vendor Mapping
-            <span className="page-title-badge">Part 2 Module</span>
-          </h1>
-          <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-            Manage corporate buyers (clients) and assign suppliers (vendors). Each vendor can be mapped to one client exclusively.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <button className="btn-outline-purple" onClick={openImportModal} title="Upload Excel/CSV sheet with horizontal client columns">
-            <FileSpreadsheet size={16} />
-            Import from Sheet
-          </button>
-
-          <button className="btn-primary-gradient" onClick={openAddClientModal}>
-            <Plus size={16} />
-            Add New Client
-          </button>
-        </div>
-      </div>
-
-      {/* Main Two-Pane Grid */}
-      <div className="mapping-grid">
-        
-        {/* ================================================================= */}
-        {/* SECTION A: CLIENT MANAGEMENT                                     */}
-        {/* ================================================================= */}
-        <div className="pane-card">
-          <div className="pane-header">
-            <h2 className="pane-title">
-              <Users size={17} color="#6d28d9" />
-              Clients ({clients.length})
-            </h2>
-            <div className="search-input-box" style={{ maxWidth: '170px' }}>
-              <Search size={14} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={clientSearch}
-                onChange={e => setClientSearch(e.target.value)}
-              />
+      {/* ── ADD / EDIT CLIENT MODAL ── */}
+      {showClientModal && (
+        <div className="modal-overlay" onClick={() => setShowClientModal(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</h3>
+              <button onClick={() => setShowClientModal(false)} className="btn-ghost-sm"><X size={18} /></button>
             </div>
-          </div>
-
-          <div className="client-list">
-            {clientsLoading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '2.5rem' }}>
-                <div className="spinner"></div>
-              </div>
-            ) : filteredClients.length === 0 ? (
-              <div className="empty-placeholder">
-                <div className="placeholder-icon-wrap">
-                  <Building2 size={26} />
-                </div>
-                <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>
-                  {clientSearch ? 'No matching clients' : 'No clients added yet'}
-                </div>
-                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.3rem 0 0.8rem' }}>
-                  {clientSearch ? 'Try adjusting your search query' : 'Create a client or import from sheet to begin mapping'}
-                </p>
-                {!clientSearch && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn-ghost-sm" onClick={openAddClientModal}>
-                      <Plus size={14} /> Add Client
-                    </button>
-                    <button className="btn-ghost-sm" onClick={openImportModal}>
-                      <FileSpreadsheet size={14} /> Import Sheet
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              filteredClients.map(client => {
-                const isSelected = selectedClient?.id === client.id;
-                const initials = (client.clientName || 'C')
-                  .split(' ')
-                  .map(w => w[0])
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .join('')
-                  .toUpperCase();
-
-                return (
-                  <div
-                    key={client.id}
-                    className={`client-card ${isSelected ? 'active' : ''}`}
-                    onClick={() => setSelectedClient(client)}
-                    title="Click to view & manage mapped vendors"
-                  >
-                    <div className="client-avatar">
-                      {client.hasLogo ? (
-                        <img 
-                          src={apiClient.getClientLogoUrl(client.id)} 
-                          alt={client.clientName}
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.parentNode.innerHTML = `<span class="fallback-initials">${initials}</span>`;
-                          }}
-                        />
-                      ) : (
-                        <span className="fallback-initials">{initials}</span>
-                      )}
-                    </div>
-
-                    <div className="client-info">
-                      <div className="client-name" title={client.clientName}>
-                        {client.clientName}
-                      </div>
-                      <div className="client-gstin-code">{client.clientGstin}</div>
-                      <div className="client-meta-badge">
-                        <Users size={11} />
-                        {client.vendorCount ?? 0} {client.vendorCount === 1 ? 'vendor' : 'vendors'} mapped
-                      </div>
-                    </div>
-
-                    <div className="client-card-actions">
-                      <button
-                        className="btn-ghost-sm"
-                        onClick={(e) => openEditClientModal(client, e)}
-                        title="Edit Client details or logo"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button
-                        className="btn-ghost-sm btn-ghost-danger"
-                        onClick={(e) => handleDeleteClient(client, e)}
-                        title="Delete Client"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                      <ChevronRight 
-                        size={16} 
-                        color={isSelected ? '#7c3aed' : '#cbd5e1'} 
-                        style={{ marginLeft: '0.2rem' }} 
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* ================================================================= */}
-        {/* SECTION B: VENDOR MAPPING                                        */}
-        {/* ================================================================= */}
-        <div className="pane-card">
-          <div className="pane-header">
-            <h2 className="pane-title">
-              <ShieldCheck size={17} color="#2563eb" />
-              {selectedClient 
-                ? `Mapped Vendors: ${selectedClient.clientName}`
-                : 'Vendor Mapping Workspace'}
-            </h2>
-
-            {selectedClient && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <div className="search-input-box" style={{ maxWidth: '200px' }}>
-                  <Search size={14} className="search-icon" />
+            <form onSubmit={handleClientSubmit}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Client GSTIN *</label>
                   <input
                     type="text"
-                    placeholder="Search mapped..."
-                    value={vendorSearch}
-                    onChange={e => setVendorSearch(e.target.value)}
+                    maxLength={15}
+                    className="form-input"
+                    placeholder="e.g. 03AAECA7648B1Z2"
+                    value={clientForm.clientGstin}
+                    onChange={(e) => setClientForm({ ...clientForm, clientGstin: e.target.value.toUpperCase() })}
+                    required
                   />
                 </div>
-                <button className="btn-primary-gradient" onClick={openMapVendorsModal}>
-                  <Plus size={15} />
-                  Map Vendors
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="vendor-pane-body">
-            {!selectedClient ? (
-              <div className="empty-placeholder" style={{ padding: '5rem 1rem' }}>
-                <div className="placeholder-icon-wrap" style={{ width: '64px', height: '64px' }}>
-                  <Building2 size={32} color="#7c3aed" />
+                <div className="form-group">
+                  <label className="form-label">Client Legal / Business Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. ALLIED RECYCLING LIMITED"
+                    value={clientForm.clientName}
+                    onChange={(e) => setClientForm({ ...clientForm, clientName: e.target.value })}
+                    required
+                  />
                 </div>
-                <h3 style={{ margin: '0.4rem 0 0.2rem', color: '#1e293b', fontSize: '1.1rem' }}>
-                  No Client Selected
-                </h3>
-                <p style={{ maxWidth: '380px', fontSize: '0.86rem', color: '#64748b', lineHeight: 1.5 }}>
-                  Select a corporate client from the left panel to review compliance scores and assign or unassign supplier GSTINs.
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Active Client Banner */}
-                <div className="selected-client-banner">
-                  <div className="client-banner-left">
-                    <div className="banner-logo">
-                      {selectedClient.hasLogo ? (
-                        <img src={apiClient.getClientLogoUrl(selectedClient.id)} alt={selectedClient.clientName} />
-                      ) : (
-                        <Building2 size={24} color="#6d28d9" />
-                      )}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
-                        {selectedClient.clientName}
+                <div className="form-group">
+                  <label className="form-label">Client Logo (Optional, max 2MB)</label>
+                  <div
+                    className="upload-dropzone"
+                    onClick={() => document.getElementById('client-logo-input')?.click()}
+                  >
+                    <input
+                      id="client-logo-input"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert('Logo image must be smaller than 2MB.');
+                            return;
+                          }
+                          setClientForm({ ...clientForm, logoFile: file });
+                          setLogoPreview(URL.createObjectURL(file));
+                        }
+                      }}
+                    />
+                    {logoPreview ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                        <img src={logoPreview} alt="Preview" style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain' }} />
+                        <span style={{ fontSize: '0.75rem', color: '#7c3aed', fontWeight: 700 }}>Click to change image</span>
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b', fontFamily: 'monospace' }}>
-                        GSTIN: <span style={{ fontWeight: 700, color: '#334155' }}>{selectedClient.clientGstin}</span>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', color: '#64748b' }}>
+                        <UploadCloud size={28} color="#7c3aed" />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Click or drag logo here (PNG, JPEG, SVG)</span>
                       </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{
-                      padding: '0.4rem 0.8rem',
-                      background: '#ffffff',
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      color: '#475569'
-                    }}>
-                      Total Mapped: <span style={{ color: '#6d28d9' }}>{mappedVendors.length}</span>
-                    </div>
-                    <button 
-                      className="btn-ghost-sm" 
-                      onClick={() => fetchMappedVendors(selectedClient.id)} 
-                      title="Refresh mapped vendors list"
-                    >
-                      <RefreshCw size={13} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Table of Mapped Vendors */}
-                {vendorsLoading ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '3.5rem' }}>
-                    <div className="spinner"></div>
-                  </div>
-                ) : filteredMappedVendors.length === 0 ? (
-                  <div className="empty-placeholder">
-                    <div className="placeholder-icon-wrap">
-                      <Users size={28} />
-                    </div>
-                    <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.95rem' }}>
-                      {vendorSearch ? 'No matching mapped vendors' : 'No vendors currently mapped to this client'}
-                    </div>
-                    <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.3rem 0 1rem', maxWidth: '340px' }}>
-                      {vendorSearch 
-                        ? 'Try a different search keyword' 
-                        : 'Assign existing vendors from GRC to view compliance scores and monitor supply risk.'}
-                    </p>
-                    {!vendorSearch && (
-                      <button className="btn-primary-gradient" onClick={openMapVendorsModal}>
-                        <Plus size={15} /> Map First Vendor
-                      </button>
                     )}
                   </div>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="vendor-table">
-                      <thead>
-                        <tr>
-                          <th>Vendor GSTIN</th>
-                          <th>Trade Name</th>
-                          <th>Legal Name</th>
-                          <th>GST Status</th>
-                          <th>GRC Score</th>
-                          <th style={{ textAlign: 'right' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredMappedVendors.map(vendor => (
-                          <tr key={vendor.vendorGstin}>
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e293b' }}>
-                                  {vendor.vendorGstin}
-                                </span>
-                                <a
-                                  href={`/vendor-report/${vendor.vendorGstin}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="View Public Assessment Report"
-                                  style={{ color: '#7c3aed', display: 'inline-flex' }}
-                                >
-                                  <ExternalLink size={13} />
-                                </a>
-                              </div>
-                            </td>
-                            <td>
-                              <div style={{ fontWeight: 600, color: '#1e293b', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={vendor.tradeName || '—'}>
-                                {vendor.tradeName || '—'}
-                              </div>
-                            </td>
-                            <td>
-                              <div style={{ color: '#64748b', fontSize: '0.8rem', maxWidth: '180px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={vendor.legalName || '—'}>
-                                {vendor.legalName || '—'}
-                              </div>
-                            </td>
-                            <td>{getStatusBadge(vendor.gstStatus)}</td>
-                            <td>{getScoreBadge(vendor.grcScore)}</td>
-                            <td style={{ textAlign: 'right' }}>
-                              <button
-                                className="btn-ghost-sm btn-ghost-danger"
-                                onClick={() => handleUnmapVendor(vendor.vendorGstin, vendor.tradeName)}
-                                title="Remove / Unmap this vendor from the client"
-                              >
-                                <X size={13} />
-                                Unmap
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-      </div>
-
-      {/* =================================================================== */}
-      {/* BULK IMPORT FROM SHEET MODAL                                        */}
-      {/* =================================================================== */}
-      {showImportModal && (
-        <div className="modal-overlay" onClick={() => !importSubmitting && setShowImportModal(false)}>
-          <div className="modal-content-box modal-xl" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileSpreadsheet size={20} color="#7c3aed" />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-                    Bulk Import Clients & Mapped Vendors
-                  </h3>
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
-                    Upload an Excel (.xlsx, .xls) or CSV sheet with horizontal client columns to auto-create clients and map vendors.
-                  </div>
                 </div>
               </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-ghost-sm" onClick={() => setShowClientModal(false)} disabled={modalSubmitting}>Cancel</button>
+                <button type="submit" className="btn-primary-gradient" disabled={modalSubmitting}>
+                  {modalSubmitting ? 'Saving...' : editingClient ? 'Save Changes' : 'Create Client'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-              <button 
-                onClick={() => setShowImportModal(false)}
-                disabled={importSubmitting}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+      {/* ── UPLOAD LOGO MODAL ── */}
+      {showLogoModal && logoTargetClient && (
+        <div className="modal-overlay" onClick={() => setShowLogoModal(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Upload Logo: {logoTargetClient.clientName}</h3>
+              <button onClick={() => setShowLogoModal(false)} className="btn-ghost-sm"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleDirectLogoSubmit}>
+              <div className="modal-body">
+                <div
+                  className="upload-dropzone"
+                  onClick={() => document.getElementById('direct-logo-input')?.click()}
+                >
+                  <input
+                    id="direct-logo-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 2 * 1024 * 1024) {
+                          alert('Logo image must be smaller than 2MB.');
+                          return;
+                        }
+                        setDirectLogoFile(file);
+                        setDirectLogoPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  {directLogoPreview ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <img src={directLogoPreview} alt="Preview" style={{ maxHeight: '110px', maxWidth: '100%', objectFit: 'contain' }} />
+                      <span style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 700 }}>Click to choose a different logo</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', color: '#64748b' }}>
+                      <UploadCloud size={32} color="#7c3aed" />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Click to select a logo (PNG, JPEG, SVG)</span>
+                      <span style={{ fontSize: '0.75rem' }}>Maximum file size: 2MB</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-ghost-sm" onClick={() => setShowLogoModal(false)} disabled={logoSubmitting}>Cancel</button>
+                <button type="submit" className="btn-primary-gradient" disabled={logoSubmitting || !directLogoFile}>
+                  {logoSubmitting ? 'Uploading...' : 'Upload Logo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MAP VENDORS MODAL ── */}
+      {showMapModal && selectedClient && (
+        <div className="modal-overlay" onClick={() => setShowMapModal(false)}>
+          <div className="modal-card modal-card-lg" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">Map Vendors to: {selectedClient.clientName}</h3>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+                  Select vendors to map exclusively to this client (strict 1-to-many relationship).
+                </div>
+              </div>
+              <button onClick={() => setShowMapModal(false)} className="btn-ghost-sm"><X size={18} /></button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+              <div style={{ marginBottom: '1rem', position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Search available vendors by name or GSTIN..."
+                  value={mapSearch}
+                  onChange={(e) => setMapSearch(e.target.value)}
+                  style={{ paddingLeft: '2.4rem' }}
+                />
+              </div>
+
+              {allVendorsLoading ? (
+                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                  <Loader2 size={28} className="spin-icon" style={{ margin: '0 auto 0.5rem', color: '#7c3aed' }} />
+                  <div>Loading vendor registry...</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {availableVendorsFiltered.slice(0, 100).map(vendor => {
+                    const gstin = vendor.gstin;
+                    const assignedInfo = assignedVendorsMap[gstin];
+                    const isAlreadyMappedToCurrent = mappedVendors.some(m => m.vendorGstin === gstin);
+                    const isMappedToOther = assignedInfo && assignedInfo.clientId !== selectedClient.id;
+                    const isSelected = selectedGstinsToMap.has(gstin);
+
+                    return (
+                      <div
+                        key={gstin}
+                        onClick={() => {
+                          if (isAlreadyMappedToCurrent) return;
+                          toggleSelectGstin(gstin);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.65rem 0.9rem',
+                          borderRadius: '8px',
+                          border: isSelected ? '1.5px solid #7c3aed' : '1px solid #e2e8f0',
+                          background: isSelected ? '#f5f3ff' : isAlreadyMappedToCurrent ? '#f8fafc' : '#ffffff',
+                          cursor: isAlreadyMappedToCurrent ? 'not-allowed' : 'pointer',
+                          opacity: isAlreadyMappedToCurrent ? 0.7 : 1
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div>
+                            {isAlreadyMappedToCurrent ? (
+                              <CheckSquare size={18} color="#16a34a" />
+                            ) : isSelected ? (
+                              <CheckSquare size={18} color="#7c3aed" />
+                            ) : (
+                              <Square size={18} color="#94a3b8" />
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                              {vendor.tradeName || vendor.legalName || 'Unnamed Vendor'}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#64748b', fontFamily: 'monospace' }}>
+                              {gstin}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {isAlreadyMappedToCurrent && (
+                            <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#16a34a', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }}>
+                              Already Mapped
+                            </span>
+                          )}
+                          {isMappedToOther && (
+                            <span style={{ fontSize: '0.72rem', background: '#fffbeb', color: '#b45309', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }} title={`Mapped to ${assignedInfo.clientName}. Selecting will reassign to this client.`}>
+                              Mapped to: {assignedInfo.clientName}
+                            </span>
+                          )}
+                          {getScoreBadge(vendor.grcScore)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <span style={{ marginRight: 'auto', fontSize: '0.82rem', color: '#64748b', alignSelf: 'center' }}>
+                Selected: <strong>{selectedGstinsToMap.size}</strong> vendor(s)
+              </span>
+              <button type="button" className="btn-ghost-sm" onClick={() => setShowMapModal(false)} disabled={mappingSubmitting}>Cancel</button>
+              <button
+                type="button"
+                className="btn-primary-gradient"
+                disabled={mappingSubmitting || selectedGstinsToMap.size === 0}
+                onClick={handleConfirmMapping}
               >
-                <X size={18} />
+                {mappingSubmitting ? 'Mapping...' : `Map Selected (${selectedGstinsToMap.size})`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="modal-body">
-              {/* File Dropzone */}
+      {/* ── IMPORT SHEET PREVIEW MODAL ── */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => !importSubmitting && setShowImportModal(false)}>
+          <div className="modal-card modal-card-lg" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">Import & Map Clients from Excel</h3>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+                  Upload Excel (.xlsx, .xls) with side-by-side client blocks.
+                </div>
+              </div>
+              <button onClick={() => setShowImportModal(false)} disabled={importSubmitting} className="btn-ghost-sm"><X size={18} /></button>
+            </div>
+
+            <div className="modal-body" style={{ maxHeight: '580px', overflowY: 'auto' }}>
               {!parsedImportData.length ? (
-                <div 
+                <div
                   className="upload-dropzone"
                   onClick={() => document.getElementById('sheet-file-input')?.click()}
-                  style={{ padding: '2.5rem 1.5rem' }}
+                  style={{ padding: '3rem 1.5rem' }}
                 >
                   <input
                     id="sheet-file-input"
@@ -1518,7 +2049,6 @@ export default function ClientVendorMapping({ currentUser }) {
                     style={{ display: 'none' }}
                     onChange={handleSheetFileSelected}
                   />
-
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem' }}>
                     <div style={{
                       width: '48px', height: '48px', borderRadius: '50%',
@@ -1526,7 +2056,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     }}>
                       <UploadCloud size={24} />
                     </div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
+                    <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
                       {importParsing ? 'Analyzing sheet format...' : 'Click or drag Excel / CSV file here to upload'}
                     </div>
                     <div style={{ fontSize: '0.78rem', color: '#64748b', maxWidth: '480px', lineHeight: 1.5 }}>
@@ -1536,7 +2066,6 @@ export default function ClientVendorMapping({ currentUser }) {
                 </div>
               ) : (
                 <div>
-                  {/* Parsing Summary Header */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1553,17 +2082,11 @@ export default function ClientVendorMapping({ currentUser }) {
                       <Check size={16} color="#7c3aed" />
                       Detected {parsedImportData.length} Client(s) • Total {totalVendorsInSheet} Vendor(s) to map
                     </div>
-
-                    <button
-                      type="button"
-                      className="btn-ghost-sm"
-                      onClick={() => { setParsedImportData([]); setImportFile(null); }}
-                    >
+                    <button type="button" className="btn-ghost-sm" onClick={() => { setParsedImportData([]); setImportFile(null); }}>
                       Choose Different File
                     </button>
                   </div>
 
-                  {/* Replace Existing Notice */}
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1583,109 +2106,80 @@ export default function ClientVendorMapping({ currentUser }) {
                     </span>
                   </div>
 
-                  {/* Client Cards Preview */}
-                  <div style={{ maxHeight: '440px', overflowY: 'auto', paddingRight: '0.3rem' }}>
+                  {/* Client Cards List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {parsedImportData.map((clientItem, idx) => {
                       const isExpanded = expandedClientIndex === idx;
-                      const hasDuplicates = clientItem.duplicateVendors && clientItem.duplicateVendors.length > 0;
-
                       return (
-                        <div key={idx} className="client-preview-card">
-                          <div className="client-preview-header">
+                        <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '0.75rem 1rem',
+                            background: '#f8fafc',
+                            borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none'
+                          }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                               <Building2 size={16} color="#7c3aed" />
-                              <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
+                              <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.92rem' }}>
                                 {clientItem.clientName}
                               </span>
-                              <span style={{
-                                fontSize: '0.72rem',
-                                padding: '0.15rem 0.5rem',
-                                borderRadius: '6px',
-                                background: '#ede9fe',
-                                color: '#6d28d9',
-                                fontWeight: 700
-                              }}>
+                              <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem', borderRadius: '6px', background: '#ede9fe', color: '#6d28d9', fontWeight: 800 }}>
                                 {clientItem.vendors.length} vendors
                               </span>
-
-                              {hasDuplicates && (
-                                <span style={{
-                                  fontSize: '0.7rem',
-                                  padding: '0.15rem 0.45rem',
-                                  borderRadius: '6px',
-                                  background: '#fef3c7',
-                                  color: '#b45309',
-                                  fontWeight: 700,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.2rem'
-                                }} title="These vendors appeared under multiple clients in the sheet and will be mapped to their first occurrence.">
-                                  <AlertTriangle size={12} />
-                                  {clientItem.duplicateVendors.length} duplicate(s) omitted
-                                </span>
-                              )}
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Client GSTIN:</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>GSTIN:</span>
                                 <input
                                   type="text"
                                   maxLength={15}
-                                  placeholder="Auto-match or enter GSTIN"
                                   value={clientItem.clientGstin}
-                                  onChange={e => handleUpdateClientGstin(idx, e.target.value)}
-                                  className="form-control"
+                                  onChange={(e) => handleUpdateClientGstin(idx, e.target.value)}
+                                  placeholder="Auto-resolving..."
                                   style={{
-                                    width: '180px',
-                                    padding: '0.25rem 0.5rem',
-                                    fontSize: '0.78rem',
                                     fontFamily: 'monospace',
-                                    fontWeight: 700
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '6px',
+                                    border: '1px solid #cbd5e1',
+                                    width: '145px',
+                                    textAlign: 'center'
                                   }}
                                 />
                               </div>
-
                               <button
                                 type="button"
                                 className="btn-ghost-sm"
+                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                                 onClick={() => setExpandedClientIndex(isExpanded ? null : idx)}
-                                title="Toggle vendors list"
                               >
-                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                {isExpanded ? 'Hide' : 'Preview Vendors'}
+                                {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                               </button>
                             </div>
                           </div>
 
-                          {/* Expanded Vendor List */}
                           {isExpanded && (
-                            <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.4rem' }}>
-                                Vendors to be mapped under {clientItem.clientName}:
-                              </div>
-
-                              <div style={{ maxHeight: '180px', overflowY: 'auto', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                <table className="vendor-table" style={{ fontSize: '0.78rem' }}>
-                                  <thead>
-                                    <tr>
-                                      <th style={{ padding: '0.4rem 0.75rem' }}>#</th>
-                                      <th style={{ padding: '0.4rem 0.75rem' }}>Vendor Name</th>
-                                      <th style={{ padding: '0.4rem 0.75rem' }}>GSTIN</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {clientItem.vendors.map((v, vIdx) => (
-                                      <tr key={v.gstin + vIdx}>
-                                        <td style={{ padding: '0.4rem 0.75rem', color: '#94a3b8' }}>{vIdx + 1}</td>
-                                        <td style={{ padding: '0.4rem 0.75rem', fontWeight: 600 }}>{v.name}</td>
-                                        <td style={{ padding: '0.4rem 0.75rem', fontFamily: 'monospace', fontWeight: 700, color: '#4338ca' }}>
-                                          {v.gstin}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                            <div style={{ padding: '0.85rem 1rem', background: '#ffffff', maxHeight: '180px', overflowY: 'auto' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                {clientItem.vendors.map((v, vIdx) => (
+                                  <span
+                                    key={vIdx}
+                                    style={{
+                                      fontFamily: 'monospace',
+                                      fontSize: '0.75rem',
+                                      padding: '0.2rem 0.5rem',
+                                      background: '#f1f5f9',
+                                      borderRadius: '4px',
+                                      color: '#334155'
+                                    }}
+                                  >
+                                    {v.gstin}
+                                  </span>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -1701,20 +2195,12 @@ export default function ClientVendorMapping({ currentUser }) {
               <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                 {parsedImportData.length > 0 && (
                   <span>
-                    Ready to create/update <strong>{parsedImportData.length}</strong> clients and map <strong>{totalVendorsInSheet}</strong> vendors.
+                    Ready to create <strong>{parsedImportData.length}</strong> clients and map <strong>{totalVendorsInSheet}</strong> vendors.
                   </span>
                 )}
               </div>
-
               <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button
-                  type="button"
-                  className="btn-ghost-sm"
-                  onClick={() => setShowImportModal(false)}
-                  disabled={importSubmitting}
-                >
-                  Cancel
-                </button>
+                <button type="button" className="btn-ghost-sm" onClick={() => setShowImportModal(false)} disabled={importSubmitting}>Cancel</button>
                 <button
                   type="button"
                   className="btn-primary-gradient"
@@ -1728,299 +2214,6 @@ export default function ClientVendorMapping({ currentUser }) {
           </div>
         </div>
       )}
-
-      {/* =================================================================== */}
-      {/* ADD / EDIT CLIENT MODAL                                             */}
-      {/* =================================================================== */}
-      {showClientModal && (
-        <div className="modal-overlay" onClick={() => !modalSubmitting && setShowClientModal(false)}>
-          <div className="modal-content-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Building2 size={18} color="#7c3aed" />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-                  {editingClient ? 'Edit Client' : 'Add New Client'}
-                </h3>
-              </div>
-              <button 
-                onClick={() => setShowClientModal(false)}
-                disabled={modalSubmitting}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveClient}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>Client GSTIN *</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={15}
-                    placeholder="e.g. 27ABCDE1234F1Z5"
-                    className="form-control"
-                    style={{ textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}
-                    value={clientForm.clientGstin}
-                    onChange={e => setClientForm({ ...clientForm, clientGstin: e.target.value.toUpperCase() })}
-                  />
-                  <small style={{ color: '#64748b', fontSize: '0.73rem', marginTop: '0.2rem', display: 'block' }}>
-                    15-character alphanumeric GSTIN of the corporate buyer / manufacturer.
-                  </small>
-                </div>
-
-                <div className="form-group">
-                  <label>Client Legal / Business Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Rapidue Technologies Pvt Ltd / Tata Motors"
-                    className="form-control"
-                    value={clientForm.clientName}
-                    onChange={e => setClientForm({ ...clientForm, clientName: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Client Logo (PNG, JPEG, SVG — Max 2 MB)</label>
-                  <div 
-                    className="upload-dropzone"
-                    onClick={() => document.getElementById('client-logo-input')?.click()}
-                  >
-                    <input
-                      id="client-logo-input"
-                      type="file"
-                      accept="image/png,image/jpeg,image/svg+xml"
-                      style={{ display: 'none' }}
-                      onChange={handleLogoChange}
-                    />
-
-                    {logoPreview ? (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                        <div style={{
-                          width: '64px', height: '64px', borderRadius: '10px',
-                          border: '1px solid #cbd5e1', overflow: 'hidden', background: 'white'
-                        }}>
-                          <img src={logoPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                        </div>
-                        <div style={{ textAlign: 'left' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
-                            {clientForm.logoFile ? clientForm.logoFile.name : 'Current Logo'}
-                          </div>
-                          <span style={{ fontSize: '0.75rem', color: '#7c3aed', fontWeight: 600 }}>
-                            Click to choose different image
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
-                        <div style={{
-                          width: '40px', height: '40px', borderRadius: '50%',
-                          background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed'
-                        }}>
-                          <Upload size={18} />
-                        </div>
-                        <div style={{ fontSize: '0.83rem', fontWeight: 700, color: '#334155' }}>
-                          Click or drag file to upload logo
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-                          Supported formats: PNG, JPEG, SVG (max 2 MB)
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn-ghost-sm"
-                  onClick={() => setShowClientModal(false)}
-                  disabled={modalSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary-gradient"
-                  disabled={modalSubmitting}
-                >
-                  {modalSubmitting ? 'Saving...' : (editingClient ? 'Update Client' : 'Create Client')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* MAP VENDORS MODAL (Strict 1-to-many: one vendor per client only)   */}
-      {/* =================================================================== */}
-      {showMapModal && selectedClient && (
-        <div className="modal-overlay" onClick={() => !mappingSubmitting && setShowMapModal(false)}>
-          <div className="modal-content-box modal-wide" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Users size={18} color="#7c3aed" />
-                  Map Vendors to: {selectedClient.clientName}
-                </h3>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                  Each vendor can only be assigned to one client. Select unassigned vendors below.
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setShowMapModal(false)}
-                disabled={mappingSubmitting}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ padding: '1rem 1.4rem' }}>
-              {/* Search & Bulk Select Toolbar */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                <div className="search-input-box" style={{ flex: 1, minWidth: '220px' }}>
-                  <Search size={15} className="search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search by GSTIN, Trade name or Legal name..."
-                    value={mapSearch}
-                    onChange={e => setMapSearch(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    className="btn-ghost-sm"
-                    onClick={() => handleSelectAllFiltered(availableVendorsFiltered)}
-                    title="Select all unassigned vendors shown"
-                  >
-                    Select All Unassigned
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost-sm"
-                    onClick={handleClearAllSelected}
-                    disabled={selectedGstinsToMap.size === 0}
-                  >
-                    Clear ({selectedGstinsToMap.size})
-                  </button>
-                </div>
-              </div>
-
-              {/* Vendors List Table */}
-              {allVendorsLoading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
-                  <div className="spinner"></div>
-                </div>
-              ) : availableVendorsFiltered.length === 0 ? (
-                <div className="empty-placeholder" style={{ padding: '2.5rem' }}>
-                  <p style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>No vendors match your search.</p>
-                </div>
-              ) : (
-                <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                  <table className="vendor-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '40px' }}></th>
-                        <th>Vendor GSTIN</th>
-                        <th>Trade Name</th>
-                        <th>Status</th>
-                        <th>GRC Score</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availableVendorsFiltered.map(vendor => {
-                        const assignedInfo = assignedVendorsMap[vendor.gstin];
-                        const isMappedToThis = assignedInfo && assignedInfo.clientId === selectedClient.id;
-                        const isMappedToOther = assignedInfo && assignedInfo.clientId !== selectedClient.id;
-                        const isMapped = isMappedToThis || isMappedToOther;
-                        const isChecked = selectedGstinsToMap.has(vendor.gstin);
-
-                        return (
-                          <tr
-                            key={vendor.gstin}
-                            className={`selectable-row ${isMapped ? 'already-mapped' : ''} ${isChecked ? 'selected' : ''}`}
-                            onClick={() => {
-                              if (!isMapped) toggleVendorSelection(vendor.gstin);
-                            }}
-                          >
-                            <td style={{ textAlign: 'center' }}>
-                              {isMappedToThis ? (
-                                <Check size={16} color="#10b981" title="Already mapped to this client" />
-                              ) : isMappedToOther ? (
-                                <X size={15} color="#d97706" title={`Already mapped to client: ${assignedInfo.clientName}`} />
-                              ) : isChecked ? (
-                                <CheckSquare size={17} color="#7c3aed" />
-                              ) : (
-                                <Square size={17} color="#94a3b8" />
-                              )}
-                            </td>
-                            <td>
-                              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e293b' }}>
-                                {vendor.gstin}
-                              </span>
-                              {isMappedToThis && (
-                                <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', color: '#059669', background: '#d1fae5', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }}>
-                                  Mapped to this client
-                                </span>
-                              )}
-                              {isMappedToOther && (
-                                <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }} title={`Client GSTIN: ${assignedInfo.clientGstin}`}>
-                                  Mapped to: {assignedInfo.clientName}
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              <div style={{ fontWeight: 600, color: '#1e293b', maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {vendor.tradeName || vendor.legalName || '—'}
-                              </div>
-                            </td>
-                            <td>{getStatusBadge(vendor.gstStatus)}</td>
-                            <td>{getScoreBadge(vendor.grcScore)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>
-                <span style={{ color: '#7c3aed' }}>{selectedGstinsToMap.size}</span> unassigned vendor(s) selected
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button
-                  type="button"
-                  className="btn-ghost-sm"
-                  onClick={() => setShowMapModal(false)}
-                  disabled={mappingSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary-gradient"
-                  disabled={mappingSubmitting || selectedGstinsToMap.size === 0}
-                  onClick={handleConfirmMapping}
-                >
-                  {mappingSubmitting ? 'Mapping...' : `Map ${selectedGstinsToMap.size} Vendor(s)`}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
