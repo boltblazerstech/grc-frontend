@@ -572,7 +572,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
       return [
         idx + 1,
-        v.tradeName || v.legalName || v.vendorGstin,
+        getVendorDisplayName(v),
         v.vendorGstin,
         v.gstType || 'Partnership',
         ageVal,
@@ -596,6 +596,21 @@ export default function ClientVendorMapping({ currentUser }) {
 
   // ── Derived Data & Helpers ────────────────────────────────────────────────
 
+  const getVendorDisplayName = (vendor) => {
+    if (!vendor) return '';
+    const isInvalid = (str) => {
+      if (!str) return true;
+      const s = String(str).trim().toLowerCase();
+      return s === '' || s === 'na' || s === 'n/a' || s === 'null' || s === 'none' || s === 'undefined' || s === '-';
+    };
+
+    const trade = !isInvalid(vendor.tradeName) ? vendor.tradeName.trim() : null;
+    const legal = !isInvalid(vendor.legalName) ? vendor.legalName.trim() : null;
+
+    // Prioritize trade name; if null/NA, fallback to legal name; if both fail, GSTIN
+    return trade || legal || vendor.vendorGstin || vendor.gstin || '';
+  };
+
   const computeAge = (regDate) => {
     if (!regDate) return '-';
     try {
@@ -612,14 +627,16 @@ export default function ClientVendorMapping({ currentUser }) {
     const q = vendorSearch.trim().toLowerCase();
 
     if (q) {
-      list = list.filter(v => 
-        (v.vendorGstin && v.vendorGstin.toLowerCase().includes(q)) ||
-        (v.tradeName && v.tradeName.toLowerCase().includes(q)) ||
-        (v.legalName && v.legalName.toLowerCase().includes(q)) ||
-        (v.gstType && v.gstType.toLowerCase().includes(q)) ||
-        (v.coreActivity && v.coreActivity.toLowerCase().includes(q)) ||
-        (v.aggregateTurnover && v.aggregateTurnover.toLowerCase().includes(q))
-      );
+      list = list.filter(v => {
+        const displayName = getVendorDisplayName(v).toLowerCase();
+        return displayName.includes(q) ||
+          (v.vendorGstin && v.vendorGstin.toLowerCase().includes(q)) ||
+          (v.tradeName && v.tradeName.toLowerCase().includes(q)) ||
+          (v.legalName && v.legalName.toLowerCase().includes(q)) ||
+          (v.gstType && v.gstType.toLowerCase().includes(q)) ||
+          (v.coreActivity && v.coreActivity.toLowerCase().includes(q)) ||
+          (v.aggregateTurnover && v.aggregateTurnover.toLowerCase().includes(q));
+      });
     }
 
     if (statusFilter === 'delayed-gstr1') {
@@ -638,7 +655,9 @@ export default function ClientVendorMapping({ currentUser }) {
   const availableVendorsFiltered = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
     return allAvailableVendors.filter(v => {
+      const displayName = getVendorDisplayName(v).toLowerCase();
       const matchText = !q || 
+        displayName.includes(q) ||
         (v.gstin && v.gstin.toLowerCase().includes(q)) ||
         (v.tradeName && v.tradeName.toLowerCase().includes(q)) ||
         (v.legalName && v.legalName.toLowerCase().includes(q));
@@ -1594,7 +1613,7 @@ export default function ClientVendorMapping({ currentUser }) {
                             <CheckCircle2 size={16} color="#16a34a" />
                           </span>
                           <span className="company-name-text">
-                            {vendor.tradeName || vendor.legalName || gstin}
+                            {getVendorDisplayName(vendor)}
                           </span>
                         </div>
                       </td>
@@ -1958,7 +1977,7 @@ export default function ClientVendorMapping({ currentUser }) {
                           </div>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
-                              {vendor.tradeName || vendor.legalName || 'Unnamed Vendor'}
+                              {getVendorDisplayName(vendor) || 'Unnamed Vendor'}
                             </div>
                             <div style={{ fontSize: '0.78rem', color: '#64748b', fontFamily: 'monospace' }}>
                               {gstin}
