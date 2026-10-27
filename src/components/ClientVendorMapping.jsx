@@ -167,13 +167,15 @@ export default function ClientVendorMapping({ currentUser }) {
       if (!entry) continue;
       const origGstr1 = v.delayCountGstr1 ?? 0;
       const origGstr3b = v.delayCountGstr3b ?? 0;
-      const origGstr1Months = v.delayedMonthsGstr1 || '';
-      const origGstr3bMonths = v.delayedMonthsGstr3b || '';
+      const origGstr1Months = (v.delayedMonthsGstr1 || '').trim();
+      const origGstr3bMonths = (v.delayedMonthsGstr3b || '').trim();
+      const curGstr1Months = (entry.gstr1Months || '').trim();
+      const curGstr3bMonths = (entry.gstr3bMonths || '').trim();
       if (
         entry.gstr1 !== origGstr1 ||
         entry.gstr3b !== origGstr3b ||
-        (entry.gstr1Months || '') !== origGstr1Months ||
-        (entry.gstr3bMonths || '') !== origGstr3bMonths
+        curGstr1Months !== origGstr1Months ||
+        curGstr3bMonths !== origGstr3bMonths
       ) {
         modified.add(v.vendorGstin);
       }
@@ -215,8 +217,8 @@ export default function ClientVendorMapping({ currentUser }) {
           const payload = {
             delayCountGstr1: values.gstr1,
             delayCountGstr3b: values.gstr3b,
-            delayedMonthsGstr1: values.gstr1Months || null,
-            delayedMonthsGstr3b: values.gstr3bMonths || null,
+            delayedMonthsGstr1: values.gstr1Months !== undefined && values.gstr1Months !== null ? values.gstr1Months.trim() : '',
+            delayedMonthsGstr3b: values.gstr3bMonths !== undefined && values.gstr3bMonths !== null ? values.gstr3bMonths.trim() : '',
             updatedBy: currentUser?.name || 'Admin'
           };
           const updated = await apiClient.updateDetails(gstin, payload);
@@ -246,13 +248,27 @@ export default function ClientVendorMapping({ currentUser }) {
               ...v,
               delayCountGstr1: updated.delayCountGstr1,
               delayCountGstr3b: updated.delayCountGstr3b,
-              delayedMonthsGstr1: updated.delayedMonthsGstr1,
-              delayedMonthsGstr3b: updated.delayedMonthsGstr3b,
+              delayedMonthsGstr1: updated.delayedMonthsGstr1 || '',
+              delayedMonthsGstr3b: updated.delayedMonthsGstr3b || '',
               grcScore: updated.grcScore
             };
           }
           return v;
         }));
+
+        setInlineCompliance(prev => {
+          const next = { ...prev };
+          Object.keys(successfulUpdates).forEach(g => {
+            const updated = successfulUpdates[g];
+            next[g] = {
+              gstr1: updated.delayCountGstr1 ?? 0,
+              gstr3b: updated.delayCountGstr3b ?? 0,
+              gstr1Months: updated.delayedMonthsGstr1 || '',
+              gstr3bMonths: updated.delayedMonthsGstr3b || ''
+            };
+          });
+          return next;
+        });
 
         setSavingGstins(prev => {
           const next = { ...prev };
@@ -341,17 +357,13 @@ export default function ClientVendorMapping({ currentUser }) {
     const values = inlineCompliance[vendorGstin];
     if (!values) return;
 
-    // Check if changed compared to mappedVendors
-    const original = mappedVendors.find(v => v.vendorGstin === vendorGstin);
-    if (original && original.delayCountGstr1 === values.gstr1 && original.delayCountGstr3b === values.gstr3b) {
-      return; // No change
-    }
-
     setSavingGstins(prev => ({ ...prev, [vendorGstin]: 'saving' }));
     try {
       const payload = {
         delayCountGstr1: values.gstr1,
         delayCountGstr3b: values.gstr3b,
+        delayedMonthsGstr1: values.gstr1Months !== undefined && values.gstr1Months !== null ? values.gstr1Months.trim() : '',
+        delayedMonthsGstr3b: values.gstr3bMonths !== undefined && values.gstr3bMonths !== null ? values.gstr3bMonths.trim() : '',
         updatedBy: currentUser?.name || 'Admin'
       };
 
@@ -364,6 +376,8 @@ export default function ClientVendorMapping({ currentUser }) {
             ...v,
             delayCountGstr1: updated.delayCountGstr1,
             delayCountGstr3b: updated.delayCountGstr3b,
+            delayedMonthsGstr1: updated.delayedMonthsGstr1 || '',
+            delayedMonthsGstr3b: updated.delayedMonthsGstr3b || '',
             grcScore: updated.grcScore
           };
         }
@@ -2072,9 +2086,9 @@ export default function ClientVendorMapping({ currentUser }) {
                   const gstr1Months = inlineCompliance[gstin]?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '';
                   const gstr3bMonths = inlineCompliance[gstin]?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '';
                   const isGstr1Modified = (inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== (vendor.delayCountGstr1 ?? 0)) ||
-                    (inlineCompliance[gstin]?.gstr1Months !== undefined && inlineCompliance[gstin]?.gstr1Months !== (vendor.delayedMonthsGstr1 || ''));
+                    ((inlineCompliance[gstin]?.gstr1Months || '').trim() !== (vendor.delayedMonthsGstr1 || '').trim());
                   const isGstr3bModified = (inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== (vendor.delayCountGstr3b ?? 0)) ||
-                    (inlineCompliance[gstin]?.gstr3bMonths !== undefined && inlineCompliance[gstin]?.gstr3bMonths !== (vendor.delayedMonthsGstr3b || ''));
+                    ((inlineCompliance[gstin]?.gstr3bMonths || '').trim() !== (vendor.delayedMonthsGstr3b || '').trim());
                   const saveStatus = savingGstins[gstin];
                   const gstr7Info = getGstr7Display(vendor);
                   const isHighRisk = (vendor.grcScore !== null && vendor.grcScore < 40) || gstr3bVal >= 2;
