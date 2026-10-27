@@ -4,7 +4,7 @@ import {
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
   ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
   UploadCloud, ChevronDown, ChevronUp, AlertTriangle, Download,
-  Copy, CheckCircle2, Loader2, ArrowUpDown
+  Copy, CheckCircle2, Loader2, ArrowUpDown, Save
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { apiClient } from '../api/apiClient';
@@ -25,6 +25,8 @@ export default function ClientVendorMapping({ currentUser }) {
   // Inline Compliance Editing State: { [gstin]: { gstr1: number, gstr3b: number } }
   const [inlineCompliance, setInlineCompliance] = useState({});
   const [savingGstins, setSavingGstins] = useState({}); // { [gstin]: 'saving' | 'saved' | 'error' }
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [savedSuccessFlash, setSavedSuccessFlash] = useState(false);
   const [copiedGstin, setCopiedGstin] = useState(null);
 
   // Modals
@@ -133,6 +135,22 @@ export default function ClientVendorMapping({ currentUser }) {
 
   // ── Manual Compliance Editing Handlers ────────────────────────────────────
 
+  // Compute GSTINs that have unsaved changes compared to mappedVendors
+  const modifiedGstins = useMemo(() => {
+    const modified = new Set();
+    if (!mappedVendors || mappedVendors.length === 0) return modified;
+    for (const v of mappedVendors) {
+      const entry = inlineCompliance[v.vendorGstin];
+      if (!entry) continue;
+      const origGstr1 = v.delayCountGstr1 ?? 0;
+      const origGstr3b = v.delayCountGstr3b ?? 0;
+      if (entry.gstr1 !== origGstr1 || entry.gstr3b !== origGstr3b) {
+        modified.add(v.vendorGstin);
+      }
+    }
+    return modified;
+  }, [mappedVendors, inlineCompliance]);
+
   const handleComplianceChange = (vendorGstin, field, val) => {
     const num = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
     setInlineCompliance(prev => ({
@@ -142,6 +160,91 @@ export default function ClientVendorMapping({ currentUser }) {
         [field]: num
       }
     }));
+  };
+
+  const handleSaveAllCompliance = async () => {
+    if (modifiedGstins.size === 0) {
+      showToast('No compliance changes to save', 'info');
+      return;
+    }
+
+    setIsSavingAll(true);
+    const gstinsToSave = Array.from(modifiedGstins);
+
+    // Set saving status for all modified gstins
+    setSavingGstins(prev => {
+      const next = { ...prev };
+      gstinsToSave.forEach(g => { next[g] = 'saving'; });
+      return next;
+    });
+
+    try {
+      const results = await Promise.allSettled(
+        gstinsToSave.map(async (gstin) => {
+          const values = inlineCompliance[gstin];
+          const payload = {
+            delayCountGstr1: values.gstr1,
+            delayCountGstr3b: values.gstr3b,
+            updatedBy: currentUser?.name || 'Admin'
+          };
+          const updated = await apiClient.updateDetails(gstin, payload);
+          return { gstin, updated };
+        })
+      );
+
+      let successCount = 0;
+      let failCount = 0;
+      const successfulUpdates = {};
+
+      results.forEach((res, idx) => {
+        const gstin = gstinsToSave[idx];
+        if (res.status === 'fulfilled') {
+          successCount++;
+          successfulUpdates[gstin] = res.value.updated;
+        } else {
+          failCount++;
+        }
+      });
+
+      if (successCount > 0) {
+        setMappedVendors(prev => prev.map(v => {
+          const updated = successfulUpdates[v.vendorGstin];
+          if (updated) {
+            return {
+              ...v,
+              delayCountGstr1: updated.delayCountGstr1,
+              delayCountGstr3b: updated.delayCountGstr3b,
+              grcScore: updated.grcScore
+            };
+          }
+          return v;
+        }));
+
+        setSavingGstins(prev => {
+          const next = { ...prev };
+          Object.keys(successfulUpdates).forEach(g => {
+            next[g] = 'saved';
+          });
+          return next;
+        });
+
+        setSavedSuccessFlash(true);
+        setTimeout(() => setSavedSuccessFlash(false), 3000);
+        showToast(`Successfully saved compliance changes for ${successCount} vendor(s)!`);
+      }
+
+      if (failCount > 0) {
+        showToast(`Failed to update ${failCount} vendor(s). Please try again.`, 'error');
+      }
+
+      setTimeout(() => {
+        setSavingGstins({});
+      }, 2500);
+    } catch (err) {
+      showToast(err.message || 'Error saving compliance changes', 'error');
+    } finally {
+      setIsSavingAll(false);
+    }
   };
 
   const handleSaveCompliance = async (vendorGstin) => {
@@ -891,6 +994,74 @@ export default function ClientVendorMapping({ currentUser }) {
           color: #dc2626;
         }
 
+        /* Prominent Save Button above Table */
+        .btn-save-compliance {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.52rem 1.05rem;
+          font-family: inherit;
+          font-size: 0.84rem;
+          font-weight: 700;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          border: 1px solid transparent;
+        }
+
+        .btn-save-compliance.has-changes {
+          background: linear-gradient(135deg, #2563eb, #1d4ed8);
+          color: #ffffff;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+          animation: pulseSaveButton 2s infinite ease-in-out;
+        }
+
+        .btn-save-compliance.has-changes:hover {
+          background: linear-gradient(135deg, #1d4ed8, #1e40af);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+        }
+
+        .btn-save-compliance.is-saved {
+          background: #10b981;
+          color: #ffffff;
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-save-compliance.no-changes {
+          background: #f1f5f9;
+          color: #94a3b8;
+          border-color: #e2e8f0;
+          cursor: not-allowed;
+        }
+
+        .btn-save-compliance:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .save-badge-count {
+          background: rgba(255, 255, 255, 0.25);
+          padding: 0.1rem 0.45rem;
+          border-radius: 9999px;
+          font-size: 0.76rem;
+          font-weight: 800;
+          margin-left: 0.2rem;
+        }
+
+        @keyframes pulseSaveButton {
+          0% {
+            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+          }
+          70% {
+            box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+          }
+        }
+
         /* Filter & Toolbar Area */
         .table-toolbar-card {
           background: #ffffff;
@@ -1116,6 +1287,23 @@ export default function ClientVendorMapping({ currentUser }) {
           color: #b91c1c;
           border-color: #fecaca;
           background: #fef2f2;
+        }
+
+        .compliance-edit-box.is-dirty {
+          border-color: #2563eb !important;
+          box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25) !important;
+          background-color: #eff6ff !important;
+          color: #1d4ed8 !important;
+        }
+
+        .dirty-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #2563eb;
+          display: inline-block;
+          flex-shrink: 0;
+          animation: pulseSaveButton 1.5s infinite ease-in-out;
         }
 
         .save-indicator {
@@ -1526,7 +1714,32 @@ export default function ClientVendorMapping({ currentUser }) {
           </div>
         </div>
 
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <button
+            type="button"
+            className={`btn-save-compliance ${savedSuccessFlash ? 'is-saved' : modifiedGstins.size > 0 ? 'has-changes' : 'no-changes'}`}
+            onClick={handleSaveAllCompliance}
+            disabled={isSavingAll || (modifiedGstins.size === 0 && !savedSuccessFlash)}
+            title={modifiedGstins.size > 0 ? `Save compliance changes for ${modifiedGstins.size} vendor(s)` : 'No unsaved changes'}
+          >
+            {isSavingAll ? (
+              <>
+                <Loader2 size={15} className="spin-icon" /> Saving...
+              </>
+            ) : savedSuccessFlash ? (
+              <>
+                <Check size={15} /> All Saved!
+              </>
+            ) : (
+              <>
+                <Save size={15} /> Save Changes
+                {modifiedGstins.size > 0 && (
+                  <span className="save-badge-count">{modifiedGstins.size}</span>
+                )}
+              </>
+            )}
+          </button>
+
           <button className="btn-secondary-sm" onClick={handleExportExcel} disabled={!filteredMappedVendors.length}>
             <Download size={15} /> Export Excel
           </button>
@@ -1574,10 +1787,10 @@ export default function ClientVendorMapping({ currentUser }) {
                   <th style={{ minWidth: '130px' }}>Type</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
                   <th style={{ width: '85px', textAlign: 'center' }}>GST Status</th>
-                  <th style={{ minWidth: '110px' }} title="Editable field — adjustments save immediately">
+                  <th style={{ minWidth: '110px' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR1 ✎
                   </th>
-                  <th style={{ minWidth: '150px' }} title="Editable field — adjustments save immediately">
+                  <th style={{ minWidth: '150px' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR3B (Delayed) ✎
                   </th>
                   <th style={{ minWidth: '160px' }}>GSTR7R</th>
@@ -1592,6 +1805,8 @@ export default function ClientVendorMapping({ currentUser }) {
                   const gstin = vendor.vendorGstin;
                   const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? vendor.delayCountGstr1 ?? 0;
                   const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? vendor.delayCountGstr3b ?? 0;
+                  const isGstr1Modified = inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== (vendor.delayCountGstr1 ?? 0);
+                  const isGstr3bModified = inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== (vendor.delayCountGstr3b ?? 0);
                   const saveStatus = savingGstins[gstin];
                   const gstr7Info = getGstr7Display(vendor);
                   const isHighRisk = (vendor.grcScore !== null && vendor.grcScore < 40) || gstr3bVal >= 2;
@@ -1658,13 +1873,19 @@ export default function ClientVendorMapping({ currentUser }) {
                             type="number"
                             min="0"
                             max="36"
-                            className={`compliance-edit-box ${gstr1Val > 0 ? 'compliance-has-delay' : 'compliance-zero'}`}
+                            className={`compliance-edit-box ${
+                              isGstr1Modified
+                                ? 'is-dirty'
+                                : gstr1Val > 0 
+                                  ? 'compliance-has-delay' 
+                                  : 'compliance-zero'
+                            }`}
                             value={gstr1Val}
                             onChange={(e) => handleComplianceChange(gstin, 'gstr1', e.target.value)}
-                            onBlur={() => handleSaveCompliance(gstin)}
-                            onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-                            title="Edit GSTR-1 delay count (auto-saves on change)"
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveAllCompliance()}
+                            title="Edit GSTR-1 delay count. Click 'Save Changes' above to save."
                           />
+                          {isGstr1Modified && <span className="dirty-dot" title="Unsaved changes" />}
                           {saveStatus === 'saving' && <Loader2 size={13} className="spin-icon" color="#7c3aed" />}
                           {saveStatus === 'saved' && <span className="save-indicator">✓</span>}
                         </div>
@@ -1677,13 +1898,21 @@ export default function ClientVendorMapping({ currentUser }) {
                             type="number"
                             min="0"
                             max="36"
-                            className={`compliance-edit-box ${gstr3bVal >= 2 ? 'compliance-high-delay' : gstr3bVal > 0 ? 'compliance-has-delay' : 'compliance-zero'}`}
+                            className={`compliance-edit-box ${
+                              isGstr3bModified
+                                ? 'is-dirty'
+                                : gstr3bVal >= 2 
+                                  ? 'compliance-high-delay' 
+                                  : gstr3bVal > 0 
+                                    ? 'compliance-has-delay' 
+                                    : 'compliance-zero'
+                            }`}
                             value={gstr3bVal}
                             onChange={(e) => handleComplianceChange(gstin, 'gstr3b', e.target.value)}
-                            onBlur={() => handleSaveCompliance(gstin)}
-                            onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-                            title="Edit GSTR-3B delay count (auto-saves on change)"
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveAllCompliance()}
+                            title="Edit GSTR-3B delay count. Click 'Save Changes' above to save."
                           />
+                          {isGstr3bModified && <span className="dirty-dot" title="Unsaved changes" />}
                           {gstr3bVal > 0 && (
                             <span className="delay-tag">
                               {gstr3bVal >= 2 ? 'Delayed' : 'Delay'}
