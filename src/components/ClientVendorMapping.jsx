@@ -805,6 +805,29 @@ export default function ClientVendorMapping({ currentUser }) {
 
   // ── Derived Data & Helpers ────────────────────────────────────────────────
 
+    // ── Scenario Color & Risk Evaluation Helpers ──────────────────────────────
+  const isTurnoverUnder3Cr = (turnoverStr) => {
+    if (!turnoverStr) return false;
+    const t = turnoverStr.toLowerCase();
+    return t.includes('lakh') || 
+      t.includes('below 1 cr') || 
+      t.includes('0 to 40') || 
+      t.includes('40 to 1.5') || 
+      t.includes('1.5 cr');
+  };
+
+  const isPartyTrader = (activity) => {
+    return (activity || '').toLowerCase().includes('trader');
+  };
+
+  const isPropPartnerOrHuf = (gstType) => {
+    const t = (gstType || '').toLowerCase();
+    return t.includes('proprietor') || 
+      t.includes('partner') || 
+      t.includes('huf') || 
+      t.includes('hindu undivided');
+  };
+
   const getVendorDisplayName = (vendor) => {
     if (!vendor) return '';
     const isInvalid = (str) => {
@@ -1098,6 +1121,63 @@ export default function ClientVendorMapping({ currentUser }) {
         .btn-danger-sm:hover {
           background: #fee2e2;
           color: #dc2626;
+        }
+
+        
+        /* ── Scenario Background & Dot Styling ── */
+        .cell-bg-yellow {
+          background-color: #fef08a !important;
+          color: #713f12 !important;
+          font-weight: 700 !important;
+        }
+
+        .cell-bg-red {
+          background-color: #fecaca !important;
+          color: #991b1b !important;
+          font-weight: 700 !important;
+        }
+
+        .row-critical-risk {
+          background-color: #dc2626 !important;
+          color: #ffffff !important;
+        }
+
+        .row-critical-risk td {
+          background-color: #dc2626 !important;
+          color: #ffffff !important;
+          border-color: #b91c1c !important;
+        }
+
+        .row-critical-risk .company-name-text,
+        .row-critical-risk .gstn-cell span,
+        .row-critical-risk td span,
+        .row-critical-risk .compliance-months-display,
+        .row-critical-risk .copy-btn {
+          color: #ffffff !important;
+        }
+
+        .badge-risky {
+          background-color: #dc2626;
+          color: #ffffff;
+          font-size: 0.68rem;
+          font-weight: 800;
+          padding: 2px 6px;
+          border-radius: 4px;
+          letter-spacing: 0.02em;
+          margin-right: 6px;
+          display: inline-flex;
+          align-items: center;
+          flex-shrink: 0;
+          box-shadow: 0 1px 3px rgba(220, 38, 38, 0.4);
+        }
+
+        .circular-dot-indicator {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          display: inline-block;
+          flex-shrink: 0;
+          margin-right: 6px;
         }
 
         /* Prominent Save Button above Table */
@@ -2091,13 +2171,36 @@ export default function ClientVendorMapping({ currentUser }) {
                     ((inlineCompliance[gstin]?.gstr3bMonths || '').trim() !== (vendor.delayedMonthsGstr3b || '').trim());
                   const saveStatus = savingGstins[gstin];
                   const gstr7Info = getGstr7Display(vendor);
-                  const isHighRisk = (vendor.grcScore !== null && vendor.grcScore < 40) || gstr3bVal >= 2;
+                  
                   const ageDisplay = vendor.ageYears !== null && vendor.ageYears !== undefined
                     ? Math.round(vendor.ageYears)
                     : computeAge(vendor.registrationDate);
 
+                  // ── Scenario Condition Evaluations ──
+                  const isTrader = isPartyTrader(vendor.coreActivity);
+                  const isPropOrPartner = isPropPartnerOrHuf(vendor.gstType);
+                  const isAadhaarNo = (vendor.aadhaarValidation || '').trim().toLowerCase() === 'no';
+                  const isGstr7NA = !vendor.gstdNo && (!vendor.gstr7Status || vendor.gstr7Status.toLowerCase() === 'n/a' || gstr7Info?.status?.text === 'N/A' || !gstr7Info?.status?.text);
+                  const isLowTurnover = isTurnoverUnder3Cr(vendor.aggregateTurnover);
+                  const isYoungAge = typeof ageDisplay === 'number' && ageDisplay < 2;
+
+                  // Scenario 8: Risky badge if last 3 months delayed in GSTR3B
+                  const last3Months = last12Months.slice(-3);
+                  const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
+                  const hasLast3MonthsDelay = gstr3bTokens.some(m => last3Months.includes(m)) || gstr3bVal >= 3;
+                  const isRisky = hasLast3MonthsDelay;
+
+                  // Scenario 9: GSTR3B delayed > 2 && traders && Aadhaar No && GSTR7 N/A -> Whole line red with white text
+                  const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
+
+                  // Scenario 2: GSTR1 circular dot color
+                  const gstr1DotColor = gstr1Val > 2 ? '#ef4444' : gstr1Val >= 1 ? '#f59e0b' : '#10b981';
+
+                  // Circular dot color before company name
+                  const companyDotColor = isEntireRowRed || gstr3bVal > 2 ? '#ef4444' : (gstr3bVal >= 1 || gstr1Val >= 1 ? '#f59e0b' : '#10b981');
+
                   return (
-                    <tr key={gstin}>
+                    <tr key={gstin} className={isEntireRowRed ? 'row-critical-risk' : ''}>
                       {/* Sl. No. */}
                       <td style={{ textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
                         {index + 1}
@@ -2106,9 +2209,12 @@ export default function ClientVendorMapping({ currentUser }) {
                       {/* Company Name */}
                       <td>
                         <div className="company-cell">
-                          <span className="company-icon">
-                            <CheckCircle2 size={16} color="#16a34a" />
-                          </span>
+                          {isRisky && <span className="badge-risky">Risky</span>}
+                          <span
+                            className="circular-dot-indicator"
+                            style={{ backgroundColor: companyDotColor }}
+                            title={gstr3bVal > 2 ? 'High delay risk' : gstr3bVal >= 1 ? 'Moderate delay' : 'Compliant'}
+                          />
                           <span className="company-name-text">
                             {getVendorDisplayName(vendor)}
                           </span>
@@ -2136,7 +2242,11 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Age */}
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#334155' }} title={vendor.registrationDate ? `Registered: ${vendor.registrationDate}` : ''}>
+                      <td
+                        className={!isEntireRowRed && isYoungAge ? 'cell-bg-yellow' : ''}
+                        style={{ textAlign: 'center', fontWeight: 700, color: isEntireRowRed ? '#ffffff' : (!isEntireRowRed && isYoungAge ? '#713f12' : '#334155') }}
+                        title={vendor.registrationDate ? `Registered: ${vendor.registrationDate}` : ''}
+                      >
                         {ageDisplay}
                       </td>
 
@@ -2151,6 +2261,11 @@ export default function ClientVendorMapping({ currentUser }) {
                       {/* GSTR1 (Directly Editable) */}
                       <td>
                         <div className="compliance-cell">
+                          <span
+                            className="circular-dot-indicator"
+                            style={{ backgroundColor: gstr1DotColor, marginRight: '4px' }}
+                            title={`GSTR-1 delay: ${gstr1Val}`}
+                          />
                           <input
                             type="number"
                             min="0"
@@ -2187,7 +2302,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* GSTR3B (Delayed) (Directly Editable) */}
-                      <td>
+                      <td className={!isEntireRowRed ? (gstr3bVal > 2 ? 'cell-bg-red' : (gstr3bVal >= 1 ? 'cell-bg-yellow' : '')) : ''}>
                         <div className="compliance-cell">
                           <input
                             type="number"
@@ -2231,13 +2346,13 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* GSTR7R */}
-                      <td>
+                      <td className={!isEntireRowRed && isTrader && isGstr7NA ? 'cell-bg-red' : ''}>
                         <span
                           className="gstr7-badge"
                           style={{
-                            background: gstr7Info.status.bg,
-                            color: gstr7Info.status.color,
-                            border: `1px solid ${gstr7Info.status.border}`
+                            background: (!isEntireRowRed && isTrader && isGstr7NA) ? '#ef4444' : gstr7Info.status.bg,
+                            color: (!isEntireRowRed && isTrader && isGstr7NA) ? '#ffffff' : gstr7Info.status.color,
+                            border: (!isEntireRowRed && isTrader && isGstr7NA) ? '1px solid #b91c1c' : `1px solid ${gstr7Info.status.border}`
                           }}
                         >
                           {gstr7Info.status.text}
@@ -2245,13 +2360,16 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Aadhaar Authenticated */}
-                      <td style={{ textAlign: 'center' }}>
+                      <td
+                        className={!isEntireRowRed && (isTrader || isPropOrPartner) && isAadhaarNo ? 'cell-bg-red' : ''}
+                        style={{ textAlign: 'center' }}
+                      >
                         {vendor.aadhaarValidation === 'Yes' ? (
-                          <span style={{ color: '#16a34a', fontWeight: 800 }}>Yes</span>
+                          <span style={{ color: isEntireRowRed ? '#ffffff' : '#16a34a', fontWeight: 800 }}>Yes</span>
                         ) : vendor.aadhaarValidation === 'No' ? (
-                          <span style={{ color: '#64748b', fontWeight: 700 }}>No</span>
+                          <span style={{ color: isEntireRowRed ? '#ffffff' : ((isTrader || isPropOrPartner) ? '#991b1b' : '#64748b'), fontWeight: 800 }}>No</span>
                         ) : (
-                          <span style={{ color: '#94a3b8' }}>-</span>
+                          <span style={{ color: isEntireRowRed ? '#ffffff' : '#94a3b8' }}>-</span>
                         )}
                       </td>
 
@@ -2261,7 +2379,10 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Turn over */}
-                      <td style={{ color: '#334155', fontWeight: 600, fontSize: '0.82rem' }}>
+                      <td
+                        className={!isEntireRowRed && isLowTurnover ? 'cell-bg-yellow' : ''}
+                        style={{ color: isEntireRowRed ? '#ffffff' : (!isEntireRowRed && isLowTurnover ? '#713f12' : '#334155'), fontWeight: 600, fontSize: '0.82rem' }}
+                      >
                         {vendor.aggregateTurnover || 'N/A'}
                       </td>
 
