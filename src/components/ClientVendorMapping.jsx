@@ -4,7 +4,7 @@ import {
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
   ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
   UploadCloud, ChevronDown, ChevronUp, AlertTriangle, Download,
-  Copy, CheckCircle2, Loader2, ArrowUpDown, Save
+  Copy, CheckCircle2, Loader2, ArrowUpDown, Save, Calendar
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { apiClient } from '../api/apiClient';
@@ -28,6 +28,18 @@ export default function ClientVendorMapping({ currentUser }) {
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [savedSuccessFlash, setSavedSuccessFlash] = useState(false);
   const [copiedGstin, setCopiedGstin] = useState(null);
+
+  // Month Picker Modal State for selecting multiple delayed months
+  const [monthPicker, setMonthPicker] = useState({
+    isOpen: false,
+    vendorGstin: '',
+    vendorName: '',
+    field: 'gstr3b', // 'gstr1' | 'gstr3b'
+    selectedYear: '2024',
+    selectedMonths: [],
+    customInput: '',
+    syncCountWithMonths: true
+  });
 
   // Modals
   const [showClientModal, setShowClientModal] = useState(false);
@@ -80,7 +92,9 @@ export default function ClientVendorMapping({ currentUser }) {
       mappedVendors.forEach(v => {
         initial[v.vendorGstin] = {
           gstr1: v.delayCountGstr1 ?? 0,
-          gstr3b: v.delayCountGstr3b ?? 0
+          gstr3b: v.delayCountGstr3b ?? 0,
+          gstr1Months: v.delayedMonthsGstr1 || '',
+          gstr3bMonths: v.delayedMonthsGstr3b || ''
         };
       });
       setInlineCompliance(initial);
@@ -144,7 +158,14 @@ export default function ClientVendorMapping({ currentUser }) {
       if (!entry) continue;
       const origGstr1 = v.delayCountGstr1 ?? 0;
       const origGstr3b = v.delayCountGstr3b ?? 0;
-      if (entry.gstr1 !== origGstr1 || entry.gstr3b !== origGstr3b) {
+      const origGstr1Months = v.delayedMonthsGstr1 || '';
+      const origGstr3bMonths = v.delayedMonthsGstr3b || '';
+      if (
+        entry.gstr1 !== origGstr1 ||
+        entry.gstr3b !== origGstr3b ||
+        (entry.gstr1Months || '') !== origGstr1Months ||
+        (entry.gstr3bMonths || '') !== origGstr3bMonths
+      ) {
         modified.add(v.vendorGstin);
       }
     }
@@ -185,6 +206,8 @@ export default function ClientVendorMapping({ currentUser }) {
           const payload = {
             delayCountGstr1: values.gstr1,
             delayCountGstr3b: values.gstr3b,
+            delayedMonthsGstr1: values.gstr1Months || null,
+            delayedMonthsGstr3b: values.gstr3bMonths || null,
             updatedBy: currentUser?.name || 'Admin'
           };
           const updated = await apiClient.updateDetails(gstin, payload);
@@ -214,6 +237,8 @@ export default function ClientVendorMapping({ currentUser }) {
               ...v,
               delayCountGstr1: updated.delayCountGstr1,
               delayCountGstr3b: updated.delayCountGstr3b,
+              delayedMonthsGstr1: updated.delayedMonthsGstr1,
+              delayedMonthsGstr3b: updated.delayedMonthsGstr3b,
               grcScore: updated.grcScore
             };
           }
@@ -245,6 +270,92 @@ export default function ClientVendorMapping({ currentUser }) {
     } finally {
       setIsSavingAll(false);
     }
+  };
+
+  // ── Month Picker Handlers ────────────────────────────────────────────────
+  const openMonthPicker = (vendor, field) => {
+    const gstin = vendor.vendorGstin;
+    const currentVal = inlineCompliance[gstin];
+    const existingStr = field === 'gstr1'
+      ? (currentVal?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '')
+      : (currentVal?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '');
+
+    const tokens = existingStr
+      ? existingStr.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+    setMonthPicker({
+      isOpen: true,
+      vendorGstin: gstin,
+      vendorName: getVendorDisplayName(vendor),
+      field,
+      selectedYear: '2024',
+      selectedMonths: tokens,
+      customInput: existingStr,
+      syncCountWithMonths: true
+    });
+  };
+
+  const handleToggleMonth = (monthName) => {
+    const yrSuffix = monthPicker.selectedYear === 'none'
+      ? ''
+      : `-${monthPicker.selectedYear.slice(-2)}`;
+    const tag = `${monthName}${yrSuffix}`;
+
+    setMonthPicker(prev => {
+      const exists = prev.selectedMonths.includes(tag);
+      const updated = exists
+        ? prev.selectedMonths.filter(m => m !== tag)
+        : [...prev.selectedMonths, tag];
+      return {
+        ...prev,
+        selectedMonths: updated,
+        customInput: updated.join(', ')
+      };
+    });
+  };
+
+  const handleCustomInputChange = (val) => {
+    const tokens = val.split(',').map(s => s.trim()).filter(Boolean);
+    setMonthPicker(prev => ({
+      ...prev,
+      customInput: val,
+      selectedMonths: tokens
+    }));
+  };
+
+  const handlePresetClick = (preset) => {
+    const tokens = preset.split(',').map(s => s.trim()).filter(Boolean);
+    setMonthPicker(prev => {
+      const combined = Array.from(new Set([...prev.selectedMonths, ...tokens]));
+      return {
+        ...prev,
+        selectedMonths: combined,
+        customInput: combined.join(', ')
+      };
+    });
+  };
+
+  const handleApplyMonths = () => {
+    const gstin = monthPicker.vendorGstin;
+    const field = monthPicker.field;
+    const finalStr = monthPicker.customInput.trim();
+    const tokens = finalStr ? finalStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const count = tokens.length;
+
+    setInlineCompliance(prev => {
+      const existing = prev[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
+      return {
+        ...prev,
+        [gstin]: {
+          ...existing,
+          [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: finalStr,
+          ...(monthPicker.syncCountWithMonths ? { [field]: count } : {})
+        }
+      };
+    });
+
+    setMonthPicker(prev => ({ ...prev, isOpen: false }));
   };
 
   const handleSaveCompliance = async (vendorGstin) => {
@@ -671,6 +782,8 @@ export default function ClientVendorMapping({ currentUser }) {
       const gstr7Info = getGstr7Display(v);
       const gstr1Val = inlineCompliance[v.vendorGstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
       const gstr3bVal = inlineCompliance[v.vendorGstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+      const gstr1Months = inlineCompliance[v.vendorGstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '';
+      const gstr3bMonths = inlineCompliance[v.vendorGstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '';
       const ageVal = v.ageYears !== null && v.ageYears !== undefined ? Math.round(v.ageYears) : computeAge(v.registrationDate);
 
       return [
@@ -680,8 +793,8 @@ export default function ClientVendorMapping({ currentUser }) {
         v.gstType || 'Partnership',
         ageVal,
         v.gstStatus || 'Active',
-        gstr1Val,
-        gstr3bVal,
+        gstr1Months ? `${gstr1Val} (${gstr1Months})` : gstr1Val,
+        gstr3bMonths ? `${gstr3bVal} (${gstr3bMonths})` : gstr3bVal,
         gstr7Info?.status?.text || 'N/A',
         v.aadhaarValidation || 'N/A',
         v.coreActivity || 'Manufacturer',
@@ -1296,6 +1409,175 @@ export default function ClientVendorMapping({ currentUser }) {
           color: #1d4ed8 !important;
         }
 
+        /* Month Picker Button & Months Display */
+        .btn-month-picker {
+          background: #f8fafc;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          width: 26px;
+          height: 26px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: #64748b;
+          transition: all 0.15s ease;
+          padding: 0;
+          flex-shrink: 0;
+        }
+
+        .btn-month-picker:hover {
+          background: #ede9fe;
+          color: #7c3aed;
+          border-color: #c4b5fd;
+          transform: translateY(-1px);
+        }
+
+        .btn-month-picker.has-months {
+          background: #fee2e2;
+          color: #dc2626;
+          border-color: #fca5a5;
+        }
+
+        .compliance-months-display {
+          color: #dc2626;
+          font-weight: 700;
+          font-size: 0.74rem;
+          white-space: nowrap;
+          letter-spacing: -0.01em;
+          padding: 1px 3px;
+        }
+
+        /* Month Picker Modal Styles */
+        .year-tabs {
+          display: flex;
+          gap: 0.45rem;
+          margin-bottom: 0.9rem;
+          flex-wrap: wrap;
+        }
+
+        .year-tab-btn {
+          padding: 0.35rem 0.8rem;
+          font-family: inherit;
+          font-size: 0.8rem;
+          font-weight: 700;
+          border-radius: 20px;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .year-tab-btn:hover {
+          border-color: #94a3b8;
+          color: #1e293b;
+        }
+
+        .year-tab-btn.active {
+          background: #7c3aed;
+          color: #ffffff;
+          border-color: #7c3aed;
+          box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+        }
+
+        .month-picker-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 0.5rem;
+          margin-bottom: 1.15rem;
+        }
+
+        .month-btn {
+          padding: 0.6rem 0.5rem;
+          font-family: inherit;
+          font-size: 0.84rem;
+          font-weight: 700;
+          border-radius: 8px;
+          border: 1.5px solid #e2e8f0;
+          background: #f8fafc;
+          color: #334155;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-align: center;
+        }
+
+        .month-btn:hover {
+          background: #ede9fe;
+          color: #6d28d9;
+          border-color: #c4b5fd;
+        }
+
+        .month-btn.selected {
+          background: #dc2626;
+          color: #ffffff;
+          border-color: #b91c1c;
+          box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+        }
+
+        .quick-presets-row {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+          margin-bottom: 1rem;
+        }
+
+        .preset-chip {
+          padding: 0.25rem 0.6rem;
+          font-size: 0.74rem;
+          font-weight: 700;
+          border-radius: 6px;
+          border: 1px solid #fed7aa;
+          background: #fff7ed;
+          color: #c2410c;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .preset-chip:hover {
+          background: #ffedd5;
+          border-color: #fb923c;
+        }
+
+        .selected-tags-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.4rem;
+          margin-bottom: 0.85rem;
+          min-height: 34px;
+          padding: 0.45rem;
+          background: #f8fafc;
+          border-radius: 8px;
+          border: 1px dashed #cbd5e1;
+          align-items: center;
+        }
+
+        .month-tag-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          padding: 0.2rem 0.55rem;
+          background: #fee2e2;
+          color: #991b1b;
+          border: 1px solid #fca5a5;
+          border-radius: 9999px;
+          font-size: 0.76rem;
+          font-weight: 700;
+        }
+
+        .month-tag-pill button {
+          background: none;
+          border: none;
+          color: #991b1b;
+          cursor: pointer;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          font-size: 0.95rem;
+          line-height: 1;
+        }
+
         .dirty-dot {
           width: 7px;
           height: 7px;
@@ -1805,8 +2087,12 @@ export default function ClientVendorMapping({ currentUser }) {
                   const gstin = vendor.vendorGstin;
                   const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? vendor.delayCountGstr1 ?? 0;
                   const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? vendor.delayCountGstr3b ?? 0;
-                  const isGstr1Modified = inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== (vendor.delayCountGstr1 ?? 0);
-                  const isGstr3bModified = inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== (vendor.delayCountGstr3b ?? 0);
+                  const gstr1Months = inlineCompliance[gstin]?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '';
+                  const gstr3bMonths = inlineCompliance[gstin]?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '';
+                  const isGstr1Modified = (inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== (vendor.delayCountGstr1 ?? 0)) ||
+                    (inlineCompliance[gstin]?.gstr1Months !== undefined && inlineCompliance[gstin]?.gstr1Months !== (vendor.delayedMonthsGstr1 || ''));
+                  const isGstr3bModified = (inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== (vendor.delayCountGstr3b ?? 0)) ||
+                    (inlineCompliance[gstin]?.gstr3bMonths !== undefined && inlineCompliance[gstin]?.gstr3bMonths !== (vendor.delayedMonthsGstr3b || ''));
                   const saveStatus = savingGstins[gstin];
                   const gstr7Info = getGstr7Display(vendor);
                   const isHighRisk = (vendor.grcScore !== null && vendor.grcScore < 40) || gstr3bVal >= 2;
@@ -1883,8 +2169,21 @@ export default function ClientVendorMapping({ currentUser }) {
                             value={gstr1Val}
                             onChange={(e) => handleComplianceChange(gstin, 'gstr1', e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSaveAllCompliance()}
-                            title="Edit GSTR-1 delay count. Click 'Save Changes' above to save."
+                            title="Edit GSTR-1 delay count"
                           />
+                          <button
+                            type="button"
+                            className={`btn-month-picker ${gstr1Months ? 'has-months' : ''}`}
+                            onClick={() => openMonthPicker(vendor, 'gstr1')}
+                            title={gstr1Months ? `Delayed months: ${gstr1Months} (Click to edit)` : "Select delayed months for GSTR-1"}
+                          >
+                            <Calendar size={13} />
+                          </button>
+                          {gstr1Months && (
+                            <span className="compliance-months-display" title={`Delayed months: ${gstr1Months}`}>
+                              {gstr1Months}
+                            </span>
+                          )}
                           {isGstr1Modified && <span className="dirty-dot" title="Unsaved changes" />}
                           {saveStatus === 'saving' && <Loader2 size={13} className="spin-icon" color="#7c3aed" />}
                           {saveStatus === 'saved' && <span className="save-indicator">✓</span>}
@@ -1910,14 +2209,26 @@ export default function ClientVendorMapping({ currentUser }) {
                             value={gstr3bVal}
                             onChange={(e) => handleComplianceChange(gstin, 'gstr3b', e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSaveAllCompliance()}
-                            title="Edit GSTR-3B delay count. Click 'Save Changes' above to save."
+                            title="Edit GSTR-3B delay count"
                           />
-                          {isGstr3bModified && <span className="dirty-dot" title="Unsaved changes" />}
-                          {gstr3bVal > 0 && (
+                          <button
+                            type="button"
+                            className={`btn-month-picker ${gstr3bMonths ? 'has-months' : ''}`}
+                            onClick={() => openMonthPicker(vendor, 'gstr3b')}
+                            title={gstr3bMonths ? `Delayed months: ${gstr3bMonths} (Click to edit)` : "Select delayed months for GSTR-3B"}
+                          >
+                            <Calendar size={13} />
+                          </button>
+                          {gstr3bMonths ? (
+                            <span className="compliance-months-display" title={`Delayed months: ${gstr3bMonths}`}>
+                              {gstr3bMonths}
+                            </span>
+                          ) : gstr3bVal > 0 ? (
                             <span className="delay-tag">
                               {gstr3bVal >= 2 ? 'Delayed' : 'Delay'}
                             </span>
-                          )}
+                          ) : null}
+                          {isGstr3bModified && <span className="dirty-dot" title="Unsaved changes" />}
                           {saveStatus === 'saving' && <Loader2 size={13} className="spin-icon" color="#7c3aed" />}
                           {saveStatus === 'saved' && <span className="save-indicator">✓</span>}
                         </div>
