@@ -11,6 +11,18 @@ import { apiClient } from '../api/apiClient';
 import { getGstr7Display } from '../utils/gstr7Display';
 
 export default function ClientVendorMapping({ currentUser }) {
+  // Dynamically compute the last 12 months including the current month
+  const last12Months = useMemo(() => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const curIdx = now.getMonth();
+    const list = [];
+    for (let i = 11; i >= 0; i--) {
+      const idx = (curIdx - i + 120) % 12;
+      list.push(monthNames[idx]);
+    }
+    return list;
+  }, []);
   // State for Clients
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -35,10 +47,7 @@ export default function ClientVendorMapping({ currentUser }) {
     vendorGstin: '',
     vendorName: '',
     field: 'gstr3b', // 'gstr1' | 'gstr3b'
-    selectedYear: '2024',
-    selectedMonths: [],
-    customInput: '',
-    syncCountWithMonths: true
+    selectedMonths: []
   });
 
   // Modals
@@ -272,7 +281,7 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  // ── Month Picker Handlers ────────────────────────────────────────────────
+  // ── Month Picker Handlers (Last 12 Months Only) ───────────────────────────
   const openMonthPicker = (vendor, field) => {
     const gstin = vendor.vendorGstin;
     const currentVal = inlineCompliance[gstin];
@@ -280,8 +289,9 @@ export default function ClientVendorMapping({ currentUser }) {
       ? (currentVal?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '')
       : (currentVal?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '');
 
+    // Extract month names, stripping any trailing numbers or years
     const tokens = existingStr
-      ? existingStr.split(',').map(s => s.trim()).filter(Boolean)
+      ? existingStr.split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean)
       : [];
 
     setMonthPicker({
@@ -289,49 +299,19 @@ export default function ClientVendorMapping({ currentUser }) {
       vendorGstin: gstin,
       vendorName: getVendorDisplayName(vendor),
       field,
-      selectedYear: '2024',
-      selectedMonths: tokens,
-      customInput: existingStr,
-      syncCountWithMonths: true
+      selectedMonths: tokens
     });
   };
 
   const handleToggleMonth = (monthName) => {
-    const yrSuffix = monthPicker.selectedYear === 'none'
-      ? ''
-      : `-${monthPicker.selectedYear.slice(-2)}`;
-    const tag = `${monthName}${yrSuffix}`;
-
     setMonthPicker(prev => {
-      const exists = prev.selectedMonths.includes(tag);
+      const exists = prev.selectedMonths.includes(monthName);
       const updated = exists
-        ? prev.selectedMonths.filter(m => m !== tag)
-        : [...prev.selectedMonths, tag];
+        ? prev.selectedMonths.filter(m => m !== monthName)
+        : [...prev.selectedMonths, monthName];
       return {
         ...prev,
-        selectedMonths: updated,
-        customInput: updated.join(', ')
-      };
-    });
-  };
-
-  const handleCustomInputChange = (val) => {
-    const tokens = val.split(',').map(s => s.trim()).filter(Boolean);
-    setMonthPicker(prev => ({
-      ...prev,
-      customInput: val,
-      selectedMonths: tokens
-    }));
-  };
-
-  const handlePresetClick = (preset) => {
-    const tokens = preset.split(',').map(s => s.trim()).filter(Boolean);
-    setMonthPicker(prev => {
-      const combined = Array.from(new Set([...prev.selectedMonths, ...tokens]));
-      return {
-        ...prev,
-        selectedMonths: combined,
-        customInput: combined.join(', ')
+        selectedMonths: updated
       };
     });
   };
@@ -339,9 +319,8 @@ export default function ClientVendorMapping({ currentUser }) {
   const handleApplyMonths = () => {
     const gstin = monthPicker.vendorGstin;
     const field = monthPicker.field;
-    const finalStr = monthPicker.customInput.trim();
-    const tokens = finalStr ? finalStr.split(',').map(s => s.trim()).filter(Boolean) : [];
-    const count = tokens.length;
+    const monthsStr = monthPicker.selectedMonths.join(', ');
+    const count = monthPicker.selectedMonths.length;
 
     setInlineCompliance(prev => {
       const existing = prev[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
@@ -349,8 +328,8 @@ export default function ClientVendorMapping({ currentUser }) {
         ...prev,
         [gstin]: {
           ...existing,
-          [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: finalStr,
-          ...(monthPicker.syncCountWithMonths ? { [field]: count } : {})
+          [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr,
+          [field]: count
         }
       };
     });
@@ -1412,31 +1391,34 @@ export default function ClientVendorMapping({ currentUser }) {
         /* Month Picker Button & Months Display */
         .btn-month-picker {
           background: #f8fafc;
-          border: 1px solid #cbd5e1;
+          border: 1.5px solid #cbd5e1;
           border-radius: 6px;
-          width: 26px;
-          height: 26px;
+          width: 28px;
+          height: 28px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
+          cursor: pointer !important;
           color: #64748b;
           transition: all 0.15s ease;
           padding: 0;
           flex-shrink: 0;
+          position: relative;
+          z-index: 2;
+          pointer-events: auto !important;
         }
 
         .btn-month-picker:hover {
-          background: #ede9fe;
-          color: #7c3aed;
-          border-color: #c4b5fd;
-          transform: translateY(-1px);
+          background: #ede9fe !important;
+          color: #7c3aed !important;
+          border-color: #a78bfa !important;
+          transform: scale(1.08);
         }
 
         .btn-month-picker.has-months {
-          background: #fee2e2;
-          color: #dc2626;
-          border-color: #fca5a5;
+          background: #fee2e2 !important;
+          color: #dc2626 !important;
+          border-color: #fca5a5 !important;
         }
 
         .compliance-months-display {
@@ -2174,7 +2156,7 @@ export default function ClientVendorMapping({ currentUser }) {
                           <button
                             type="button"
                             className={`btn-month-picker ${gstr1Months ? 'has-months' : ''}`}
-                            onClick={() => openMonthPicker(vendor, 'gstr1')}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openMonthPicker(vendor, 'gstr1'); }}
                             title={gstr1Months ? `Delayed months: ${gstr1Months} (Click to edit)` : "Select delayed months for GSTR-1"}
                           >
                             <Calendar size={13} />
@@ -2214,7 +2196,7 @@ export default function ClientVendorMapping({ currentUser }) {
                           <button
                             type="button"
                             className={`btn-month-picker ${gstr3bMonths ? 'has-months' : ''}`}
-                            onClick={() => openMonthPicker(vendor, 'gstr3b')}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openMonthPicker(vendor, 'gstr3b'); }}
                             title={gstr3bMonths ? `Delayed months: ${gstr3bMonths} (Click to edit)` : "Select delayed months for GSTR-3B"}
                           >
                             <Calendar size={13} />
@@ -2751,6 +2733,154 @@ export default function ClientVendorMapping({ currentUser }) {
                   {importSubmitting ? 'Replacing & Importing...' : `Replace & Import All (${parsedImportData.length} Clients)`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── 12 Months Only Selector Modal ── */}
+      {monthPicker.isOpen && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 9999 }}
+          onClick={() => setMonthPicker(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '440px', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ padding: '1.1rem 1.35rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Calendar size={18} color="#7c3aed" />
+                <h3 className="modal-title" style={{ fontSize: '1.05rem', margin: 0 }}>
+                  Select Delayed Months
+                </h3>
+                <span
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    padding: '0.15rem 0.55rem',
+                    borderRadius: '6px',
+                    background: monthPicker.field === 'gstr1' ? '#ede9fe' : '#fee2e2',
+                    color: monthPicker.field === 'gstr1' ? '#7c3aed' : '#dc2626'
+                  }}
+                >
+                  {monthPicker.field === 'gstr1' ? 'GSTR-1' : 'GSTR-3B'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMonthPicker(prev => ({ ...prev, isOpen: false }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '1.25rem 1.35rem' }}>
+              <div style={{ fontSize: '0.84rem', color: '#64748b', marginBottom: '1.1rem' }}>
+                Vendor: <strong style={{ color: '#0f172a' }}>{monthPicker.vendorName}</strong>
+              </div>
+
+              {/* Grid of the last 12 months only */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '0.65rem',
+                  marginBottom: '1.25rem'
+                }}
+              >
+                {last12Months.map(month => {
+                  const isSelected = monthPicker.selectedMonths.includes(month);
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      onClick={() => handleToggleMonth(month)}
+                      style={{
+                        padding: '0.75rem 0.5rem',
+                        fontFamily: 'inherit',
+                        fontSize: '0.92rem',
+                        fontWeight: 700,
+                        borderRadius: '10px',
+                        border: isSelected ? '2px solid #dc2626' : '1.5px solid #e2e8f0',
+                        background: isSelected ? '#fee2e2' : '#f8fafc',
+                        color: isSelected ? '#b91c1c' : '#334155',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem',
+                        boxShadow: isSelected ? '0 2px 6px rgba(220, 38, 38, 0.18)' : 'none'
+                      }}
+                    >
+                      {isSelected && <Check size={14} color="#b91c1c" strokeWidth={3} />}
+                      <span>{month}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selected months preview */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '0.75rem 0.9rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569' }}>
+                  Selected: {monthPicker.selectedMonths.length > 0 ? (
+                    <strong style={{ color: '#dc2626', marginLeft: '0.35rem', fontSize: '0.88rem' }}>
+                      {monthPicker.selectedMonths.join(', ')}
+                    </strong>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic', marginLeft: '0.35rem' }}>
+                      None
+                    </span>
+                  )}
+                </div>
+                {monthPicker.selectedMonths.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMonthPicker(prev => ({ ...prev, selectedMonths: [] }))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: '2px 6px'
+                    }}
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ padding: '0.9rem 1.35rem', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+              <button
+                type="button"
+                className="btn-secondary-sm"
+                onClick={() => setMonthPicker(prev => ({ ...prev, isOpen: false }))}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary-gradient"
+                onClick={handleApplyMonths}
+              >
+                <Check size={15} /> Apply ({monthPicker.selectedMonths.length})
+              </button>
             </div>
           </div>
         </div>
