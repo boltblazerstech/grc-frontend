@@ -7,6 +7,7 @@ import {
   Copy, CheckCircle2, Loader2, ArrowUpDown, Save, Calendar
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { apiClient } from '../api/apiClient';
 import { getGstr7Display } from '../utils/gstr7Display';
 
@@ -749,58 +750,263 @@ export default function ClientVendorMapping({ currentUser }) {
 
   // ── Excel Export Handler ──────────────────────────────────────────────────
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!filteredMappedVendors || filteredMappedVendors.length === 0) {
       alert('No vendors available to export.');
       return;
     }
 
-    const headers = [
-      'Sl. No.',
-      'Company Name',
-      'GSTN',
-      'Type',
-      'Age',
-      'GST Status',
-      'GSTR1',
-      'GSTR3B (Delayed)',
-      'GSTR7R',
-      'Aadhaar Authenticated',
-      'Core Activity',
-      'Turn over',
-      'GRC Score'
-    ];
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'GRC Assessment System';
+      workbook.created = new Date();
 
-    const dataRows = filteredMappedVendors.map((v, idx) => {
-      const gstr7Info = getGstr7Display(v);
-      const gstr1Val = inlineCompliance[v.vendorGstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
-      const gstr3bVal = inlineCompliance[v.vendorGstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
-      const gstr1Months = inlineCompliance[v.vendorGstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '';
-      const gstr3bMonths = inlineCompliance[v.vendorGstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '';
-      const ageVal = v.ageYears !== null && v.ageYears !== undefined ? Math.round(v.ageYears) : computeAge(v.registrationDate);
+      const worksheet = workbook.addWorksheet('Vendor Assessment', {
+        views: [{ showGridLines: true }]
+      });
 
-      return [
-        idx + 1,
-        getVendorDisplayName(v),
-        v.vendorGstin,
-        v.gstType || 'Partnership',
-        ageVal,
-        v.gstStatus || 'Active',
-        gstr1Months ? `${gstr1Val} (${gstr1Months})` : gstr1Val,
-        gstr3bMonths ? `${gstr3bVal} (${gstr3bMonths})` : gstr3bVal,
-        gstr7Info?.status?.text || 'N/A',
-        v.aadhaarValidation || 'N/A',
-        v.coreActivity || 'Manufacturer',
-        v.aggregateTurnover || 'N/A',
-        v.grcScore ?? 'N/A'
+      // Set Column Definitions with clean widths
+      worksheet.columns = [
+        { key: 'slNo', width: 9 },
+        { key: 'companyName', width: 34 },
+        { key: 'gstn', width: 18 },
+        { key: 'type', width: 22 },
+        { key: 'age', width: 10 },
+        { key: 'gstStatus', width: 13 },
+        { key: 'gstr1', width: 14 },
+        { key: 'gstr3b', width: 22 },
+        { key: 'gstr7r', width: 24 },
+        { key: 'aadhaar', width: 18 },
+        { key: 'coreActivity', width: 28 },
+        { key: 'turnover', width: 18 },
+        { key: 'grcScore', width: 12 }
       ];
-    });
 
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Assessment');
-    const safeClientName = (selectedClient?.clientName || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
-    XLSX.writeFile(workbook, `${safeClientName}_Vendor_Assessment.xlsx`);
+      // Header Row (matching dark purple template)
+      const headerRow = worksheet.addRow([
+        'Sl. No.',
+        'Company Name',
+        'GSTN',
+        'Type',
+        'Age',
+        'GST Status',
+        'GSTR1',
+        'GSTR3B (Delayed)',
+        'GSTR7R',
+        'Aadhaar Authenticated',
+        'Core Activity',
+        'Turn over',
+        'GRC Score'
+      ]);
+      headerRow.height = 28;
+
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF3B1D6E' }
+        };
+        cell.font = {
+          name: 'Arial',
+          size: 10,
+          bold: true,
+          color: { argb: 'FFFFFFFF' }
+        };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF28124D' } },
+          bottom: { style: 'medium', color: { argb: 'FF28124D' } },
+          left: { style: 'thin', color: { argb: 'FF4C2582' } },
+          right: { style: 'thin', color: { argb: 'FF4C2582' } }
+        };
+      });
+
+      // Style Presets (ARGB)
+      const FILL_YELLOW = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFEF08A' } // Yellow
+      };
+      const FONT_YELLOW = {
+        name: 'Arial',
+        size: 9.5,
+        bold: true,
+        color: { argb: 'FF713F12' }
+      };
+
+      const FILL_SOFT_RED = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFECACA' } // Soft Red
+      };
+      const FONT_SOFT_RED = {
+        name: 'Arial',
+        size: 9.5,
+        bold: true,
+        color: { argb: 'FF991B1B' }
+      };
+
+      const FILL_CRITICAL_ROW = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFDC2626' } // Solid Red
+      };
+      const FONT_CRITICAL_ROW = {
+        name: 'Arial',
+        size: 9.5,
+        bold: true,
+        color: { argb: 'FFFFFFFF' }
+      };
+
+      const THIN_BORDER = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+      };
+
+      const last3Months = last12Months.slice(-3);
+
+      filteredMappedVendors.forEach((v, idx) => {
+        const gstin = v.vendorGstin;
+        const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
+        const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+        const gstr1Months = inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '';
+        const gstr3bMonths = inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '';
+        const gstr7Info = getGstr7Display(v);
+        const ageDisplay = v.ageYears !== null && v.ageYears !== undefined
+          ? Math.round(v.ageYears)
+          : computeAge(v.registrationDate);
+
+        // Scenario Evaluations
+        const isTrader = isPartyTrader(v.coreActivity);
+        const isPropOrPartner = isPropPartnerOrHuf(v.gstType);
+        const isAadhaarNo = (v.aadhaarValidation || '').trim().toLowerCase() === 'no';
+        const isGstr7NA = !v.gstdNo && (!v.gstr7Status || v.gstr7Status.toLowerCase() === 'n/a' || gstr7Info?.status?.text === 'N/A' || !gstr7Info?.status?.text);
+        const isLowTurnover = isTurnoverUnder3Cr(v.aggregateTurnover);
+        const isYoungAge = typeof ageDisplay === 'number' && ageDisplay < 2;
+
+        // Scenario 8: Risky if last 3 months delayed in GSTR3B or count >= 3
+        const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
+        const isRisky = gstr3bTokens.some(m => last3Months.includes(m)) || gstr3bVal >= 3;
+
+        // Scenario 9: Critical risk whole row red
+        const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
+
+        // Formatted values
+        const companyDisplayName = (isRisky ? '[Risky] ' : '') + getVendorDisplayName(v);
+        const gstr1Display = gstr1Months ? `${gstr1Val}  ${gstr1Months}` : `${gstr1Val}`;
+        const gstr3bDisplay = gstr3bMonths ? `${gstr3bVal}  ${gstr3bMonths}` : `${gstr3bVal}`;
+
+        const rowValues = [
+          idx + 1,
+          companyDisplayName,
+          v.vendorGstin,
+          v.gstType || 'Partnership',
+          ageDisplay,
+          v.gstStatus || 'Active',
+          gstr1Display,
+          gstr3bDisplay,
+          gstr7Info?.status?.text || 'N/A',
+          v.aadhaarValidation || 'N/A',
+          v.coreActivity || 'Manufacturer',
+          v.aggregateTurnover || 'N/A',
+          v.grcScore ?? 'N/A'
+        ];
+
+        const row = worksheet.addRow(rowValues);
+        row.height = 22;
+
+        // Apply Base Borders & Fonts to all cells in this row
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.border = THIN_BORDER;
+          cell.font = { name: 'Arial', size: 9.5, color: { argb: 'FF1E293B' } };
+
+          if ([1, 5, 6, 10, 13].includes(colNumber)) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if ([7, 8].includes(colNumber)) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else {
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          }
+        });
+
+        if (isEntireRowRed) {
+          // Scenario 9: Entire row red with white bold text
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            cell.fill = FILL_CRITICAL_ROW;
+            cell.font = FONT_CRITICAL_ROW;
+          });
+        } else {
+          // Individual Scenario Highlights:
+
+          // Scenario 1: GSTR3B cell (Col 8)
+          if (gstr3bVal > 2) {
+            const c = row.getCell(8);
+            c.fill = FILL_SOFT_RED;
+            c.font = FONT_SOFT_RED;
+          } else if (gstr3bVal >= 1) {
+            const c = row.getCell(8);
+            c.fill = FILL_YELLOW;
+            c.font = FONT_YELLOW;
+          }
+
+          // Scenario 2: GSTR1 cell (Col 7)
+          if (gstr1Val > 2) {
+            const c = row.getCell(7);
+            c.font = FONT_SOFT_RED;
+          }
+
+          // Scenario 3: Aadhaar cell (Col 10)
+          if ((isTrader || isPropOrPartner) && isAadhaarNo) {
+            const c = row.getCell(10);
+            c.fill = FILL_SOFT_RED;
+            c.font = FONT_SOFT_RED;
+          }
+
+          // Scenario 4: Turnover cell (Col 12)
+          if (isLowTurnover) {
+            const c = row.getCell(12);
+            c.fill = FILL_YELLOW;
+            c.font = FONT_YELLOW;
+          }
+
+          // Scenario 5: Age cell (Col 5)
+          if (isYoungAge) {
+            const c = row.getCell(5);
+            c.fill = FILL_YELLOW;
+            c.font = FONT_YELLOW;
+          }
+
+          // Scenario 7: GSTR7R cell (Col 9)
+          if (isTrader && isGstr7NA) {
+            const c = row.getCell(9);
+            c.fill = FILL_SOFT_RED;
+            c.font = FONT_SOFT_RED;
+          }
+        }
+      });
+
+      // Write to buffer and trigger browser download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeClientName = (selectedClient?.clientName || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.download = `${safeClientName}_Vendor_Assessment.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export Excel failed:', err);
+      alert('Failed to export styled Excel. Please try again.');
+    }
   };
 
   // ── Derived Data & Helpers ────────────────────────────────────────────────
