@@ -768,12 +768,12 @@ export default function ClientVendorMapping({ currentUser }) {
       // Set Column Definitions with clean widths
       worksheet.columns = [
         { key: 'slNo', width: 9 },
-        { key: 'companyName', width: 34 },
+        { key: 'companyName', width: 38 },
         { key: 'gstn', width: 18 },
         { key: 'type', width: 22 },
         { key: 'age', width: 10 },
         { key: 'gstStatus', width: 13 },
-        { key: 'gstr1', width: 14 },
+        { key: 'gstr1', width: 22 },
         { key: 'gstr3b', width: 22 },
         { key: 'gstr7r', width: 24 },
         { key: 'aadhaar', width: 18 },
@@ -906,20 +906,83 @@ export default function ClientVendorMapping({ currentUser }) {
         // Scenario 9: Critical risk whole row red
         const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
 
-        // Formatted values
-        const companyDisplayName = (isRisky ? '[Risky] ' : '') + (showRedCross ? '❌ ' : '') + getVendorDisplayName(v);
-        const gstr1Display = gstr1Months ? `${gstr1Val}  ${gstr1Months}` : `${gstr1Val}`;
-        const gstr3bDisplay = gstr3bMonths ? `${gstr3bVal}  ${gstr3bMonths}` : `${gstr3bVal}`;
+        // Excel Colored Dots & Rich Text formatting
+        const companyDotColorArgb = isEntireRowRed || gstr3bVal > 2 
+          ? 'FFDC2626' 
+          : (gstr3bVal >= 1 || gstr1Val >= 1 ? 'FFF59E0B' : 'FF10B981');
+
+        const companyRichText = [];
+        if (isRisky) {
+          companyRichText.push({
+            text: '[Risky] ',
+            font: { name: 'Arial', size: 9.5, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
+          });
+        }
+        // Colored circular dot indicator before company name
+        companyRichText.push({
+          text: '● ',
+          font: { name: 'Arial', size: 12, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : companyDotColorArgb } }
+        });
+        if (showRedCross) {
+          companyRichText.push({
+            text: '❌ ',
+            font: { name: 'Arial', size: 9.5, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
+          });
+        }
+        companyRichText.push({
+          text: getVendorDisplayName(v),
+          font: { name: 'Arial', size: 9.5, bold: isEntireRowRed, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FF1E293B' } }
+        });
+
+        // GSTR-1: Colored circular dot + delay count + delayed months in RED
+        const gstr1DotColorArgb = gstr1Val > 2 
+          ? 'FFDC2626' 
+          : (gstr1Val >= 1 ? 'FFF59E0B' : 'FF10B981');
+
+        const gstr1RichText = [
+          {
+            text: '● ',
+            font: { name: 'Arial', size: 12, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : gstr1DotColorArgb } }
+          },
+          {
+            text: `${gstr1Val}`,
+            font: { name: 'Arial', size: 9.5, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FF1E293B' } }
+          }
+        ];
+        if (gstr1Months) {
+          gstr1RichText.push({
+            text: `  ${gstr1Months}`,
+            font: { name: 'Arial', size: 9, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
+          });
+        }
+
+        // GSTR-3B: Delay count + delayed months in RED
+        const gstr3bCountColorArgb = isEntireRowRed 
+          ? 'FFFFFFFF' 
+          : (gstr3bVal > 2 ? 'FF991B1B' : (gstr3bVal >= 1 ? 'FF713F12' : 'FF1E293B'));
+
+        const gstr3bRichText = [
+          {
+            text: `${gstr3bVal}`,
+            font: { name: 'Arial', size: 9.5, bold: true, color: { argb: gstr3bCountColorArgb } }
+          }
+        ];
+        if (gstr3bMonths) {
+          gstr3bRichText.push({
+            text: `  ${gstr3bMonths}`,
+            font: { name: 'Arial', size: 9, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
+          });
+        }
 
         const rowValues = [
           idx + 1,
-          companyDisplayName,
+          '', // Populated with richText below
           v.vendorGstin,
           v.gstType || 'Partnership',
           ageDisplay,
           v.gstStatus || 'Active',
-          gstr1Display,
-          gstr3bDisplay,
+          '', // Populated with richText below
+          '', // Populated with richText below
           gstr7Info?.status?.text || 'N/A',
           v.aadhaarValidation || 'N/A',
           v.coreActivity || 'Manufacturer',
@@ -957,17 +1020,9 @@ export default function ClientVendorMapping({ currentUser }) {
           if (gstr3bVal > 2) {
             const c = row.getCell(8);
             c.fill = FILL_SOFT_RED;
-            c.font = FONT_SOFT_RED;
           } else if (gstr3bVal >= 1) {
             const c = row.getCell(8);
             c.fill = FILL_YELLOW;
-            c.font = FONT_YELLOW;
-          }
-
-          // Scenario 2: GSTR1 cell (Col 7)
-          if (gstr1Val > 2) {
-            const c = row.getCell(7);
-            c.font = FONT_SOFT_RED;
           }
 
           // Scenario 3: Aadhaar cell (Col 10)
@@ -998,6 +1053,11 @@ export default function ClientVendorMapping({ currentUser }) {
             c.font = FONT_SOFT_RED;
           }
         }
+
+        // Apply RichText values with colored dots and bold red delayed months
+        row.getCell(2).value = { richText: companyRichText };
+        row.getCell(7).value = { richText: gstr1RichText };
+        row.getCell(8).value = { richText: gstr3bRichText };
       });
 
       // Write to buffer and trigger browser download
