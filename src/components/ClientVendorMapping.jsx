@@ -890,9 +890,13 @@ export default function ClientVendorMapping({ currentUser }) {
         const isLowTurnover = isTurnoverUnder3Cr(v.aggregateTurnover);
         const isYoungAge = typeof ageDisplay === 'number' && ageDisplay < 2;
 
-        // Scenario 8: Risky if last 3 months delayed in GSTR3B or count >= 3
+        // Scenario 8: Risky ONLY if explicitly selected/mentioned delayed months in GSTR3B fall in the last 3 months
+        const last3Lower = last3Months.map(m => m.toLowerCase());
         const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
-        const isRisky = gstr3bTokens.some(m => last3Months.includes(m)) || gstr3bVal >= 3;
+        const isRisky = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
+          const token = m.trim().toLowerCase();
+          return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
+        });
 
         // Scenario 9: Critical risk whole row red
         const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
@@ -2397,11 +2401,14 @@ export default function ClientVendorMapping({ currentUser }) {
                   const isLowTurnover = isTurnoverUnder3Cr(vendor.aggregateTurnover);
                   const isYoungAge = typeof ageDisplay === 'number' && ageDisplay < 2;
 
-                  // Scenario 8: Risky badge if last 3 months delayed in GSTR3B
+                  // Scenario 8: Risky badge ONLY if explicitly selected/mentioned delayed months in GSTR3B fall in the last 3 months
                   const last3Months = last12Months.slice(-3);
+                  const last3Lower = last3Months.map(m => m.toLowerCase());
                   const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
-                  const hasLast3MonthsDelay = gstr3bTokens.some(m => last3Months.includes(m)) || gstr3bVal >= 3;
-                  const isRisky = hasLast3MonthsDelay;
+                  const isRisky = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
+                    const token = m.trim().toLowerCase();
+                    return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
+                  });
 
                   // Scenario 9: GSTR3B delayed > 2 && traders && Aadhaar No && GSTR7 N/A -> Whole line red with white text
                   const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
