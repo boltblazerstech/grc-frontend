@@ -2642,29 +2642,6 @@ export default function ClientVendorMapping({ currentUser }) {
           margin: 0.35rem 0;
         }
 
-        /* Warning Callout Notice Right Above Table */
-        .table-assessment-warning-banner {
-          display: flex;
-          align-items: center;
-          gap: 0.65rem;
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-left: 4px solid #dc2626;
-          border-radius: 10px;
-          padding: 0.65rem 1rem;
-          margin-bottom: 0.85rem;
-          color: #991b1b;
-          font-size: 0.84rem;
-          font-weight: 700;
-          line-height: 1.4;
-          box-shadow: 0 1px 3px rgba(220, 38, 38, 0.04);
-        }
-
-        .table-assessment-warning-banner .warning-banner-icon {
-          font-size: 1rem;
-          flex-shrink: 0;
-        }
-
         /* Template Customization Modal Styles */
         .template-editor-modal {
           max-width: 900px !important;
@@ -3101,13 +3078,6 @@ export default function ClientVendorMapping({ currentUser }) {
           </div>
         ) : (
           <div className="table-responsive-wrapper">
-            {/* Warning statement right above table start */}
-            {filteredMappedVendors.length > 0 && reportTemplate.tableWarning && (
-              <div className="table-assessment-warning-banner">
-                <span className="warning-banner-icon">❌</span>
-                <span className="warning-banner-text">{reportTemplate.tableWarning}</span>
-              </div>
-            )}
             <table className="assessment-table">
               <thead>
                 <tr>
