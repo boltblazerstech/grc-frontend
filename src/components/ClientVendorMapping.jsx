@@ -91,11 +91,21 @@ export default function ClientVendorMapping({ currentUser }) {
 
   // Report Template State (defaults to official PDF template, editable and persistent)
   const [reportTemplate, setReportTemplate] = useState(() => {
+    const def = getDefaultTemplate();
     try {
       const saved = localStorage.getItem('grc_report_template_v1');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...def,
+          ...parsed,
+          observations: Array.isArray(parsed?.observations) && parsed.observations.length > 0 
+            ? parsed.observations 
+            : def.observations
+        };
+      }
     } catch {}
-    return getDefaultTemplate();
+    return def;
   });
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
@@ -4006,14 +4016,16 @@ export default function ClientVendorMapping({ currentUser }) {
 
       {/* ── Template Customization Modal (Editable PDF & DOCX Wording) ── */}
       {showTemplateModal && (
-        <div className="modal-backdrop" onClick={() => setShowTemplateModal(false)}>
-          <div className="modal-content template-editor-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setShowTemplateModal(false)}>
+          <div className="modal-card template-editor-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div>
-                <div className="modal-title">Vendor Assessment Report Template</div>
-                <div className="modal-subtitle">Customize the header, observations, disclaimer, and warning before downloading PDF or Word DOCX.</div>
+                <h3 className="modal-title">Vendor Assessment Report Template</h3>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+                  Customize the header, observations, disclaimer, and warning before downloading PDF or Word DOCX.
+                </div>
               </div>
-              <button type="button" className="close-btn" onClick={() => setShowTemplateModal(false)}>
+              <button type="button" className="btn-ghost-sm" onClick={() => setShowTemplateModal(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -4030,7 +4042,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     <label>Report Month (e.g. Sep 26, Oct 26)</label>
                     <input 
                       type="text" 
-                      value={reportTemplate.reportMonth}
+                      value={reportTemplate.reportMonth || ''}
                       onChange={e => setReportTemplate(prev => ({ ...prev, reportMonth: e.target.value }))}
                       placeholder="e.g. Sep 26"
                     />
@@ -4039,7 +4051,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     <label>Salutation</label>
                     <input 
                       type="text" 
-                      value={reportTemplate.salutation}
+                      value={reportTemplate.salutation || ''}
                       onChange={e => setReportTemplate(prev => ({ ...prev, salutation: e.target.value }))}
                     />
                   </div>
@@ -4048,7 +4060,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   <label>Introductory Paragraph</label>
                   <input 
                     type="text" 
-                    value={reportTemplate.introText}
+                    value={reportTemplate.introText || ''}
                     onChange={e => setReportTemplate(prev => ({ ...prev, introText: e.target.value }))}
                   />
                 </div>
@@ -4061,16 +4073,16 @@ export default function ClientVendorMapping({ currentUser }) {
                   Key Observations (Numbered List on Page 1)
                 </div>
                 <div className="observations-list-grid">
-                  {reportTemplate.observations.map((obs, idx) => (
+                  {(reportTemplate.observations || []).map((obs, idx) => (
                     <div key={obs.id || idx} className="observation-edit-item">
                       <div className="obs-header">
                         <span className="obs-num">{idx + 1}</span>
                         <input 
                           type="text" 
                           className="obs-title-input"
-                          value={obs.title} 
+                          value={obs.title || ''} 
                           onChange={e => {
-                            const newObs = [...reportTemplate.observations];
+                            const newObs = [...(reportTemplate.observations || [])];
                             newObs[idx] = { ...newObs[idx], title: e.target.value };
                             setReportTemplate(prev => ({ ...prev, observations: newObs }));
                           }}
@@ -4080,9 +4092,9 @@ export default function ClientVendorMapping({ currentUser }) {
                       <textarea 
                         rows={2}
                         className="obs-desc-textarea"
-                        value={obs.text}
+                        value={obs.text || ''}
                         onChange={e => {
-                          const newObs = [...reportTemplate.observations];
+                          const newObs = [...(reportTemplate.observations || [])];
                           newObs[idx] = { ...newObs[idx], text: e.target.value };
                           setReportTemplate(prev => ({ ...prev, observations: newObs }));
                         }}
@@ -4103,7 +4115,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   <label>Statement rendered just before the vendors table</label>
                   <input 
                     type="text" 
-                    value={reportTemplate.tableWarning}
+                    value={reportTemplate.tableWarning || ''}
                     onChange={e => setReportTemplate(prev => ({ ...prev, tableWarning: e.target.value }))}
                     placeholder="Please review these vendors..."
                   />
@@ -4120,7 +4132,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   <label>Disclaimer Paragraph 1</label>
                   <textarea 
                     rows={2}
-                    value={reportTemplate.disclaimerP1}
+                    value={reportTemplate.disclaimerP1 || ''}
                     onChange={e => setReportTemplate(prev => ({ ...prev, disclaimerP1: e.target.value }))}
                   />
                 </div>
@@ -4128,7 +4140,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   <label>Disclaimer Paragraph 2</label>
                   <textarea 
                     rows={2}
-                    value={reportTemplate.disclaimerP2}
+                    value={reportTemplate.disclaimerP2 || ''}
                     onChange={e => setReportTemplate(prev => ({ ...prev, disclaimerP2: e.target.value }))}
                   />
                 </div>
@@ -4137,7 +4149,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     <label>Regards Text</label>
                     <input 
                       type="text" 
-                      value={reportTemplate.regardsPrefix}
+                      value={reportTemplate.regardsPrefix || ''}
                       onChange={e => setReportTemplate(prev => ({ ...prev, regardsPrefix: e.target.value }))}
                     />
                   </div>
@@ -4145,7 +4157,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     <label>Company Branding (Footer Logo)</label>
                     <input 
                       type="text" 
-                      value={reportTemplate.companyName}
+                      value={reportTemplate.companyName || ''}
                       onChange={e => setReportTemplate(prev => ({ ...prev, companyName: e.target.value }))}
                     />
                   </div>
@@ -4153,7 +4165,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     <label>Signer Designation</label>
                     <input 
                       type="text" 
-                      value={reportTemplate.managerTitle}
+                      value={reportTemplate.managerTitle || ''}
                       onChange={e => setReportTemplate(prev => ({ ...prev, managerTitle: e.target.value }))}
                     />
                   </div>
