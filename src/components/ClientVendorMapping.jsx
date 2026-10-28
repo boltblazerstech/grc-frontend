@@ -391,60 +391,23 @@ export default function ClientVendorMapping({ currentUser }) {
     });
   };
 
-  const handleApplyMonths = async () => {
+  const handleApplyMonths = () => {
     const gstin = monthPicker.vendorGstin;
     const field = monthPicker.field;
     const monthsStr = monthPicker.selectedMonths.join(', ');
 
-    const existing = inlineCompliance[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
-    const updatedValues = {
-      ...existing,
-      [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr
-    };
-
-    setInlineCompliance(prev => ({
-      ...prev,
-      [gstin]: updatedValues
-    }));
+    setInlineCompliance(prev => {
+      const existing = prev[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
+      return {
+        ...prev,
+        [gstin]: {
+          ...existing,
+          [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr
+        }
+      };
+    });
 
     setMonthPicker(prev => ({ ...prev, isOpen: false }));
-
-    // Persist to localStorage immediately
-    try {
-      const stored = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
-      stored[gstin] = {
-        ...(stored[gstin] || {}),
-        [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr
-      };
-      localStorage.setItem('grc_delayed_months_store', JSON.stringify(stored));
-    } catch (e) {
-      console.warn('Failed to save compliance to localStorage', e);
-    }
-
-    // Update mappedVendors state so change is recognized immediately
-    setMappedVendors(prev => prev.map(v => {
-      if (v.vendorGstin === gstin) {
-        return {
-          ...v,
-          [field === 'gstr1' ? 'delayedMonthsGstr1' : 'delayedMonthsGstr3b']: monthsStr
-        };
-      }
-      return v;
-    }));
-
-    // Auto-save to backend so page refresh persists even without pressing 'Save Changes'
-    try {
-      const payload = {
-        delayCountGstr1: updatedValues.gstr1 ?? 0,
-        delayCountGstr3b: updatedValues.gstr3b ?? 0,
-        delayedMonthsGstr1: updatedValues.gstr1Months || '',
-        delayedMonthsGstr3b: updatedValues.gstr3bMonths || '',
-        updatedBy: currentUser?.name || 'Admin'
-      };
-      await apiClient.updateDetails(gstin, payload);
-    } catch (err) {
-      console.warn('Auto-save of delayed months to backend:', err);
-    }
   };
 
   const handleSaveCompliance = async (vendorGstin) => {
