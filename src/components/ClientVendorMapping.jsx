@@ -100,18 +100,28 @@ export default function ClientVendorMapping({ currentUser }) {
     if (mappedVendors && mappedVendors.length > 0) {
       const initial = {};
       mappedVendors.forEach(v => {
+        const d1 = v.delayCountGstr1 ?? 0;
+        const d3b = v.delayCountGstr3b ?? 0;
+        let m1 = v.delayedMonthsGstr1 || '';
+        let m3b = v.delayedMonthsGstr3b || '';
+        if (!m1 && d1 > 0) {
+          m1 = last12Months.slice(-Math.min(d1, 12)).join(', ');
+        }
+        if (!m3b && d3b > 0) {
+          m3b = last12Months.slice(-Math.min(d3b, 12)).join(', ');
+        }
         initial[v.vendorGstin] = {
-          gstr1: v.delayCountGstr1 ?? 0,
-          gstr3b: v.delayCountGstr3b ?? 0,
-          gstr1Months: v.delayedMonthsGstr1 || '',
-          gstr3bMonths: v.delayedMonthsGstr3b || ''
+          gstr1: d1,
+          gstr3b: d3b,
+          gstr1Months: m1,
+          gstr3bMonths: m3b
         };
       });
       setInlineCompliance(initial);
     } else {
       setInlineCompliance({});
     }
-  }, [mappedVendors]);
+  }, [mappedVendors, last12Months]);
 
   // Fetch Mapped Vendors when selectedClient changes
   useEffect(() => {
@@ -168,10 +178,10 @@ export default function ClientVendorMapping({ currentUser }) {
       if (!entry) continue;
       const origGstr1 = v.delayCountGstr1 ?? 0;
       const origGstr3b = v.delayCountGstr3b ?? 0;
-      const origGstr1Months = (v.delayedMonthsGstr1 || '').trim();
-      const origGstr3bMonths = (v.delayedMonthsGstr3b || '').trim();
-      const curGstr1Months = (entry.gstr1Months || '').trim();
-      const curGstr3bMonths = (entry.gstr3bMonths || '').trim();
+      const origGstr1Months = (v.delayedMonthsGstr1 || (origGstr1 > 0 ? last12Months.slice(-Math.min(origGstr1, 12)).join(', ') : '')).trim();
+      const origGstr3bMonths = (v.delayedMonthsGstr3b || (origGstr3b > 0 ? last12Months.slice(-Math.min(origGstr3b, 12)).join(', ') : '')).trim();
+      const curGstr1Months = (entry.gstr1Months || (entry.gstr1 > 0 ? last12Months.slice(-Math.min(entry.gstr1, 12)).join(', ') : '')).trim();
+      const curGstr3bMonths = (entry.gstr3bMonths || (entry.gstr3b > 0 ? last12Months.slice(-Math.min(entry.gstr3b, 12)).join(', ') : '')).trim();
       if (
         entry.gstr1 !== origGstr1 ||
         entry.gstr3b !== origGstr3b ||
@@ -182,17 +192,38 @@ export default function ClientVendorMapping({ currentUser }) {
       }
     }
     return modified;
-  }, [mappedVendors, inlineCompliance]);
+  }, [mappedVendors, inlineCompliance, last12Months]);
 
   const handleComplianceChange = (vendorGstin, field, val) => {
     const num = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
-    setInlineCompliance(prev => ({
-      ...prev,
-      [vendorGstin]: {
-        ...(prev[vendorGstin] || { gstr1: 0, gstr3b: 0 }),
-        [field]: num
+    const monthField = field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths';
+    setInlineCompliance(prev => {
+      const existing = prev[vendorGstin] || {
+        gstr1: 0,
+        gstr3b: 0,
+        gstr1Months: '',
+        gstr3bMonths: ''
+      };
+
+      let updatedMonths = existing[monthField] || '';
+      if (num === 0) {
+        updatedMonths = '';
+      } else if (num > 0) {
+        const tokens = updatedMonths ? updatedMonths.split(',').map(s => s.trim()).filter(Boolean) : [];
+        if (tokens.length !== num) {
+          updatedMonths = last12Months.slice(-Math.min(num, 12)).join(', ');
+        }
       }
-    }));
+
+      return {
+        ...prev,
+        [vendorGstin]: {
+          ...existing,
+          [field]: num,
+          [monthField]: updatedMonths
+        }
+      };
+    });
   };
 
   const handleSaveAllCompliance = async () => {
@@ -214,16 +245,28 @@ export default function ClientVendorMapping({ currentUser }) {
     try {
       const results = await Promise.allSettled(
         gstinsToSave.map(async (gstin) => {
-          const values = inlineCompliance[gstin];
+          const values = inlineCompliance[gstin] || {};
+          const g1Count = values.gstr1 ?? 0;
+          const g3bCount = values.gstr3b ?? 0;
+          let m1 = (values.gstr1Months !== undefined && values.gstr1Months !== null) ? values.gstr1Months.trim() : '';
+          let m3b = (values.gstr3bMonths !== undefined && values.gstr3bMonths !== null) ? values.gstr3bMonths.trim() : '';
+
+          if (!m1 && g1Count > 0) {
+            m1 = last12Months.slice(-Math.min(g1Count, 12)).join(', ');
+          }
+          if (!m3b && g3bCount > 0) {
+            m3b = last12Months.slice(-Math.min(g3bCount, 12)).join(', ');
+          }
+
           const payload = {
-            delayCountGstr1: values.gstr1,
-            delayCountGstr3b: values.gstr3b,
-            delayedMonthsGstr1: values.gstr1Months !== undefined && values.gstr1Months !== null ? values.gstr1Months.trim() : '',
-            delayedMonthsGstr3b: values.gstr3bMonths !== undefined && values.gstr3bMonths !== null ? values.gstr3bMonths.trim() : '',
+            delayCountGstr1: g1Count,
+            delayCountGstr3b: g3bCount,
+            delayedMonthsGstr1: m1,
+            delayedMonthsGstr3b: m3b,
             updatedBy: currentUser?.name || 'Admin'
           };
           const updated = await apiClient.updateDetails(gstin, payload);
-          return { gstin, updated };
+          return { gstin, updated, savedM1: m1, savedM3b: m3b };
         })
       );
 
@@ -235,7 +278,14 @@ export default function ClientVendorMapping({ currentUser }) {
         const gstin = gstinsToSave[idx];
         if (res.status === 'fulfilled') {
           successCount++;
-          successfulUpdates[gstin] = res.value.updated;
+          const val = res.value;
+          successfulUpdates[gstin] = {
+            ...val.updated,
+            delayCountGstr1: val.updated?.delayCountGstr1 ?? val.updated?.delay_count_gstr1 ?? 0,
+            delayCountGstr3b: val.updated?.delayCountGstr3b ?? val.updated?.delay_count_gstr3b ?? 0,
+            delayedMonthsGstr1: val.updated?.delayedMonthsGstr1 || val.savedM1,
+            delayedMonthsGstr3b: val.updated?.delayedMonthsGstr3b || val.savedM3b
+          };
         } else {
           failCount++;
         }
@@ -302,9 +352,18 @@ export default function ClientVendorMapping({ currentUser }) {
   const openMonthPicker = (vendor, field) => {
     const gstin = vendor.vendorGstin;
     const currentVal = inlineCompliance[gstin];
-    const existingStr = field === 'gstr1'
+    let existingStr = field === 'gstr1'
       ? (currentVal?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '')
       : (currentVal?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '');
+
+    const valCount = field === 'gstr1'
+      ? (currentVal?.gstr1 ?? vendor.delayCountGstr1 ?? 0)
+      : (currentVal?.gstr3b ?? vendor.delayCountGstr3b ?? 0);
+
+    // Fallback: If no custom months string but count > 0, default to last N months
+    if (!existingStr && valCount > 0) {
+      existingStr = last12Months.slice(-Math.min(valCount, 12)).join(', ');
+    }
 
     // Extract month names, stripping any trailing numbers or years
     const tokens = existingStr
@@ -360,11 +419,22 @@ export default function ClientVendorMapping({ currentUser }) {
 
     setSavingGstins(prev => ({ ...prev, [vendorGstin]: 'saving' }));
     try {
+      const g1Count = values.gstr1 ?? 0;
+      const g3bCount = values.gstr3b ?? 0;
+      let m1 = (values.gstr1Months !== undefined && values.gstr1Months !== null) ? values.gstr1Months.trim() : '';
+      let m3b = (values.gstr3bMonths !== undefined && values.gstr3bMonths !== null) ? values.gstr3bMonths.trim() : '';
+      if (!m1 && g1Count > 0) {
+        m1 = last12Months.slice(-Math.min(g1Count, 12)).join(', ');
+      }
+      if (!m3b && g3bCount > 0) {
+        m3b = last12Months.slice(-Math.min(g3bCount, 12)).join(', ');
+      }
+
       const payload = {
-        delayCountGstr1: values.gstr1,
-        delayCountGstr3b: values.gstr3b,
-        delayedMonthsGstr1: values.gstr1Months !== undefined && values.gstr1Months !== null ? values.gstr1Months.trim() : '',
-        delayedMonthsGstr3b: values.gstr3bMonths !== undefined && values.gstr3bMonths !== null ? values.gstr3bMonths.trim() : '',
+        delayCountGstr1: g1Count,
+        delayCountGstr3b: g3bCount,
+        delayedMonthsGstr1: m1,
+        delayedMonthsGstr3b: m3b,
         updatedBy: currentUser?.name || 'Admin'
       };
 
@@ -377,12 +447,23 @@ export default function ClientVendorMapping({ currentUser }) {
             ...v,
             delayCountGstr1: updated.delayCountGstr1,
             delayCountGstr3b: updated.delayCountGstr3b,
-            delayedMonthsGstr1: updated.delayedMonthsGstr1 || '',
-            delayedMonthsGstr3b: updated.delayedMonthsGstr3b || '',
+            delayedMonthsGstr1: updated.delayedMonthsGstr1 || m1,
+            delayedMonthsGstr3b: updated.delayedMonthsGstr3b || m3b,
             grcScore: updated.grcScore
           };
         }
         return v;
+      }));
+
+      // Also ensure inlineCompliance is updated
+      setInlineCompliance(prev => ({
+        ...prev,
+        [vendorGstin]: {
+          gstr1: updated.delayCountGstr1,
+          gstr3b: updated.delayCountGstr3b,
+          gstr1Months: updated.delayedMonthsGstr1 || m1,
+          gstr3bMonths: updated.delayedMonthsGstr3b || m3b
+        }
       }));
 
       setSavingGstins(prev => ({ ...prev, [vendorGstin]: 'saved' }));
@@ -875,8 +956,14 @@ export default function ClientVendorMapping({ currentUser }) {
         const gstin = v.vendorGstin;
         const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
         const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
-        const gstr1Months = inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '';
-        const gstr3bMonths = inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '';
+        let gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '').trim();
+        let gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
+        if (!gstr1Months && gstr1Val > 0) {
+          gstr1Months = last12Months.slice(-Math.min(gstr1Val, 12)).join(', ');
+        }
+        if (!gstr3bMonths && gstr3bVal > 0) {
+          gstr3bMonths = last12Months.slice(-Math.min(gstr3bVal, 12)).join(', ');
+        }
         const gstr7Info = getGstr7Display(v);
         const ageDisplay = v.ageYears !== null && v.ageYears !== undefined
           ? Math.round(v.ageYears)
@@ -2521,8 +2608,14 @@ export default function ClientVendorMapping({ currentUser }) {
                   const gstin = vendor.vendorGstin;
                   const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? vendor.delayCountGstr1 ?? 0;
                   const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? vendor.delayCountGstr3b ?? 0;
-                  const gstr1Months = inlineCompliance[gstin]?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '';
-                  const gstr3bMonths = inlineCompliance[gstin]?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '';
+                  let gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '').trim();
+                  let gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '').trim();
+                  if (!gstr1Months && gstr1Val > 0) {
+                    gstr1Months = last12Months.slice(-Math.min(gstr1Val, 12)).join(', ');
+                  }
+                  if (!gstr3bMonths && gstr3bVal > 0) {
+                    gstr3bMonths = last12Months.slice(-Math.min(gstr3bVal, 12)).join(', ');
+                  }
                   const isGstr1Modified = (inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== (vendor.delayCountGstr1 ?? 0)) ||
                     ((inlineCompliance[gstin]?.gstr1Months || '').trim() !== (vendor.delayedMonthsGstr1 || '').trim());
                   const isGstr3bModified = (inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== (vendor.delayCountGstr3b ?? 0)) ||
