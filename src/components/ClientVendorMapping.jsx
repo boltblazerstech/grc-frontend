@@ -1378,12 +1378,19 @@ export default function ClientVendorMapping({ currentUser }) {
         }
 
         .circular-dot-indicator {
-          width: 9px;
-          height: 9px;
+          width: 14px;
+          height: 14px;
           border-radius: 50%;
           display: inline-block;
           flex-shrink: 0;
-          margin-right: 6px;
+          margin-right: 7px;
+          border: 1.5px solid rgba(255, 255, 255, 0.95);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+          transition: transform 0.15s ease;
+        }
+
+        .circular-dot-indicator:hover {
+          transform: scale(1.18);
         }
 
         /* Prominent Save Button above Table */
@@ -2469,7 +2476,7 @@ export default function ClientVendorMapping({ currentUser }) {
                         <div className="compliance-cell">
                           <span
                             className="circular-dot-indicator"
-                            style={{ backgroundColor: gstr1DotColor, marginRight: '4px' }}
+                            style={{ backgroundColor: gstr1DotColor, marginRight: '7px' }}
                             title={`GSTR-1 delay: ${gstr1Val}`}
                           />
                           <input
