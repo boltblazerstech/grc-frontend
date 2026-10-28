@@ -890,19 +890,24 @@ export default function ClientVendorMapping({ currentUser }) {
         const isLowTurnover = isTurnoverUnder3Cr(v.aggregateTurnover);
         const isYoungAge = typeof ageDisplay === 'number' && ageDisplay < 2;
 
-        // Scenario 8: Risky ONLY if explicitly selected/mentioned delayed months in GSTR3B fall in the last 3 months
+        // Scenario 6: Red Cross if individual firm or traders && GSTR3B delayed > 2
+        const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
+        const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+
+        // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in the last 3 months
         const last3Lower = last3Months.map(m => m.toLowerCase());
         const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
-        const isRisky = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
+        const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
           const token = m.trim().toLowerCase();
           return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
         });
+        const isRisky = showRedCross && hasLast3MonthsDelay;
 
         // Scenario 9: Critical risk whole row red
         const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
 
         // Formatted values
-        const companyDisplayName = (isRisky ? '[Risky] ' : '') + getVendorDisplayName(v);
+        const companyDisplayName = (isRisky ? '[Risky] ' : '') + (showRedCross ? '❌ ' : '') + getVendorDisplayName(v);
         const gstr1Display = gstr1Months ? `${gstr1Val}  ${gstr1Months}` : `${gstr1Val}`;
         const gstr3bDisplay = gstr3bMonths ? `${gstr3bVal}  ${gstr3bMonths}` : `${gstr3bVal}`;
 
@@ -1033,7 +1038,9 @@ export default function ClientVendorMapping({ currentUser }) {
   const isPropPartnerOrHuf = (gstType) => {
     const t = (gstType || '').toLowerCase();
     return t.includes('proprietor') || 
+      t.includes('individual') ||
       t.includes('partner') || 
+      t.includes('firm') || 
       t.includes('huf') || 
       t.includes('hindu undivided');
   };
@@ -1449,6 +1456,34 @@ export default function ClientVendorMapping({ currentUser }) {
 
         .circular-dot-indicator:hover {
           transform: scale(1.18);
+        }
+
+        /* Scenario 6: Red Cross Indicator */
+        .red-cross-indicator {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 17px;
+          height: 17px;
+          border-radius: 50%;
+          background-color: #fee2e2;
+          color: #dc2626;
+          border: 1.5px solid #ef4444;
+          margin-right: 6px;
+          flex-shrink: 0;
+          box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2);
+          transition: transform 0.15s ease;
+        }
+
+        .red-cross-indicator:hover {
+          transform: scale(1.18);
+        }
+
+        .row-critical-risk .red-cross-indicator {
+          background-color: #ffffff !important;
+          color: #dc2626 !important;
+          border: 1.5px solid #fca5a5 !important;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
         }
 
         /* Prominent Save Button above Table */
@@ -2455,14 +2490,19 @@ export default function ClientVendorMapping({ currentUser }) {
                   const isLowTurnover = isTurnoverUnder3Cr(vendor.aggregateTurnover);
                   const isYoungAge = typeof ageDisplay === 'number' && ageDisplay < 2;
 
-                  // Scenario 8: Risky badge ONLY if explicitly selected/mentioned delayed months in GSTR3B fall in the last 3 months
+                  // Scenario 6: Red Cross if individual firm or traders && GSTR3B delayed > 2
+                  const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
+                  const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+
+                  // Scenario 8: Risky badge if conditions of Scenario 6 are met PLUS delayed in the last 3 months
                   const last3Months = last12Months.slice(-3);
                   const last3Lower = last3Months.map(m => m.toLowerCase());
                   const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
-                  const isRisky = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
+                  const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
                     const token = m.trim().toLowerCase();
                     return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
                   });
+                  const isRisky = showRedCross && hasLast3MonthsDelay;
 
                   // Scenario 9: GSTR3B delayed > 2 && traders && Aadhaar No && GSTR7 N/A -> Whole line red with white text
                   const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
@@ -2489,6 +2529,14 @@ export default function ClientVendorMapping({ currentUser }) {
                             style={{ backgroundColor: companyDotColor }}
                             title={gstr3bVal > 2 ? 'High delay risk' : gstr3bVal >= 1 ? 'Moderate delay' : 'Compliant'}
                           />
+                          {showRedCross && (
+                            <span
+                              className="red-cross-indicator"
+                              title="Scenario 6: Individual firm or Trader with GSTR-3B delayed > 2"
+                            >
+                              <X size={12} strokeWidth={3.5} />
+                            </span>
+                          )}
                           <span className="company-name-text">
                             {getVendorDisplayName(vendor)}
                           </span>
