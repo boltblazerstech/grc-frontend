@@ -98,13 +98,19 @@ export default function ClientVendorMapping({ currentUser }) {
   // Sync inline compliance dictionary when mappedVendors changes
   useEffect(() => {
     if (mappedVendors && mappedVendors.length > 0) {
+      let localStore = {};
+      try {
+        localStore = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
+      } catch (e) {}
+
       const initial = {};
       mappedVendors.forEach(v => {
+        const local = localStore[v.vendorGstin];
         initial[v.vendorGstin] = {
           gstr1: v.delayCountGstr1 ?? 0,
           gstr3b: v.delayCountGstr3b ?? 0,
-          gstr1Months: v.delayedMonthsGstr1 || '',
-          gstr3bMonths: v.delayedMonthsGstr3b || ''
+          gstr1Months: v.delayedMonthsGstr1 || local?.gstr1Months || '',
+          gstr3bMonths: v.delayedMonthsGstr3b || local?.gstr3bMonths || ''
         };
       });
       setInlineCompliance(initial);
@@ -149,7 +155,24 @@ export default function ClientVendorMapping({ currentUser }) {
     setVendorsLoading(true);
     try {
       const data = await apiClient.getClientVendors(clientId);
-      setMappedVendors(data || []);
+      const list = data || [];
+
+      // Hydrate from localStorage store in case backend doesn't have the columns yet
+      let localStore = {};
+      try {
+        localStore = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
+      } catch (e) {}
+
+      const hydrated = list.map(v => {
+        const local = localStore[v.vendorGstin];
+        return {
+          ...v,
+          delayedMonthsGstr1: v.delayedMonthsGstr1 || local?.gstr1Months || '',
+          delayedMonthsGstr3b: v.delayedMonthsGstr3b || local?.gstr3bMonths || ''
+        };
+      });
+
+      setMappedVendors(hydrated);
     } catch (err) {
       showToast(err.message || 'Failed to fetch mapped vendors', 'error');
     } finally {
@@ -292,6 +315,20 @@ export default function ClientVendorMapping({ currentUser }) {
           return next;
         });
 
+        // Cache persisted months in localStorage so refreshes always retain them
+        try {
+          const stored = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
+          Object.keys(successfulUpdates).forEach(g => {
+            const upd = successfulUpdates[g];
+            stored[g] = {
+              ...(stored[g] || {}),
+              gstr1Months: upd.delayedMonthsGstr1 || '',
+              gstr3bMonths: upd.delayedMonthsGstr3b || ''
+            };
+          });
+          localStorage.setItem('grc_delayed_months_store', JSON.stringify(stored));
+        } catch (e) {}
+
         setSavingGstins(prev => {
           const next = { ...prev };
           Object.keys(successfulUpdates).forEach(g => {
@@ -354,23 +391,60 @@ export default function ClientVendorMapping({ currentUser }) {
     });
   };
 
-  const handleApplyMonths = () => {
+  const handleApplyMonths = async () => {
     const gstin = monthPicker.vendorGstin;
     const field = monthPicker.field;
     const monthsStr = monthPicker.selectedMonths.join(', ');
 
-    setInlineCompliance(prev => {
-      const existing = prev[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
-      return {
-        ...prev,
-        [gstin]: {
-          ...existing,
-          [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr
-        }
-      };
-    });
+    const existing = inlineCompliance[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
+    const updatedValues = {
+      ...existing,
+      [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr
+    };
+
+    setInlineCompliance(prev => ({
+      ...prev,
+      [gstin]: updatedValues
+    }));
 
     setMonthPicker(prev => ({ ...prev, isOpen: false }));
+
+    // Persist to localStorage immediately
+    try {
+      const stored = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
+      stored[gstin] = {
+        ...(stored[gstin] || {}),
+        [field === 'gstr1' ? 'gstr1Months' : 'gstr3bMonths']: monthsStr
+      };
+      localStorage.setItem('grc_delayed_months_store', JSON.stringify(stored));
+    } catch (e) {
+      console.warn('Failed to save compliance to localStorage', e);
+    }
+
+    // Update mappedVendors state so change is recognized immediately
+    setMappedVendors(prev => prev.map(v => {
+      if (v.vendorGstin === gstin) {
+        return {
+          ...v,
+          [field === 'gstr1' ? 'delayedMonthsGstr1' : 'delayedMonthsGstr3b']: monthsStr
+        };
+      }
+      return v;
+    }));
+
+    // Auto-save to backend so page refresh persists even without pressing 'Save Changes'
+    try {
+      const payload = {
+        delayCountGstr1: updatedValues.gstr1 ?? 0,
+        delayCountGstr3b: updatedValues.gstr3b ?? 0,
+        delayedMonthsGstr1: updatedValues.gstr1Months || '',
+        delayedMonthsGstr3b: updatedValues.gstr3bMonths || '',
+        updatedBy: currentUser?.name || 'Admin'
+      };
+      await apiClient.updateDetails(gstin, payload);
+    } catch (err) {
+      console.warn('Auto-save of delayed months to backend:', err);
+    }
   };
 
   const handleSaveCompliance = async (vendorGstin) => {
@@ -393,6 +467,17 @@ export default function ClientVendorMapping({ currentUser }) {
       };
 
       const updated = await apiClient.updateDetails(vendorGstin, payload);
+
+      // Save to localStorage so refreshes always retain them
+      try {
+        const stored = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
+        stored[vendorGstin] = {
+          ...(stored[vendorGstin] || {}),
+          gstr1Months: m1,
+          gstr3bMonths: m3b
+        };
+        localStorage.setItem('grc_delayed_months_store', JSON.stringify(stored));
+      } catch (e) {}
 
       // Update mappedVendors state in place
       setMappedVendors(prev => prev.map(v => {
