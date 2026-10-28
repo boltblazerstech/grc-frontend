@@ -1428,7 +1428,6 @@ export default function ClientVendorMapping({ currentUser }) {
         .row-critical-risk .company-name-text,
         .row-critical-risk .gstn-cell span,
         .row-critical-risk .compliance-months-display,
-        .row-critical-risk .delay-tag,
         .row-critical-risk .copy-btn {
           color: #ffffff !important;
         }
@@ -2037,13 +2036,6 @@ export default function ClientVendorMapping({ currentUser }) {
           display: flex;
           align-items: center;
           gap: 2px;
-        }
-
-        .delay-tag {
-          font-size: 0.72rem;
-          font-weight: 700;
-          color: #dc2626;
-          white-space: nowrap;
         }
 
         /* GSTR7 Badge */
@@ -2712,15 +2704,11 @@ export default function ClientVendorMapping({ currentUser }) {
                           >
                             <Calendar size={13} />
                           </button>
-                          {gstr3bMonths ? (
+                          {gstr3bMonths && (
                             <span className="compliance-months-display" title={`Delayed months: ${gstr3bMonths}`}>
                               {gstr3bMonths}
                             </span>
-                          ) : gstr3bVal > 0 ? (
-                            <span className="delay-tag">
-                              {gstr3bVal >= 2 ? 'Delayed' : 'Delay'}
-                            </span>
-                          ) : null}
+                          )}
                           {isGstr3bModified && <span className="dirty-dot" title="Unsaved changes" />}
                           {saveStatus === 'saving' && <Loader2 size={13} className="spin-icon" color="#7c3aed" />}
                           {saveStatus === 'saved' && <span className="save-indicator">✓</span>}
