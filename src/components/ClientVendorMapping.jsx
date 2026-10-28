@@ -2616,10 +2616,14 @@ export default function ClientVendorMapping({ currentUser }) {
                   if (!gstr3bMonths && gstr3bVal > 0) {
                     gstr3bMonths = last12Months.slice(-Math.min(gstr3bVal, 12)).join(', ');
                   }
-                  const isGstr1Modified = (inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== (vendor.delayCountGstr1 ?? 0)) ||
-                    ((inlineCompliance[gstin]?.gstr1Months || '').trim() !== (vendor.delayedMonthsGstr1 || '').trim());
-                  const isGstr3bModified = (inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== (vendor.delayCountGstr3b ?? 0)) ||
-                    ((inlineCompliance[gstin]?.gstr3bMonths || '').trim() !== (vendor.delayedMonthsGstr3b || '').trim());
+                  const origGstr1 = vendor.delayCountGstr1 ?? 0;
+                  const origGstr3b = vendor.delayCountGstr3b ?? 0;
+                  const origGstr1Months = (vendor.delayedMonthsGstr1 || (origGstr1 > 0 ? last12Months.slice(-Math.min(origGstr1, 12)).join(', ') : '')).trim();
+                  const origGstr3bMonths = (vendor.delayedMonthsGstr3b || (origGstr3b > 0 ? last12Months.slice(-Math.min(origGstr3b, 12)).join(', ') : '')).trim();
+                  const isGstr1Modified = (inlineCompliance[gstin]?.gstr1 !== undefined && inlineCompliance[gstin]?.gstr1 !== origGstr1) ||
+                    (gstr1Months !== origGstr1Months);
+                  const isGstr3bModified = (inlineCompliance[gstin]?.gstr3b !== undefined && inlineCompliance[gstin]?.gstr3b !== origGstr3b) ||
+                    (gstr3bMonths !== origGstr3bMonths);
                   const saveStatus = savingGstins[gstin];
                   const gstr7Info = getGstr7Display(vendor);
                   
