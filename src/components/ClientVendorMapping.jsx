@@ -1366,64 +1366,49 @@ export default function ClientVendorMapping({ currentUser }) {
           color: #ffffff !important;
         }
 
-        /* Keep badges readable and high-contrast in critical risk row */
+        /* Keep badges readable and high-contrast on white pill backgrounds in critical risk red rows */
         .row-critical-risk .status-pill.status-active {
-          background-color: #dcfce7 !important;
-          color: #14532d !important;
+          background-color: #ffffff !important;
+          color: #16a34a !important;
           font-weight: 800 !important;
-          border: 1px solid #86efac !important;
+          border: 1px solid #bbf7d0 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         .row-critical-risk .status-pill.status-active .dot {
-          background-color: #15803d !important;
+          background-color: #16a34a !important;
         }
 
         .row-critical-risk .status-pill.status-inactive {
-          background-color: #fee2e2 !important;
-          color: #991b1b !important;
+          background-color: #ffffff !important;
+          color: #dc2626 !important;
           font-weight: 800 !important;
           border: 1px solid #fca5a5 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         .row-critical-risk .status-pill.status-inactive .dot {
-          background-color: #991b1b !important;
+          background-color: #dc2626 !important;
         }
 
         .row-critical-risk .gstr7-badge {
           background-color: #ffffff !important;
-          color: #1e293b !important;
+          color: #dc2626 !important;
           font-weight: 800 !important;
-          border: 1px solid #cbd5e1 !important;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-        }
-
-        .row-critical-risk .score-badge {
-          font-weight: 800 !important;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-        }
-
-        .row-critical-risk .score-badge.score-low {
-          background-color: #fee2e2 !important;
-          color: #991b1b !important;
           border: 1px solid #fca5a5 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
-        .row-critical-risk .score-badge.score-mid {
-          background-color: #fef3c7 !important;
-          color: #92400e !important;
-          border: 1px solid #fde68a !important;
-        }
-
-        .row-critical-risk .score-badge.score-high {
-          background-color: #dcfce7 !important;
-          color: #15803d !important;
-          border: 1px solid #86efac !important;
-        }
-
+        .row-critical-risk .score-badge,
+        .row-critical-risk .score-badge.score-low,
+        .row-critical-risk .score-badge.score-mid,
+        .row-critical-risk .score-badge.score-high,
         .row-critical-risk .score-badge.score-na {
-          background-color: #f1f5f9 !important;
-          color: #334155 !important;
-          border: 1px solid #cbd5e1 !important;
+          background-color: #ffffff !important;
+          color: #dc2626 !important;
+          font-weight: 800 !important;
+          border: 1px solid #fca5a5 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         .row-critical-risk .btn-table-action {
@@ -2638,7 +2623,12 @@ export default function ClientVendorMapping({ currentUser }) {
                       <td className={!isEntireRowRed && isTrader && isGstr7NA ? 'cell-bg-red' : ''}>
                         <span
                           className="gstr7-badge"
-                          style={{
+                          style={isEntireRowRed ? {
+                            backgroundColor: '#ffffff',
+                            color: '#dc2626',
+                            border: '1px solid #fca5a5',
+                            fontWeight: 800
+                          } : {
                             background: (!isEntireRowRed && isTrader && isGstr7NA) ? '#ef4444' : gstr7Info.status.bg,
                             color: (!isEntireRowRed && isTrader && isGstr7NA) ? '#ffffff' : gstr7Info.status.color,
                             border: (!isEntireRowRed && isTrader && isGstr7NA) ? '1px solid #b91c1c' : `1px solid ${gstr7Info.status.border}`
