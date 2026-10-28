@@ -1360,9 +1360,78 @@ export default function ClientVendorMapping({ currentUser }) {
 
         .row-critical-risk .company-name-text,
         .row-critical-risk .gstn-cell span,
-        .row-critical-risk td span,
         .row-critical-risk .compliance-months-display,
+        .row-critical-risk .delay-tag,
         .row-critical-risk .copy-btn {
+          color: #ffffff !important;
+        }
+
+        /* Keep badges readable and high-contrast in critical risk row */
+        .row-critical-risk .status-pill.status-active {
+          background-color: #dcfce7 !important;
+          color: #14532d !important;
+          font-weight: 800 !important;
+          border: 1px solid #86efac !important;
+        }
+
+        .row-critical-risk .status-pill.status-active .dot {
+          background-color: #15803d !important;
+        }
+
+        .row-critical-risk .status-pill.status-inactive {
+          background-color: #fee2e2 !important;
+          color: #991b1b !important;
+          font-weight: 800 !important;
+          border: 1px solid #fca5a5 !important;
+        }
+
+        .row-critical-risk .status-pill.status-inactive .dot {
+          background-color: #991b1b !important;
+        }
+
+        .row-critical-risk .gstr7-badge {
+          background-color: #ffffff !important;
+          color: #1e293b !important;
+          font-weight: 800 !important;
+          border: 1px solid #cbd5e1 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .row-critical-risk .score-badge {
+          font-weight: 800 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .row-critical-risk .score-badge.score-low {
+          background-color: #fee2e2 !important;
+          color: #991b1b !important;
+          border: 1px solid #fca5a5 !important;
+        }
+
+        .row-critical-risk .score-badge.score-mid {
+          background-color: #fef3c7 !important;
+          color: #92400e !important;
+          border: 1px solid #fde68a !important;
+        }
+
+        .row-critical-risk .score-badge.score-high {
+          background-color: #dcfce7 !important;
+          color: #15803d !important;
+          border: 1px solid #86efac !important;
+        }
+
+        .row-critical-risk .score-badge.score-na {
+          background-color: #f1f5f9 !important;
+          color: #334155 !important;
+          border: 1px solid #cbd5e1 !important;
+        }
+
+        .row-critical-risk .btn-table-action {
+          color: #ffffff !important;
+        }
+
+        .row-critical-risk .btn-table-action:hover {
+          background-color: rgba(255, 255, 255, 0.2) !important;
           color: #ffffff !important;
         }
 
@@ -2457,7 +2526,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Type */}
-                      <td style={{ color: '#475569', fontSize: '0.82rem' }}>
+                      <td style={{ color: isEntireRowRed ? '#ffffff' : '#475569', fontSize: '0.82rem' }}>
                         {vendor.gstType || 'Partnership'}
                       </td>
 
@@ -2594,7 +2663,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Core Activity */}
-                      <td style={{ color: '#475569', fontSize: '0.82rem' }}>
+                      <td style={{ color: isEntireRowRed ? '#ffffff' : '#475569', fontSize: '0.82rem' }}>
                         {vendor.coreActivity || 'Manufacturer'}
                       </td>
 
