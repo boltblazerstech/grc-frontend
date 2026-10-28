@@ -4124,19 +4124,108 @@ export default function ClientVendorMapping({ currentUser }) {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Company Branding (Footer Logo)</label>
-                    <input 
-                      type="text" 
-                      value={reportTemplate.companyName || ''}
-                      onChange={e => setReportTemplate(prev => ({ ...prev, companyName: e.target.value }))}
-                    />
-                  </div>
-                  <div className="form-group">
                     <label>Signer Designation</label>
                     <input 
                       type="text" 
                       value={reportTemplate.managerTitle || ''}
                       onChange={e => setReportTemplate(prev => ({ ...prev, managerTitle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Footer Branding & Logo */}
+              <div className="template-form-section">
+                <div className="section-title">
+                  <ImageIcon size={16} color="#7c3aed" />
+                  Footer Logo & Branding (All Page Footers)
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '0.85rem' }}>
+                  Upload a company logo image to display centered in the footer of all report pages.
+                </div>
+
+                <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'stretch', flexWrap: 'wrap' }}>
+                  <div
+                    className="upload-dropzone"
+                    style={{ flex: '1 1 280px', padding: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => document.getElementById('template-footer-logo-input')?.click()}
+                  >
+                    <input
+                      id="template-footer-logo-input"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            showToast('Logo file size must be under 2MB', 'error');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const dataUrl = ev.target.result;
+                            setReportTemplate(prev => ({ ...prev, footerLogoDataUrl: dataUrl }));
+                            showToast('Footer logo uploaded! Click "Save Template" to persist.');
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <UploadCloud size={24} color="#7c3aed" style={{ marginBottom: '0.35rem' }} />
+                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>
+                      Click to upload Custom Footer Logo
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
+                      PNG, JPG, WEBP, SVG (Max 2MB)
+                    </div>
+                  </div>
+
+                  {/* Logo Preview Card */}
+                  <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Active Footer Logo
+                    </div>
+                    <div style={{ height: '50px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', padding: '4px 8px' }}>
+                      {reportTemplate.footerLogoDataUrl ? (
+                        <img
+                          src={reportTemplate.footerLogoDataUrl}
+                          alt="Footer Logo Preview"
+                          style={{ maxHeight: '42px', maxWidth: '190px', objectFit: 'contain' }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#0284c7', fontWeight: 800, fontSize: '0.88rem' }}>
+                          <span style={{ fontSize: '1.05rem' }}>♻</span> ScrapDMS (Default)
+                        </div>
+                      )}
+                    </div>
+                    {reportTemplate.footerLogoDataUrl ? (
+                      <button
+                        type="button"
+                        className="btn-ghost-sm"
+                        style={{ color: '#dc2626', fontSize: '0.75rem', padding: '0.2rem 0.55rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReportTemplate(prev => ({ ...prev, footerLogoDataUrl: null }));
+                          showToast('Reset to default ScrapDMS footer logo', 'info');
+                        }}
+                      >
+                        <Trash2 size={13} /> Remove Custom Logo
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '0.73rem', color: '#94a3b8' }}>Built-in official logo</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-row-grid" style={{ marginTop: '0.85rem' }}>
+                  <div className="form-group">
+                    <label>Company Branding / Text Fallback</label>
+                    <input 
+                      type="text" 
+                      value={reportTemplate.companyName || ''}
+                      onChange={e => setReportTemplate(prev => ({ ...prev, companyName: e.target.value }))}
+                      placeholder="e.g. ScrapDMS"
                     />
                   </div>
                 </div>

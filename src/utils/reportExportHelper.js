@@ -73,7 +73,8 @@ export const getDefaultTemplate = () => {
     regardsPrefix: 'Regards,',
     companyName: 'ScrapDMS',
     managerTitle: 'Manager Data analysis',
-    tableWarning: 'Please review these vendors, as their GSTR filing patterns appear to be repetitive in nature and may require further assessment.'
+    tableWarning: 'Please review these vendors, as their GSTR filing patterns appear to be repetitive in nature and may require further assessment.',
+    footerLogoDataUrl: null
   };
 };
 
@@ -177,7 +178,7 @@ export const exportReportToPdf = async ({
   template,
   clientLogoDataUrl
 }) => {
-  const scrapLogoDataUrl = createScrapDmsLogoDataUrl();
+  const scrapLogoDataUrl = template.footerLogoDataUrl || createScrapDmsLogoDataUrl();
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'pt',
@@ -195,7 +196,10 @@ export const exportReportToPdf = async ({
     // Header Left: Client Logo or Client Name
     if (clientLogoDataUrl) {
       try {
-        pageDoc.addImage(clientLogoDataUrl, 'PNG', 40, 20, 110, 36);
+        let fmt = 'PNG';
+        if (clientLogoDataUrl.startsWith('data:image/jpeg') || clientLogoDataUrl.startsWith('data:image/jpg')) fmt = 'JPEG';
+        else if (clientLogoDataUrl.startsWith('data:image/webp')) fmt = 'WEBP';
+        pageDoc.addImage(clientLogoDataUrl, fmt, 40, 20, 110, 36);
       } catch {
         pageDoc.setFont('helvetica', 'bold');
         pageDoc.setFontSize(13);
@@ -220,21 +224,24 @@ export const exportReportToPdf = async ({
     pageDoc.setLineWidth(0.75);
     pageDoc.line(40, 62, pageWidth - 40, 62);
 
-    // Footer: ScrapDMS Logo & branding centered
+    // Footer: Custom or default footer logo
     if (scrapLogoDataUrl) {
       try {
-        pageDoc.addImage(scrapLogoDataUrl, 'PNG', (pageWidth - 90) / 2, pageHeight - 48, 90, 26);
+        let fmt = 'PNG';
+        if (scrapLogoDataUrl.startsWith('data:image/jpeg') || scrapLogoDataUrl.startsWith('data:image/jpg')) fmt = 'JPEG';
+        else if (scrapLogoDataUrl.startsWith('data:image/webp')) fmt = 'WEBP';
+        pageDoc.addImage(scrapLogoDataUrl, fmt, (pageWidth - 90) / 2, pageHeight - 48, 90, 26);
       } catch {
         pageDoc.setFont('helvetica', 'bold');
         pageDoc.setFontSize(9);
         pageDoc.setTextColor(2, 132, 199);
-        pageDoc.text('ScrapDMS', pageWidth / 2, pageHeight - 28, { align: 'center' });
+        pageDoc.text(template.companyName || 'ScrapDMS', pageWidth / 2, pageHeight - 28, { align: 'center' });
       }
     } else {
       pageDoc.setFont('helvetica', 'bold');
       pageDoc.setFontSize(9);
       pageDoc.setTextColor(2, 132, 199);
-      pageDoc.text('ScrapDMS', pageWidth / 2, pageHeight - 28, { align: 'center' });
+      pageDoc.text(template.companyName || 'ScrapDMS', pageWidth / 2, pageHeight - 28, { align: 'center' });
     }
   };
 
@@ -539,7 +546,7 @@ export const exportReportToDocx = async ({
   template,
   clientLogoDataUrl
 }) => {
-  const scrapLogoDataUrl = createScrapDmsLogoDataUrl();
+  const scrapLogoDataUrl = template.footerLogoDataUrl || createScrapDmsLogoDataUrl();
   const scrapLogoBytes = dataUrlToUint8Array(scrapLogoDataUrl);
   const clientLogoBytes = dataUrlToUint8Array(clientLogoDataUrl);
 
