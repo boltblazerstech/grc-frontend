@@ -363,11 +363,10 @@ export const exportReportToPdf = async ({
     if (v.isRisky) compText += '[Risky] ';
     if (showRedCross) compText += '[X] ';
     compText += v.companyName;
-    // 3 leading spaces leave space for the native vector circle drawn in didDrawCell
-    const companyDisplay = `   ${compText}`;
+    const companyDisplay = compText;
 
-    // GSTR1 cell: 3 spaces for native dot + count + delayed months
-    let gstr1Display = `   ${v.gstr1Val}`;
+    // GSTR1 cell
+    let gstr1Display = `${v.gstr1Val}`;
     if (v.gstr1Months) gstr1Display += `  ${v.gstr1Months}`;
 
     // GSTR3B cell
@@ -417,12 +416,18 @@ export const exportReportToPdf = async ({
     },
     columnStyles: {
       0: { cellWidth: 24, halign: 'center' },  // Sl. No.
-      1: { cellWidth: 140 },                  // Company Name
+      1: { 
+        cellWidth: 140,
+        cellPadding: { top: 2.2, bottom: 2.2, left: 15, right: 2.2 }
+      },                                      // Company Name (15pt left padding keeps text away from dot)
       2: { cellWidth: 80 },                   // GSTN (standard clean helvetica)
       3: { cellWidth: 62 },                   // Type
       4: { cellWidth: 20, halign: 'center' },  // Age
       5: { cellWidth: 42, halign: 'center' },  // GST Status
-      6: { cellWidth: 46 },                   // GSTR1
+      6: { 
+        cellWidth: 46,
+        cellPadding: { top: 2.2, bottom: 2.2, left: 15, right: 2.2 }
+      },                                      // GSTR1 (15pt left padding keeps text away from dot)
       7: { cellWidth: 62 },                   // GSTR3B (Delayed)
       8: { cellWidth: 76 },                   // GSTR7R
       9: { cellWidth: 50, halign: 'center' },  // Aadhaar Authenticated
@@ -442,18 +447,22 @@ export const exportReportToPdf = async ({
         if (data.column.index === 1) {
           const dotColor = hexToRgb(v.companyDotColorHex || '#10b981');
           doc.setFillColor(dotColor.r, dotColor.g, dotColor.b);
-          const cx = data.cell.x + 4.5;
-          const cy = data.cell.y + data.cell.height / 2;
-          doc.circle(cx, cy, 2, 'F');
+          // Dot placed at left: cx = 6.8, radius = 3.0 (spans x=3.8 to 9.8)
+          // With left cellPadding = 15, text begins at x=15, leaving 5.2pt clear gap
+          const cx = data.cell.x + 6.8;
+          const lineCount = Array.isArray(data.cell.text) ? data.cell.text.length : 1;
+          const cy = (data.cell.y + data.cell.height / 2) - ((lineCount - 1) * 4.2);
+          doc.circle(cx, cy, 3.0, 'F');
         }
 
         // Native vector circular dot in Column 6 (GSTR1)
         if (data.column.index === 6) {
           const dotColor = hexToRgb(v.gstr1DotColorHex || '#10b981');
           doc.setFillColor(dotColor.r, dotColor.g, dotColor.b);
-          const cx = data.cell.x + 4.5;
-          const cy = data.cell.y + data.cell.height / 2;
-          doc.circle(cx, cy, 2, 'F');
+          const cx = data.cell.x + 6.8;
+          const lineCount = Array.isArray(data.cell.text) ? data.cell.text.length : 1;
+          const cy = (data.cell.y + data.cell.height / 2) - ((lineCount - 1) * 4.2);
+          doc.circle(cx, cy, 3.0, 'F');
         }
       }
     },
@@ -461,6 +470,11 @@ export const exportReportToPdf = async ({
       const rowIdx = data.row.index;
       const v = vendors[rowIdx];
       if (!v) return;
+
+      // Ensure body cells in column 1 & 6 maintain left padding for dot
+      if (data.section === 'body' && (data.column.index === 1 || data.column.index === 6)) {
+        data.cell.styles.cellPadding = { top: 2.2, bottom: 2.2, left: 15, right: 2.2 };
+      }
 
       // Scenario 9: Critical risk whole row red
       if (v.isEntireRowRed) {
@@ -780,7 +794,7 @@ export const exportReportToDocx = async ({
       compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
     const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
-    compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 19 }));
+    compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
     if (showRedCross) {
       compChildren.push(new TextRun({ text: '[X] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
@@ -789,7 +803,7 @@ export const exportReportToDocx = async ({
     // GSTR1 Cell formatted
     const gstr1DotColor = (v.gstr1DotColorHex || '10B981').replace('#', '');
     const gstr1Children = [
-      new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : gstr1DotColor, size: 19 }),
+      new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : gstr1DotColor, size: 22 }),
       new TextRun({ text: `${v.gstr1Val}`, bold: true, color: rowTextColor, size: 17 })
     ];
     if (v.gstr1Months) {
