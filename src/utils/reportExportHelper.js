@@ -157,6 +157,19 @@ export const dataUrlToUint8Array = (dataUrl) => {
   return bytes;
 };
 
+// Helper to convert hex color to RGB object
+const hexToRgb = (hex) => {
+  if (!hex) return { r: 16, g: 185, b: 129 };
+  const clean = hex.replace('#', '');
+  const bigint = parseInt(clean, 16);
+  if (isNaN(bigint)) return { r: 16, g: 185, b: 129 };
+  return {
+    r: (bigint >> 16) & 255,
+    g: (bigint >> 8) & 255,
+    b: bigint & 255
+  };
+};
+
 // ── EXPORT TO PDF ────────────────────────────────────────────────────────────
 export const exportReportToPdf = async ({
   client,
@@ -307,6 +320,19 @@ export const exportReportToPdf = async ({
   // ── PAGE 2+: Vendors Table ────────────────────────────────────────────────
   doc.addPage('a4', 'landscape');
 
+  // Warning statement strictly above table start on Page 2 (never in table header)
+  let tableStartY = 66;
+  if (template.tableWarning && template.tableWarning.trim()) {
+    doc.setFillColor(254, 242, 242);
+    doc.setDrawColor(254, 202, 202);
+    doc.roundedRect(18, 62, pageWidth - 36, 14, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.setTextColor(220, 38, 38);
+    doc.text(template.tableWarning.trim(), 24, 71.5);
+    tableStartY = 82;
+  }
+
   // Prepare table columns & data matching website exact styling
   const tableHeaders = [
     'Sl. No.',
@@ -321,7 +347,7 @@ export const exportReportToPdf = async ({
     'Aadhaar Authenticated',
     'Core Activity',
     'Turn over',
-    'Score'
+    'Score & Action'
   ];
 
   const tableBody = vendors.map((v, idx) => {
@@ -332,14 +358,16 @@ export const exportReportToPdf = async ({
     const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
     const showRedCross = isIndividualFirmOrTrader && v.gstr3bVal > 2;
 
-    // Badges / Prefixes
-    let compPrefix = '';
-    if (v.isRisky) compPrefix += '[Risky] ';
-    compPrefix += v.companyDotSymbol + ' ';
-    if (showRedCross) compPrefix += '❌ ';
+    // Clean text prefixes: avoid unicode emojis/bullets that cause %Ï garbling in PDF
+    let compText = '';
+    if (v.isRisky) compText += '[Risky] ';
+    if (showRedCross) compText += '[X] ';
+    compText += v.companyName;
+    // 3 leading spaces leave space for the native vector circle drawn in didDrawCell
+    const companyDisplay = `   ${compText}`;
 
-    // GSTR1 cell
-    let gstr1Display = `${v.gstr1DotSymbol} ${v.gstr1Val}`;
+    // GSTR1 cell: 3 spaces for native dot + count + delayed months
+    let gstr1Display = `   ${v.gstr1Val}`;
     if (v.gstr1Months) gstr1Display += `  ${v.gstr1Months}`;
 
     // GSTR3B cell
@@ -348,7 +376,7 @@ export const exportReportToPdf = async ({
 
     return [
       idx + 1,
-      compPrefix + v.companyName,
+      companyDisplay,
       v.gstin,
       v.gstType || 'Partnership',
       v.ageDisplay,
@@ -363,55 +391,70 @@ export const exportReportToPdf = async ({
     ];
   });
 
-  // Callout warning message right above table start
-  const warningText = `❌  ${template.tableWarning}`;
-
   autoTable(doc, {
     head: [tableHeaders],
     body: tableBody,
-    startY: 85,
-    margin: { top: 72, bottom: 58, left: 24, right: 24 },
+    startY: tableStartY,
+    margin: { top: 66, bottom: 48, left: 18, right: 18 },
     theme: 'grid',
     styles: {
       font: 'helvetica',
-      fontSize: 7.5,
-      cellPadding: 3.5,
+      fontSize: 6.8,
+      cellPadding: 2.2,
       valign: 'middle',
       textColor: [30, 41, 59],
       lineColor: [226, 232, 240],
-      lineWidth: 0.5
+      lineWidth: 0.5,
+      overflow: 'linebreak'
     },
     headStyles: {
       fillColor: [59, 24, 95], // Website deep purple header
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 7.5,
-      halign: 'center'
+      fontSize: 6.8,
+      halign: 'center',
+      valign: 'middle'
     },
     columnStyles: {
-      0: { cellWidth: 32, halign: 'center' }, // Sl. No.
-      1: { cellWidth: 145 },                  // Company Name
-      2: { cellWidth: 88, font: 'courier' }, // GSTN
-      3: { cellWidth: 70 },                  // Type
-      4: { cellWidth: 26, halign: 'center' }, // Age
-      5: { cellWidth: 50, halign: 'center' }, // Status
-      6: { cellWidth: 62 },                  // GSTR1
-      7: { cellWidth: 70 },                  // GSTR3B
-      8: { cellWidth: 70 },                  // GSTR7R
-      9: { cellWidth: 50, halign: 'center' }, // Aadhaar
-      10: { cellWidth: 75 },                 // Core Activity
-      11: { cellWidth: 58 },                 // Turnover
-      12: { cellWidth: 32, halign: 'center' } // Score
+      0: { cellWidth: 24, halign: 'center' },  // Sl. No.
+      1: { cellWidth: 140 },                  // Company Name
+      2: { cellWidth: 80 },                   // GSTN (standard clean helvetica)
+      3: { cellWidth: 62 },                   // Type
+      4: { cellWidth: 20, halign: 'center' },  // Age
+      5: { cellWidth: 42, halign: 'center' },  // GST Status
+      6: { cellWidth: 46 },                   // GSTR1
+      7: { cellWidth: 62 },                   // GSTR3B (Delayed)
+      8: { cellWidth: 76 },                   // GSTR7R
+      9: { cellWidth: 50, halign: 'center' },  // Aadhaar Authenticated
+      10: { cellWidth: 78 },                  // Core Activity
+      11: { cellWidth: 58 },                  // Turn over
+      12: { cellWidth: 48, halign: 'center' }  // Score & Action (Fits completely without truncation!)
     },
     didDrawPage: (data) => {
       drawPageHeaderAndFooter(doc, false);
+    },
+    didDrawCell: (data) => {
+      if (data.section === 'body') {
+        const v = vendors[data.row.index];
+        if (!v) return;
 
-      // On table's first page, draw the warning statement above the table
-      if (data.pageNumber === 2) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.setTextColor(220, 38, 38);
-        doc.text(warningText, 26, 76);
+        // Native vector circular dot in Column 1 (Company Name)
+        if (data.column.index === 1) {
+          const dotColor = hexToRgb(v.companyDotColorHex || '#10b981');
+          doc.setFillColor(dotColor.r, dotColor.g, dotColor.b);
+          const cx = data.cell.x + 4.5;
+          const cy = data.cell.y + data.cell.height / 2;
+          doc.circle(cx, cy, 2, 'F');
+        }
+
+        // Native vector circular dot in Column 6 (GSTR1)
+        if (data.column.index === 6) {
+          const dotColor = hexToRgb(v.gstr1DotColorHex || '#10b981');
+          doc.setFillColor(dotColor.r, dotColor.g, dotColor.b);
+          const cx = data.cell.x + 4.5;
+          const cy = data.cell.y + data.cell.height / 2;
+          doc.circle(cx, cy, 2, 'F');
+        }
       }
     },
     didParseCell: (data) => {
@@ -664,7 +707,7 @@ export const exportReportToDocx = async ({
     spacing: { before: 200, after: 140 },
     children: [
       new TextRun({
-        text: `❌  ${template.tableWarning}`,
+        text: `[!]  ${template.tableWarning}`,
         bold: true,
         size: 19,
         color: 'DC2626'
@@ -686,7 +729,7 @@ export const exportReportToDocx = async ({
     'Aadhaar Authenticated',
     'Core Activity',
     'Turn over',
-    'Score'
+    'Score & Action'
   ];
 
   const headerRow = new TableRow({
@@ -736,15 +779,17 @@ export const exportReportToDocx = async ({
     if (v.isRisky) {
       compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
-    compChildren.push(new TextRun({ text: `${v.companyDotSymbol} `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : v.companyDotColorHex, size: 19 }));
+    const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
+    compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 19 }));
     if (showRedCross) {
-      compChildren.push(new TextRun({ text: '❌ ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
+      compChildren.push(new TextRun({ text: '[X] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
     compChildren.push(new TextRun({ text: v.companyName, bold: v.isEntireRowRed, color: rowTextColor, size: 17 }));
 
     // GSTR1 Cell formatted
+    const gstr1DotColor = (v.gstr1DotColorHex || '10B981').replace('#', '');
     const gstr1Children = [
-      new TextRun({ text: `${v.gstr1DotSymbol} `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : v.gstr1DotColorHex, size: 19 }),
+      new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : gstr1DotColor, size: 19 }),
       new TextRun({ text: `${v.gstr1Val}`, bold: true, color: rowTextColor, size: 17 })
     ];
     if (v.gstr1Months) {
