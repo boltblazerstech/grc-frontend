@@ -1,15 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Building2, Users, Plus, Search, Trash2, Edit2, Upload, 
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
   ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
   UploadCloud, ChevronDown, ChevronUp, AlertTriangle, Download,
-  Copy, CheckCircle2, Loader2, ArrowUpDown, Save, Calendar
+  Copy, CheckCircle2, Loader2, ArrowUpDown, Save, Calendar,
+  FileText, Sliders, RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { apiClient } from '../api/apiClient';
 import { getGstr7Display } from '../utils/gstr7Display';
+import {
+  getDefaultTemplate,
+  exportReportToPdf,
+  exportReportToDocx,
+  loadImageAsBase64
+} from '../utils/reportExportHelper';
 
 export default function ClientVendorMapping({ currentUser }) {
   // Dynamically compute the last 12 months including the current month
@@ -81,6 +88,29 @@ export default function ClientVendorMapping({ currentUser }) {
   const [directLogoFile, setDirectLogoFile] = useState(null);
   const [directLogoPreview, setDirectLogoPreview] = useState(null);
   const [logoSubmitting, setLogoSubmitting] = useState(false);
+
+  // Report Template State (defaults to official PDF template, editable and persistent)
+  const [reportTemplate, setReportTemplate] = useState(() => {
+    try {
+      const saved = localStorage.getItem('grc_report_template_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return getDefaultTemplate();
+  });
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [exportingType, setExportingType] = useState(null); // 'excel' | 'pdf' | 'docx' | null
+  const downloadDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (downloadDropdownRef.current && !downloadDropdownRef.current.contains(e.target)) {
+        setShowDownloadMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Global Alert / Toast
   const [notification, setNotification] = useState(null);
@@ -1158,6 +1188,129 @@ export default function ClientVendorMapping({ currentUser }) {
     } catch (err) {
       console.error('Export Excel failed:', err);
       alert('Failed to export styled Excel. Please try again.');
+    }
+  };
+
+  // ── PDF & DOCX Assessment Report Generators ───────────────────────────────
+
+  const getClientLogoBase64 = async () => {
+    if (!selectedClient?.id) return null;
+    const url = apiClient.getClientLogoUrl(selectedClient.id);
+    return await loadImageAsBase64(url);
+  };
+
+  const getPreparedVendorsForExport = () => {
+    const last3Months = last12Months.slice(-3);
+    const last3Lower = last3Months.map(m => m.toLowerCase());
+
+    return filteredMappedVendors.map((v) => {
+      const gstin = v.vendorGstin;
+      const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
+      const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+      const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '').trim();
+      const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
+      const gstr7Info = getGstr7Display(v);
+      const ageDisplay = v.ageYears !== null && v.ageYears !== undefined
+        ? Math.round(v.ageYears)
+        : computeAge(v.registrationDate);
+
+      const isTrader = isPartyTrader(v.coreActivity);
+      const isPropOrPartner = isPropPartnerOrHuf(v.gstType);
+      const isAadhaarNo = (v.aadhaarValidation || '').trim().toLowerCase() === 'no';
+      const isGstr7NA = !v.gstdNo && (!v.gstr7Status || v.gstr7Status.toLowerCase() === 'n/a' || gstr7Info?.status?.text === 'N/A' || !gstr7Info?.status?.text);
+      const isLowTurnover = isTurnoverUnder3Cr(v.aggregateTurnover);
+
+      // Scenario 6: Red Cross if individual firm or traders && GSTR3B delayed > 2
+      const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
+      const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+
+      // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in the last 3 months
+      const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
+      const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
+        const token = m.trim().toLowerCase();
+        return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
+      });
+      const isRisky = showRedCross && hasLast3MonthsDelay;
+
+      // Scenario 9: Critical risk whole row red
+      const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
+
+      // Colored circular dot indicator colors matching website table
+      const companyDotColorHex = isEntireRowRed || gstr3bVal > 2 ? '#dc2626' : (gstr3bVal >= 1 || gstr1Val >= 1 ? '#f59e0b' : '#10b981');
+      const gstr1DotColorHex = gstr1Val > 2 ? '#dc2626' : (gstr1Val >= 1 ? '#f59e0b' : '#10b981');
+
+      return {
+        gstin,
+        companyName: getVendorDisplayName(v),
+        companyDotSymbol: '●',
+        companyDotColorHex,
+        isRisky,
+        showRedCross,
+        isEntireRowRed,
+        gstType: v.gstType || 'Partnership',
+        ageDisplay,
+        gstStatus: v.gstStatus || 'Active',
+        gstr1Val,
+        gstr1DotSymbol: '●',
+        gstr1DotColorHex,
+        gstr1Months,
+        gstr3bVal,
+        gstr3bMonths,
+        gstr7Text: gstr7Info?.status?.text || 'N/A',
+        aadhaarValidation: v.aadhaarValidation || 'N/A',
+        coreActivity: v.coreActivity || 'Manufacturer',
+        aggregateTurnover: v.aggregateTurnover || 'N/A',
+        isLowTurnover,
+        grcScore: v.grcScore
+      };
+    });
+  };
+
+  const handleExportPdf = async () => {
+    if (!filteredMappedVendors.length) {
+      showToast('No vendors to export', 'error');
+      return;
+    }
+    setExportingType('pdf');
+    try {
+      const clientLogo = await getClientLogoBase64();
+      const preparedVendors = getPreparedVendorsForExport();
+      await exportReportToPdf({
+        client: selectedClient,
+        vendors: preparedVendors,
+        template: reportTemplate,
+        clientLogoDataUrl: clientLogo
+      });
+      showToast('PDF report downloaded successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to export PDF: ' + err.message, 'error');
+    } finally {
+      setExportingType(null);
+    }
+  };
+
+  const handleExportDocx = async () => {
+    if (!filteredMappedVendors.length) {
+      showToast('No vendors to export', 'error');
+      return;
+    }
+    setExportingType('docx');
+    try {
+      const clientLogo = await getClientLogoBase64();
+      const preparedVendors = getPreparedVendorsForExport();
+      await exportReportToDocx({
+        client: selectedClient,
+        vendors: preparedVendors,
+        template: reportTemplate,
+        clientLogoDataUrl: clientLogo
+      });
+      showToast('Word DOCX report downloaded successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to export DOCX: ' + err.message, 'error');
+    } finally {
+      setExportingType(null);
     }
   };
 
@@ -2382,6 +2535,286 @@ export default function ClientVendorMapping({ currentUser }) {
           text-align: center;
           color: #64748b;
         }
+
+        /* Download Dropdown & Options */
+        .download-dropdown-wrapper {
+          position: relative;
+          display: inline-block;
+        }
+
+        .btn-download-main {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.55rem 1.15rem;
+          background: #f8fafc;
+          border: 1.5px solid #cbd5e1;
+          color: #1e293b;
+          border-radius: 9px;
+          font-family: inherit;
+          font-size: 0.86rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+        }
+
+        .btn-download-main:hover:not(:disabled) {
+          background: #ffffff;
+          border-color: #7c3aed;
+          color: #7c3aed;
+          box-shadow: 0 3px 10px rgba(124, 58, 237, 0.12);
+        }
+
+        .btn-download-main:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .download-dropdown-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          width: 310px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+          padding: 0.45rem;
+          z-index: 1000;
+          animation: dropFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes dropFadeIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .download-menu-item {
+          width: 100%;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          padding: 0.65rem 0.8rem;
+          background: none;
+          border: none;
+          border-radius: 8px;
+          text-align: left;
+          cursor: pointer;
+          font-family: inherit;
+          transition: background 0.15s ease;
+        }
+
+        .download-menu-item:hover {
+          background: #f1f5f9;
+        }
+
+        .download-menu-item.item-customize:hover {
+          background: #f5f3ff;
+        }
+
+        .download-menu-item .item-title {
+          font-size: 0.86rem;
+          font-weight: 700;
+          color: #1e293b;
+          margin-bottom: 2px;
+        }
+
+        .download-menu-item .item-desc {
+          font-size: 0.73rem;
+          color: #64748b;
+          line-height: 1.25;
+        }
+
+        .dropdown-divider {
+          height: 1px;
+          background: #e2e8f0;
+          margin: 0.35rem 0;
+        }
+
+        /* Warning Callout Notice Right Above Table */
+        .table-assessment-warning-banner {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-left: 4px solid #dc2626;
+          border-radius: 10px;
+          padding: 0.65rem 1rem;
+          margin-bottom: 0.85rem;
+          color: #991b1b;
+          font-size: 0.84rem;
+          font-weight: 700;
+          line-height: 1.4;
+          box-shadow: 0 1px 3px rgba(220, 38, 38, 0.04);
+        }
+
+        .table-assessment-warning-banner .warning-banner-icon {
+          font-size: 1rem;
+          flex-shrink: 0;
+        }
+
+        /* Template Customization Modal Styles */
+        .template-editor-modal {
+          max-width: 900px !important;
+          max-height: 92vh !important;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .template-editor-body {
+          overflow-y: auto;
+          max-height: calc(92vh - 140px);
+          padding: 1.25rem 1.5rem;
+        }
+
+        .template-form-section {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 1.1rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .template-form-section .section-title {
+          font-size: 0.92rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin-bottom: 0.85rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .form-row-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 0.85rem;
+        }
+
+        .observations-list-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .observation-edit-item {
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 9px;
+          padding: 0.75rem;
+          transition: border-color 0.15s ease;
+        }
+
+        .observation-edit-item:focus-within {
+          border-color: #7c3aed;
+          box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+        }
+
+        .obs-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 0.4rem;
+        }
+
+        .obs-num {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #7c3aed;
+          color: #ffffff;
+          font-size: 0.75rem;
+          font-weight: 800;
+          flex-shrink: 0;
+        }
+
+        .obs-title-input {
+          flex: 1;
+          padding: 0.35rem 0.65rem;
+          font-family: inherit;
+          font-size: 0.86rem;
+          font-weight: 700;
+          color: #0f172a;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+        }
+
+        .obs-desc-textarea {
+          width: 100%;
+          padding: 0.45rem 0.65rem;
+          font-family: inherit;
+          font-size: 0.82rem;
+          color: #334155;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          resize: vertical;
+        }
+
+        .template-editor-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem 1.5rem;
+          border-top: 1px solid #e2e8f0;
+          background: #ffffff;
+          border-radius: 0 0 16px 16px;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+        }
+
+        .footer-right-buttons {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          flex-wrap: wrap;
+        }
+
+        .btn-download-pdf-action {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          background: #dc2626;
+          color: #ffffff;
+          border: none;
+          padding: 0.55rem 1rem;
+          border-radius: 8px;
+          font-family: inherit;
+          font-size: 0.86rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .btn-download-pdf-action:hover:not(:disabled) {
+          background: #b91c1c;
+          box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
+        }
+
+        .btn-download-docx-action {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          background: #2563eb;
+          color: #ffffff;
+          border: none;
+          padding: 0.55rem 1rem;
+          border-radius: 8px;
+          font-family: inherit;
+          font-size: 0.86rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .btn-download-docx-action:hover:not(:disabled) {
+          background: #1d4ed8;
+          box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+        }
       `}</style>
 
       {/* ── Top Bar with Client-Wise Filter Dropdown ── */}
@@ -2539,9 +2972,90 @@ export default function ClientVendorMapping({ currentUser }) {
             )}
           </button>
 
-          <button className="btn-secondary-sm" onClick={handleExportExcel} disabled={!filteredMappedVendors.length}>
-            <Download size={15} /> Export Excel
+          <button
+            type="button"
+            className="btn-secondary-sm"
+            onClick={() => setShowTemplateModal(true)}
+            title="Edit report template, observations & disclaimer text"
+          >
+            <Sliders size={15} /> Edit Template
           </button>
+
+          <div className="download-dropdown-wrapper" ref={downloadDropdownRef}>
+            <button
+              type="button"
+              className="btn-download-main"
+              onClick={() => setShowDownloadMenu(prev => !prev)}
+              disabled={!filteredMappedVendors.length}
+            >
+              {exportingType ? (
+                <>
+                  <Loader2 size={15} className="spin-icon" />
+                  Generating {exportingType.toUpperCase()}...
+                </>
+              ) : (
+                <>
+                  <Download size={15} />
+                  Download
+                  <ChevronDown size={14} />
+                </>
+              )}
+            </button>
+
+            {showDownloadMenu && (
+              <div className="download-dropdown-menu">
+                <button
+                  type="button"
+                  className="download-menu-item"
+                  onClick={() => { setShowDownloadMenu(false); handleExportExcel(); }}
+                >
+                  <FileSpreadsheet size={16} color="#10b981" />
+                  <div>
+                    <div className="item-title">Export as Excel (.xlsx)</div>
+                    <div className="item-desc">Spreadsheet with colored dots, red months & styles</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="download-menu-item"
+                  onClick={() => { setShowDownloadMenu(false); handleExportPdf(); }}
+                >
+                  <FileText size={16} color="#ef4444" />
+                  <div>
+                    <div className="item-title">Download as PDF (.pdf)</div>
+                    <div className="item-desc">Assessment report with key observations & styled table</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="download-menu-item"
+                  onClick={() => { setShowDownloadMenu(false); handleExportDocx(); }}
+                >
+                  <Edit2 size={16} color="#2563eb" />
+                  <div>
+                    <div className="item-title">Download as DOCX (.docx)</div>
+                    <div className="item-desc">100% editable Word template with tables & styles</div>
+                  </div>
+                </button>
+
+                <div className="dropdown-divider"></div>
+
+                <button
+                  type="button"
+                  className="download-menu-item item-customize"
+                  onClick={() => { setShowDownloadMenu(false); setShowTemplateModal(true); }}
+                >
+                  <Sliders size={16} color="#7c3aed" />
+                  <div>
+                    <div className="item-title">Customize Report Template...</div>
+                    <div className="item-desc">Edit month, observations & disclaimer text</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2577,6 +3091,13 @@ export default function ClientVendorMapping({ currentUser }) {
           </div>
         ) : (
           <div className="table-responsive-wrapper">
+            {/* Warning statement right above table start */}
+            {filteredMappedVendors.length > 0 && reportTemplate.tableWarning && (
+              <div className="table-assessment-warning-banner">
+                <span className="warning-banner-icon">❌</span>
+                <span className="warning-banner-text">{reportTemplate.tableWarning}</span>
+              </div>
+            )}
             <table className="assessment-table">
               <thead>
                 <tr>
@@ -3478,6 +3999,221 @@ export default function ClientVendorMapping({ currentUser }) {
               >
                 <Check size={15} /> Apply ({monthPicker.selectedMonths.length})
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Template Customization Modal (Editable PDF & DOCX Wording) ── */}
+      {showTemplateModal && (
+        <div className="modal-backdrop" onClick={() => setShowTemplateModal(false)}>
+          <div className="modal-content template-editor-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Vendor Assessment Report Template</div>
+                <div className="modal-subtitle">Customize the header, observations, disclaimer, and warning before downloading PDF or Word DOCX.</div>
+              </div>
+              <button type="button" className="close-btn" onClick={() => setShowTemplateModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body template-editor-body">
+              {/* Section: Report Header */}
+              <div className="template-form-section">
+                <div className="section-title">
+                  <Building2 size={16} color="#7c3aed" />
+                  Report Header & Salutation
+                </div>
+                <div className="form-row-grid">
+                  <div className="form-group">
+                    <label>Report Month (e.g. Sep 26, Oct 26)</label>
+                    <input 
+                      type="text" 
+                      value={reportTemplate.reportMonth}
+                      onChange={e => setReportTemplate(prev => ({ ...prev, reportMonth: e.target.value }))}
+                      placeholder="e.g. Sep 26"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Salutation</label>
+                    <input 
+                      type="text" 
+                      value={reportTemplate.salutation}
+                      onChange={e => setReportTemplate(prev => ({ ...prev, salutation: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                  <label>Introductory Paragraph</label>
+                  <input 
+                    type="text" 
+                    value={reportTemplate.introText}
+                    onChange={e => setReportTemplate(prev => ({ ...prev, introText: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Section: 7 Key Observations */}
+              <div className="template-form-section">
+                <div className="section-title">
+                  <FileText size={16} color="#7c3aed" />
+                  Key Observations (Numbered List on Page 1)
+                </div>
+                <div className="observations-list-grid">
+                  {reportTemplate.observations.map((obs, idx) => (
+                    <div key={obs.id || idx} className="observation-edit-item">
+                      <div className="obs-header">
+                        <span className="obs-num">{idx + 1}</span>
+                        <input 
+                          type="text" 
+                          className="obs-title-input"
+                          value={obs.title} 
+                          onChange={e => {
+                            const newObs = [...reportTemplate.observations];
+                            newObs[idx] = { ...newObs[idx], title: e.target.value };
+                            setReportTemplate(prev => ({ ...prev, observations: newObs }));
+                          }}
+                          placeholder="Observation Title"
+                        />
+                      </div>
+                      <textarea 
+                        rows={2}
+                        className="obs-desc-textarea"
+                        value={obs.text}
+                        onChange={e => {
+                          const newObs = [...reportTemplate.observations];
+                          newObs[idx] = { ...newObs[idx], text: e.target.value };
+                          setReportTemplate(prev => ({ ...prev, observations: newObs }));
+                        }}
+                        placeholder="Observation description..."
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section: Warning Notice Above Table */}
+              <div className="template-form-section">
+                <div className="section-title">
+                  <AlertTriangle size={16} color="#dc2626" />
+                  Warning Notice Above Table (Page 2 & Website Table)
+                </div>
+                <div className="form-group">
+                  <label>Statement rendered just before the vendors table</label>
+                  <input 
+                    type="text" 
+                    value={reportTemplate.tableWarning}
+                    onChange={e => setReportTemplate(prev => ({ ...prev, tableWarning: e.target.value }))}
+                    placeholder="Please review these vendors..."
+                  />
+                </div>
+              </div>
+
+              {/* Section: Disclaimer & Sign-Off */}
+              <div className="template-form-section">
+                <div className="section-title">
+                  <ShieldCheck size={16} color="#059669" />
+                  Disclaimer & Sign-Off
+                </div>
+                <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                  <label>Disclaimer Paragraph 1</label>
+                  <textarea 
+                    rows={2}
+                    value={reportTemplate.disclaimerP1}
+                    onChange={e => setReportTemplate(prev => ({ ...prev, disclaimerP1: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                  <label>Disclaimer Paragraph 2</label>
+                  <textarea 
+                    rows={2}
+                    value={reportTemplate.disclaimerP2}
+                    onChange={e => setReportTemplate(prev => ({ ...prev, disclaimerP2: e.target.value }))}
+                  />
+                </div>
+                <div className="form-row-grid">
+                  <div className="form-group">
+                    <label>Regards Text</label>
+                    <input 
+                      type="text" 
+                      value={reportTemplate.regardsPrefix}
+                      onChange={e => setReportTemplate(prev => ({ ...prev, regardsPrefix: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Company Branding (Footer Logo)</label>
+                    <input 
+                      type="text" 
+                      value={reportTemplate.companyName}
+                      onChange={e => setReportTemplate(prev => ({ ...prev, companyName: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Signer Designation</label>
+                    <input 
+                      type="text" 
+                      value={reportTemplate.managerTitle}
+                      onChange={e => setReportTemplate(prev => ({ ...prev, managerTitle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="template-editor-footer">
+              <button 
+                type="button" 
+                className="btn-secondary-sm"
+                onClick={() => {
+                  const def = getDefaultTemplate();
+                  setReportTemplate(def);
+                  localStorage.removeItem('grc_report_template_v1');
+                  showToast('Template reset to default values', 'info');
+                }}
+              >
+                <RotateCcw size={14} /> Reset Default
+              </button>
+
+              <div className="footer-right-buttons">
+                <button 
+                  type="button" 
+                  className="btn-secondary-sm"
+                  onClick={() => {
+                    localStorage.setItem('grc_report_template_v1', JSON.stringify(reportTemplate));
+                    showToast('Template preferences saved locally');
+                    setShowTemplateModal(false);
+                  }}
+                >
+                  <Save size={14} /> Save Template
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn-download-pdf-action"
+                  onClick={async () => {
+                    localStorage.setItem('grc_report_template_v1', JSON.stringify(reportTemplate));
+                    setShowTemplateModal(false);
+                    await handleExportPdf();
+                  }}
+                  disabled={!filteredMappedVendors.length || exportingType !== null}
+                >
+                  <FileText size={15} /> Download PDF
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn-download-docx-action"
+                  onClick={async () => {
+                    localStorage.setItem('grc_report_template_v1', JSON.stringify(reportTemplate));
+                    setShowTemplateModal(false);
+                    await handleExportDocx();
+                  }}
+                  disabled={!filteredMappedVendors.length || exportingType !== null}
+                >
+                  <Edit2 size={15} /> Download DOCX
+                </button>
+              </div>
             </div>
           </div>
         </div>
