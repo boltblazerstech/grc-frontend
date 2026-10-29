@@ -720,6 +720,10 @@ export default function ClientVendorMapping({ currentUser }) {
     setShowImportModal(true);
   };
 
+  const handleRemoveClientFromImport = (index) => {
+    setParsedImportData(prev => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleSheetFileSelected = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -730,39 +734,9 @@ export default function ClientVendorMapping({ currentUser }) {
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[firstSheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-      if (!rows || rows.length < 2) {
-        throw new Error('Sheet is empty or missing header rows.');
-      }
-
-      const headerRow = rows[0] || [];
-      const subHeaderRow = rows[1] || [];
-
-      const detectedBlocks = [];
-      for (let col = 0; col < headerRow.length; col++) {
-        const rawName = String(headerRow[col] || '').trim();
-        if (rawName && !rawName.toLowerCase().startsWith('vendor') && !rawName.toLowerCase().startsWith('gst')) {
-          let vendorCol = col;
-          let gstnCol = col + 1;
-          for (let c = col; c < col + 8 && c < subHeaderRow.length; c++) {
-            const h = String(subHeaderRow[c] || '').trim().toLowerCase();
-            if (h === 'gstn' || h === 'gstin' || h.includes('gst')) gstnCol = c;
-            if (h === 'vendor' || h.includes('vendor name') || h.includes('supplier')) vendorCol = c;
-          }
-          detectedBlocks.push({
-            clientName: rawName,
-            startCol: col,
-            vendorCol,
-            gstnCol
-          });
-        }
-      }
-
-      if (detectedBlocks.length === 0) {
-        throw new Error('Could not detect any client columns in row 1. Make sure row 1 has client names.');
+      if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('The uploaded file does not contain any readable sheets.');
       }
 
       let grcDetails = [];
@@ -773,33 +747,79 @@ export default function ClientVendorMapping({ currentUser }) {
       }
 
       const seenVendors = new Map();
+      let parsedClients = [];
 
-      const parsedClients = detectedBlocks.map(block => {
+      // ── STRATEGY 1: MULTI-SHEET PARSER (Each sheet = One Client) ──────────
+      // Official format: Each sheet tab name represents a Client, rows are that client's vendors
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) continue;
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        if (!rows || rows.length === 0) continue;
+
+        // Find header row in first 5 rows
+        let headerRowIdx = -1;
+        let vendorCol = -1;
+        let gstnCol = -1;
+
+        for (let r = 0; r < Math.min(rows.length, 5); r++) {
+          const row = rows[r];
+          if (!row || !row.length) continue;
+          let vCol = -1;
+          let gCol = -1;
+          for (let c = 0; c < row.length; c++) {
+            const h = String(row[c] || '').trim().toLowerCase();
+            if (h === 'vendor' || h === 'vendor name' || h.includes('vendor') || h.includes('supplier') || h.includes('party')) {
+              vCol = c;
+            }
+            if (h === 'gstn' || h === 'gstin' || h === 'vendor gstn' || h.includes('gst')) {
+              gCol = c;
+            }
+          }
+          if (vCol !== -1 && gCol !== -1) {
+            headerRowIdx = r;
+            vendorCol = vCol;
+            gstnCol = gCol;
+            break;
+          }
+        }
+
+        if (headerRowIdx === -1) continue;
+
+        const cleanClientName = sheetName.trim();
         let resolvedGstin = '';
-        const existingClient = clients.find(c => 
-          c.clientName && c.clientName.trim().toLowerCase() === block.clientName.toLowerCase()
-        );
 
-        if (existingClient) {
-          resolvedGstin = existingClient.clientGstin;
+        // 1. Check if sheet name contains 15-char alphanumeric GSTIN
+        const nameGstinMatch = cleanClientName.match(/\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b/i);
+        if (nameGstinMatch) {
+          resolvedGstin = nameGstinMatch[0].toUpperCase();
         } else {
-          const matchedGrc = grcDetails.find(g => 
-            (g.tradeName && g.tradeName.toLowerCase().includes(block.clientName.toLowerCase())) ||
-            (g.legalName && g.legalName.toLowerCase().includes(block.clientName.toLowerCase()))
+          // 2. Match with existing clients by name
+          const existingClient = clients.find(c =>
+            c.clientName && c.clientName.trim().toLowerCase() === cleanClientName.toLowerCase()
           );
-          if (matchedGrc) {
-            resolvedGstin = matchedGrc.gstin;
+          if (existingClient && existingClient.clientGstin) {
+            resolvedGstin = existingClient.clientGstin;
+          } else {
+            // 3. Match with Master GRC records
+            const matchedGrc = grcDetails.find(g =>
+              (g.tradeName && g.tradeName.toLowerCase().includes(cleanClientName.toLowerCase())) ||
+              (g.legalName && g.legalName.toLowerCase().includes(cleanClientName.toLowerCase()))
+            );
+            if (matchedGrc && matchedGrc.gstin) {
+              resolvedGstin = matchedGrc.gstin;
+            }
           }
         }
 
         const validVendors = [];
         const duplicateVendors = [];
 
-        for (let r = 2; r < rows.length; r++) {
+        for (let r = headerRowIdx + 1; r < rows.length; r++) {
           const row = rows[r];
           if (!row) continue;
-          const vName = String(row[block.vendorCol] || '').trim();
-          const vGstn = String(row[block.gstnCol] || '').trim().toUpperCase();
+          const vName = String(row[vendorCol] || '').trim();
+          const vGstn = String(row[gstnCol] || '').trim().toUpperCase();
 
           if (vGstn && vGstn.length === 15 && /^[0-9A-Z]{15}$/.test(vGstn)) {
             if (seenVendors.has(vGstn)) {
@@ -809,7 +829,7 @@ export default function ClientVendorMapping({ currentUser }) {
                 firstClient: seenVendors.get(vGstn)
               });
             } else {
-              seenVendors.set(vGstn, block.clientName);
+              seenVendors.set(vGstn, cleanClientName);
               validVendors.push({
                 name: vName || vGstn,
                 gstin: vGstn
@@ -818,13 +838,103 @@ export default function ClientVendorMapping({ currentUser }) {
           }
         }
 
-        return {
-          clientName: block.clientName,
+        parsedClients.push({
+          clientName: cleanClientName,
           clientGstin: resolvedGstin,
           vendors: validVendors,
           duplicateVendors: duplicateVendors
-        };
-      });
+        });
+      }
+
+      // ── STRATEGY 2: FALLBACK TO HORIZONTAL COLUMNS IN SHEET 1 ───────────────
+      if (parsedClients.length === 0) {
+        const firstSheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+        if (!rows || rows.length < 2) {
+          throw new Error('Sheet is empty or missing header rows.');
+        }
+
+        const headerRow = rows[0] || [];
+        const subHeaderRow = rows[1] || [];
+
+        const detectedBlocks = [];
+        for (let col = 0; col < headerRow.length; col++) {
+          const rawName = String(headerRow[col] || '').trim();
+          if (rawName && !rawName.toLowerCase().startsWith('vendor') && !rawName.toLowerCase().startsWith('gst')) {
+            let vendorCol = col;
+            let gstnCol = col + 1;
+            for (let c = col; c < col + 8 && c < subHeaderRow.length; c++) {
+              const h = String(subHeaderRow[c] || '').trim().toLowerCase();
+              if (h === 'gstn' || h === 'gstin' || h.includes('gst')) gstnCol = c;
+              if (h === 'vendor' || h.includes('vendor name') || h.includes('supplier')) vendorCol = c;
+            }
+            detectedBlocks.push({
+              clientName: rawName,
+              startCol: col,
+              vendorCol,
+              gstnCol
+            });
+          }
+        }
+
+        if (detectedBlocks.length === 0) {
+          throw new Error("Could not detect valid Client sheets with 'Vendor' and 'GSTN' columns. Please check your Excel workbook.");
+        }
+
+        parsedClients = detectedBlocks.map(block => {
+          let resolvedGstin = '';
+          const existingClient = clients.find(c => 
+            c.clientName && c.clientName.trim().toLowerCase() === block.clientName.toLowerCase()
+          );
+
+          if (existingClient && existingClient.clientGstin) {
+            resolvedGstin = existingClient.clientGstin;
+          } else {
+            const matchedGrc = grcDetails.find(g => 
+              (g.tradeName && g.tradeName.toLowerCase().includes(block.clientName.toLowerCase())) ||
+              (g.legalName && g.legalName.toLowerCase().includes(block.clientName.toLowerCase()))
+            );
+            if (matchedGrc && matchedGrc.gstin) {
+              resolvedGstin = matchedGrc.gstin;
+            }
+          }
+
+          const validVendors = [];
+          const duplicateVendors = [];
+
+          for (let r = 2; r < rows.length; r++) {
+            const row = rows[r];
+            if (!row) continue;
+            const vName = String(row[block.vendorCol] || '').trim();
+            const vGstn = String(row[block.gstnCol] || '').trim().toUpperCase();
+
+            if (vGstn && vGstn.length === 15 && /^[0-9A-Z]{15}$/.test(vGstn)) {
+              if (seenVendors.has(vGstn)) {
+                duplicateVendors.push({
+                  name: vName || vGstn,
+                  gstin: vGstn,
+                  firstClient: seenVendors.get(vGstn)
+                });
+              } else {
+                seenVendors.set(vGstn, block.clientName);
+                validVendors.push({
+                  name: vName || vGstn,
+                  gstin: vGstn
+                });
+              }
+            }
+          }
+
+          return {
+            clientName: block.clientName,
+            clientGstin: resolvedGstin,
+            vendors: validVendors,
+            duplicateVendors: duplicateVendors
+          };
+        });
+      }
 
       setParsedImportData(parsedClients);
     } catch (err) {
@@ -3650,7 +3760,7 @@ export default function ClientVendorMapping({ currentUser }) {
               <div>
                 <h3 className="modal-title">Import & Map Clients from Excel</h3>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
-                  Upload Excel (.xlsx, .xls) with side-by-side client blocks.
+                  Upload an Excel workbook where each sheet represents a Client and their respective vendors.
                 </div>
               </div>
               <button onClick={() => setShowImportModal(false)} disabled={importSubmitting} className="btn-ghost-sm"><X size={18} /></button>
@@ -3678,10 +3788,10 @@ export default function ClientVendorMapping({ currentUser }) {
                       <UploadCloud size={24} />
                     </div>
                     <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                      {importParsing ? 'Analyzing sheet format...' : 'Click or drag Excel / CSV file here to upload'}
+                      {importParsing ? 'Analyzing sheets & clients...' : 'Click or drag Excel file (.xlsx) here to upload'}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b', maxWidth: '480px', lineHeight: 1.5 }}>
-                      Expected format: Row 1 contains Client Names side-by-side horizontally. Below each client are their respective Vendor & GSTN columns.
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', maxWidth: '520px', lineHeight: 1.5 }}>
+                      Multi-Sheet Format: Each sheet tab represents a Client (e.g. "Company Name -1"), containing columns for Vendor, GSTN, Email, Mobile Number, Transactions.
                     </div>
                   </div>
                 </div>
@@ -3701,7 +3811,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: '#5b21b6', fontSize: '0.88rem' }}>
                       <Check size={16} color="#7c3aed" />
-                      Detected {parsedImportData.length} Client(s) • Total {totalVendorsInSheet} Vendor(s) to map
+                      Detected {parsedImportData.length} Client Sheet(s) • Total {totalVendorsInSheet} Vendor(s) to map
                     </div>
                     <button type="button" className="btn-ghost-sm" onClick={() => { setParsedImportData([]); setImportFile(null); }}>
                       Choose Different File
@@ -3746,7 +3856,7 @@ export default function ClientVendorMapping({ currentUser }) {
                               <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.92rem' }}>
                                 {clientItem.clientName}
                               </span>
-                              <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem', borderRadius: '6px', background: '#ede9fe', color: '#6d28d9', fontWeight: 800 }}>
+                              <span style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem', borderRadius: '6px', background: clientItem.vendors.length > 0 ? '#ede9fe' : '#f1f5f9', color: clientItem.vendors.length > 0 ? '#6d28d9' : '#64748b', fontWeight: 800 }}>
                                 {clientItem.vendors.length} vendors
                               </span>
                             </div>
@@ -3775,6 +3885,18 @@ export default function ClientVendorMapping({ currentUser }) {
                               <button
                                 type="button"
                                 className="btn-ghost-sm"
+                                style={{ padding: '0.25rem 0.45rem', fontSize: '0.75rem', color: '#ef4444' }}
+                                title="Remove this sheet/client from import"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveClientFromImport(idx);
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-ghost-sm"
                                 style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                                 onClick={() => setExpandedClientIndex(isExpanded ? null : idx)}
                               >
@@ -3784,24 +3906,34 @@ export default function ClientVendorMapping({ currentUser }) {
                           </div>
 
                           {isExpanded && (
-                            <div style={{ padding: '0.85rem 1rem', background: '#ffffff', maxHeight: '180px', overflowY: 'auto' }}>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                                {clientItem.vendors.map((v, vIdx) => (
-                                  <span
-                                    key={vIdx}
-                                    style={{
-                                      fontFamily: 'monospace',
-                                      fontSize: '0.75rem',
-                                      padding: '0.2rem 0.5rem',
-                                      background: '#f1f5f9',
-                                      borderRadius: '4px',
-                                      color: '#334155'
-                                    }}
-                                  >
-                                    {v.gstin}
-                                  </span>
-                                ))}
-                              </div>
+                            <div style={{ padding: '0.85rem 1rem', background: '#ffffff', maxHeight: '220px', overflowY: 'auto' }}>
+                              {clientItem.vendors.length === 0 ? (
+                                <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                  No vendors found in this sheet.
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                  {clientItem.vendors.map((v, vIdx) => (
+                                    <span
+                                      key={vIdx}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        fontSize: '0.74rem',
+                                        padding: '0.25rem 0.55rem',
+                                        background: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '6px',
+                                        color: '#1e293b'
+                                      }}
+                                    >
+                                      <span style={{ fontWeight: 700 }}>{v.name}</span>
+                                      <span style={{ fontFamily: 'monospace', color: '#64748b', fontSize: '0.72rem' }}>({v.gstin})</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
