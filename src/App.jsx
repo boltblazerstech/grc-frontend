@@ -14,6 +14,7 @@ const Gstr7DataEntryRedirect = React.lazy(() => import('./components/Gstr7DataEn
 const TrashFolder = React.lazy(() => import('./components/TrashFolder'));
 const VendorReportView = React.lazy(() => import('./components/VendorReportView'));
 const ClientVendorMapping = React.lazy(() => import('./components/ClientVendorMapping'));
+const CreateInvoice = React.lazy(() => import('./components/CreateInvoice'));
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -126,6 +127,8 @@ function App() {
           <Routes>
             <Route path="/vendor-report/:gstin" element={<VendorReportView />} />
             <Route path="/admin/client-mapping" element={<ClientVendorMapping currentUser={currentUser} />} />
+            <Route path="/create-invoice" element={<CreateInvoice currentUser={currentUser} onBack={handleHomeClick} />} />
+            <Route path="/invoice" element={<CreateInvoice currentUser={currentUser} onBack={handleHomeClick} />} />
             <Route path="/gstr7-master" element={<Gstr7Management />} />
             <Route path="/grc/master-view" element={<MasterView currentUser={currentUser} />} />
             <Route path="/grc/gstr7/:gstin" element={<Gstr7DataEntryRedirect />} />

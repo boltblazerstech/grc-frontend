@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown, Users } from 'lucide-react';
+import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown, Users, Receipt } from 'lucide-react';
 import UserProfileModal from './UserProfileModal';
 import SettingsModal from './SettingsModal';
 
@@ -9,6 +9,7 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
     const location = useLocation();
     const onGstr7Page = location.pathname === '/gstr7-master';
     const onClientMappingPage = location.pathname === '/admin/client-mapping';
+    const onInvoicePage = location.pathname === '/create-invoice' || location.pathname === '/invoice';
     const [showProfile, setShowProfile] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [scrolled, setScrolled] = useState(false);
@@ -147,11 +148,28 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                                 <span className="btn-text">Client Mapping</span>
                             </button>
 
+                            {/* Create / Generate Invoice Navigation Button */}
+                            <button
+                                className={`navbar-btn ${onInvoicePage ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                onClick={() => {
+                                    setShowSuperAdmin(false);
+                                    if (onInvoicePage) {
+                                        navigate('/');
+                                    } else {
+                                        navigate('/create-invoice');
+                                    }
+                                }}
+                                title="Create / Generate Tax Invoice"
+                            >
+                                <Receipt size={15} />
+                                <span className="btn-text">+ Invoice</span>
+                            </button>
+
                             {currentUser.role === 'super_admin' && (
                                 <button
                                     className={`navbar-btn ${(showSuperAdmin || onGstr7Page) ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
                                     onClick={() => {
-                                        if (onGstr7Page || onClientMappingPage) {
+                                        if (onGstr7Page || onClientMappingPage || onInvoicePage) {
                                             navigate('/');
                                         } else {
                                             setShowSuperAdmin(!showSuperAdmin);
@@ -175,7 +193,7 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                                 </button>
                             )}
 
-                            {(onGstr7Page || onClientMappingPage) && currentUser.role === 'super_admin' && (
+                            {(onGstr7Page || onClientMappingPage || onInvoicePage) && currentUser.role === 'super_admin' && (
                                 <button
                                     className="navbar-btn navbar-btn-ghost"
                                     onClick={() => navigate('/')}

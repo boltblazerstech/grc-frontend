@@ -641,5 +641,16 @@ export const apiClient = {
             throw new Error(msg);
         }
         return response.json();
+    },
+
+    async searchCompanies(query) {
+        if (!query || query.trim().length < 2) return [];
+        try {
+            const response = await fetch(`${API_CLIENTS_URL}/search-companies?query=${encodeURIComponent(query.trim())}`);
+            if (!response.ok) return [];
+            return await response.json();
+        } catch {
+            return [];
+        }
     }
 };
