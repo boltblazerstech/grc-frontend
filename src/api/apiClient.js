@@ -5,11 +5,18 @@ const API_BASE_URL = `${_BACKEND}/api/grc`;
 const API_USER_URL = `${_BACKEND}/api/users`;
 const API_CLIENTS_URL = `${_BACKEND}/api/admin/clients`;
 
+let _cachedDetails = null;
+
 export const apiClient = {
     async getDetails() {
+        if (_cachedDetails && Array.isArray(_cachedDetails) && _cachedDetails.length > 0) {
+            return _cachedDetails;
+        }
         const response = await fetch(`${API_BASE_URL}/details`);
         if (!response.ok) throw new Error('Failed to fetch details');
-        return response.json();
+        const data = await response.json();
+        _cachedDetails = data;
+        return data;
     },
 
     async getDetailByGstin(gstin) {
@@ -645,12 +652,85 @@ export const apiClient = {
 
     async searchCompanies(query) {
         if (!query || query.trim().length < 2) return [];
+        const clean = query.trim().toLowerCase();
+
+        // 1. Try backend search endpoint
         try {
             const response = await fetch(`${API_CLIENTS_URL}/search-companies?query=${encodeURIComponent(query.trim())}`);
-            if (!response.ok) return [];
-            return await response.json();
-        } catch {
-            return [];
+            if (response.ok) {
+                const data = await response.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.warn('Backend search endpoint unavailable, using dataset fallback:', e);
         }
+
+        // 2. Reliable Fallback: Search in-memory / loaded details + clients
+        try {
+            const results = [];
+            const seenGstin = new Set();
+
+            // Check clients if available
+            try {
+                const cResp = await fetch(`${API_CLIENTS_URL}`);
+                if (cResp.ok) {
+                    const clients = await cResp.json();
+                    if (Array.isArray(clients)) {
+                        for (const c of clients) {
+                            const nameMatch = c.clientName && c.clientName.toLowerCase().includes(clean);
+                            const gstinMatch = c.clientGstin && c.clientGstin.toLowerCase().includes(clean);
+                            if (nameMatch || gstinMatch) {
+                                results.push({
+                                    gstin: c.clientGstin || '',
+                                    name: c.clientName || '',
+                                    tradeName: c.clientName || '',
+                                    legalName: c.clientName || '',
+                                    address: '',
+                                    gstType: '',
+                                    source: 'Client'
+                                });
+                                if (c.clientGstin) seenGstin.add(c.clientGstin.toLowerCase());
+                            }
+                        }
+                    }
+                }
+            } catch {}
+
+            // Check loaded/cached gst_details
+            if (!_cachedDetails) {
+                const resp = await fetch(`${API_BASE_URL}/details`);
+                if (resp.ok) {
+                    _cachedDetails = await resp.json();
+                }
+            }
+            if (Array.isArray(_cachedDetails)) {
+                for (const g of _cachedDetails) {
+                    if (g.gstin && seenGstin.has(g.gstin.toLowerCase())) continue;
+                    const gstinMatch = g.gstin && g.gstin.toLowerCase().includes(clean);
+                    const tradeMatch = g.tradeName && g.tradeName.toLowerCase().includes(clean);
+                    const legalMatch = g.legalName && g.legalName.toLowerCase().includes(clean);
+                    if (gstinMatch || tradeMatch || legalMatch) {
+                        results.push({
+                            gstin: g.gstin,
+                            name: g.tradeName || g.legalName || g.gstin,
+                            tradeName: g.tradeName,
+                            legalName: g.legalName,
+                            address: g.address || '',
+                            gstType: g.gstType || '',
+                            source: 'Database'
+                        });
+                        if (g.gstin) seenGstin.add(g.gstin.toLowerCase());
+                        if (results.length >= 25) break;
+                    }
+                }
+            }
+            return results;
+        } catch (err) {
+            console.error('Local fallback search error:', err);
+        }
+
+        return [];
     }
 };

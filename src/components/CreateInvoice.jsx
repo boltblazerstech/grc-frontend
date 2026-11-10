@@ -78,6 +78,11 @@ export default function CreateInvoice({ currentUser, onBack }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Preload details cache on mount so search suggestions are instantaneous
+  useEffect(() => {
+    apiClient.getDetails().catch((e) => console.warn('Preload details warning:', e));
+  }, []);
+
   // Debounced search
   useEffect(() => {
     if (!searchQuery || searchQuery.trim().length < 2) {
@@ -86,19 +91,20 @@ export default function CreateInvoice({ currentUser, onBack }) {
       return;
     }
 
+    setSearching(true);
+    setShowDropdown(true);
+
     const timer = setTimeout(async () => {
-      setSearching(true);
       try {
         const results = await apiClient.searchCompanies(searchQuery.trim());
         setSearchResults(results || []);
-        setShowDropdown(true);
       } catch (err) {
         console.error('Company search error:', err);
         setSearchResults([]);
       } finally {
         setSearching(false);
       }
-    }, 280);
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -670,8 +676,22 @@ export default function CreateInvoice({ currentUser, onBack }) {
           </div>
 
           {/* Autocomplete Dropdown */}
-          {showDropdown && searchResults.length > 0 && (
+          {showDropdown && searchQuery.trim().length >= 2 && (
             <div className="search-dropdown">
+              {searching && searchResults.length === 0 && (
+                <div style={{ padding: '1rem', color: '#6d28d9', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <Loader2 size={16} className="spin-icon" color="#7c3aed" />
+                  <span>Searching matching companies in database...</span>
+                </div>
+              )}
+              {!searching && searchResults.length === 0 && (
+                <div style={{ padding: '1.25rem 1rem', color: '#64748b', fontSize: '0.88rem', textAlign: 'center', lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 600, color: '#334155' }}>No company found matching "{searchQuery}"</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                    You can try searching by 15-digit GSTIN or fill in the customer details manually below.
+                  </div>
+                </div>
+              )}
               {searchResults.map((company, idx) => (
                 <div
                   key={idx}
