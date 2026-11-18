@@ -460,28 +460,32 @@ export async function exportInvoiceToDocx(invoiceData) {
         new TableRow({
           children: [
             new TableCell({
-              width: { size: 30, type: WidthType.PERCENTAGE },
+              width: { size: 38, type: WidthType.PERCENTAGE },
               borders: noBorders,
               verticalAlign: VerticalAlign.TOP,
               children: [
                 new Paragraph({
                   spacing: { before: 80, after: 0 },
                   children: [
-                    new TextRun({ text: 'GSTN: ', bold: true, size: 20, color: '0F243E' }),
-                    new TextRun({ text: invoiceData.supplierGstin || '06AANHD7145Q1ZN', size: 20, color: '0F243E' })
+                    new TextRun({ text: 'GSTN: ', bold: true, size: 19, color: '0F243E' }),
+                    new TextRun({ text: invoiceData.supplierGstin || '06AANHD7145Q1ZN', size: 19, color: '0F243E' })
                   ]
                 }),
                 new Paragraph({
                   spacing: { before: 40, after: 0 },
                   children: [
-                    new TextRun({ text: 'Udyam: ', bold: true, size: 20, color: '0F243E' }),
-                    new TextRun({ text: invoiceData.supplierUdyam || 'UDYAM-HR-05-0154507', size: 20, color: '0F243E' })
+                    new TextRun({ text: 'Udyam: ', bold: true, size: 19, color: '0F243E' }),
+                    new TextRun({
+                      text: (invoiceData.supplierUdyam || 'UDYAM-HR-05-0154507').replace(/-/g, '\u2011'),
+                      size: 19,
+                      color: '0F243E'
+                    })
                   ]
                 })
               ]
             }),
             new TableCell({
-              width: { size: 42, type: WidthType.PERCENTAGE },
+              width: { size: 36, type: WidthType.PERCENTAGE },
               borders: noBorders,
               verticalAlign: VerticalAlign.CENTER,
               children: [
@@ -512,7 +516,7 @@ export async function exportInvoiceToDocx(invoiceData) {
               ]
             }),
             new TableCell({
-              width: { size: 28, type: WidthType.PERCENTAGE },
+              width: { size: 26, type: WidthType.PERCENTAGE },
               borders: noBorders,
               verticalAlign: VerticalAlign.TOP,
               children: [
