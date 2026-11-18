@@ -138,18 +138,60 @@ export async function exportInvoiceToPdf(invoiceData) {
   const isInterState = invoiceData.isInterState;
   const taxHeader = isInterState ? `IGST ${invoiceData.igstRate}%` : 'GST 18%';
 
-  const tableHeaders = ['Sr.', 'Description', 'Price', 'Discount', 'Final Rate', taxHeader, 'Total'];
-  const tableRows = [
-    [
-      '1',
-      invoiceData.itemDescription || 'ScrapDMS SaaS Platform Monthly Subscription',
-      formatIndianCurrency(invoiceData.price),
-      invoiceData.discountPercent ? `${invoiceData.discountPercent}%` : '0%',
-      formatIndianCurrency(invoiceData.finalRate),
-      formatIndianCurrency(invoiceData.taxAmount),
-      formatIndianCurrency(invoiceData.totalAmount)
-    ]
-  ];
+  const hasDiscount = Boolean(
+    invoiceData.discountPercent !== null &&
+    invoiceData.discountPercent !== undefined &&
+    invoiceData.discountPercent !== '' &&
+    parseFloat(invoiceData.discountPercent) > 0
+  );
+
+  let tableHeaders;
+  let tableRows;
+  let columnStyles;
+
+  if (hasDiscount) {
+    tableHeaders = ['Sr.', 'Description', 'Price', 'Discount', 'Final Rate', taxHeader, 'Total'];
+    tableRows = [
+      [
+        '1',
+        invoiceData.itemDescription || 'ScrapDMS SaaS Platform Monthly Subscription',
+        formatIndianCurrency(invoiceData.price),
+        `${invoiceData.discountPercent}%`,
+        formatIndianCurrency(invoiceData.finalRate),
+        formatIndianCurrency(invoiceData.taxAmount),
+        formatIndianCurrency(invoiceData.totalAmount)
+      ]
+    ];
+    columnStyles = {
+      0: { cellWidth: 42 },
+      1: { cellWidth: 147 },
+      2: { cellWidth: 62 },
+      3: { cellWidth: 60 },
+      4: { cellWidth: 64 },
+      5: { cellWidth: 62 },
+      6: { cellWidth: 62 }
+    };
+  } else {
+    tableHeaders = ['Sr.', 'Description', 'Price', 'Final Rate', taxHeader, 'Total'];
+    tableRows = [
+      [
+        '1',
+        invoiceData.itemDescription || 'ScrapDMS SaaS Platform Monthly Subscription',
+        formatIndianCurrency(invoiceData.price),
+        formatIndianCurrency(invoiceData.finalRate),
+        formatIndianCurrency(invoiceData.taxAmount),
+        formatIndianCurrency(invoiceData.totalAmount)
+      ]
+    ];
+    columnStyles = {
+      0: { cellWidth: 42 },
+      1: { cellWidth: 207 },
+      2: { cellWidth: 62 },
+      3: { cellWidth: 64 },
+      4: { cellWidth: 62 },
+      5: { cellWidth: 62 }
+    };
+  }
 
   autoTable(doc, {
     head: [tableHeaders],
@@ -176,15 +218,7 @@ export async function exportInvoiceToPdf(invoiceData) {
       lineColor: [100, 116, 139],
       lineWidth: 0.6
     },
-    columnStyles: {
-      0: { cellWidth: 42 },
-      1: { cellWidth: 147 },
-      2: { cellWidth: 62 },
-      3: { cellWidth: 60 },
-      4: { cellWidth: 64 },
-      5: { cellWidth: 62 },
-      6: { cellWidth: 62 }
-    }
+    columnStyles
   });
 
   curY = doc.lastAutoTable.finalY + 11;
@@ -330,6 +364,36 @@ export async function exportInvoiceToDocx(invoiceData) {
 
   const isInterState = invoiceData.isInterState;
   const taxHeader = isInterState ? `IGST ${invoiceData.igstRate}%` : 'GST 18%';
+
+  const hasDiscount = Boolean(
+    invoiceData.discountPercent !== null &&
+    invoiceData.discountPercent !== undefined &&
+    invoiceData.discountPercent !== '' &&
+    parseFloat(invoiceData.discountPercent) > 0
+  );
+
+  const docxTableHeaders = hasDiscount
+    ? ['Sr.', 'Description', 'Price', 'Discount', 'Final Rate', taxHeader, 'Total']
+    : ['Sr.', 'Description', 'Price', 'Final Rate', taxHeader, 'Total'];
+
+  const docxTableValues = hasDiscount
+    ? [
+        '1',
+        invoiceData.itemDescription || 'ScrapDMS SaaS Platform Monthly Subscription',
+        formatIndianCurrency(invoiceData.price),
+        `${invoiceData.discountPercent}%`,
+        formatIndianCurrency(invoiceData.finalRate),
+        formatIndianCurrency(invoiceData.taxAmount),
+        formatIndianCurrency(invoiceData.totalAmount)
+      ]
+    : [
+        '1',
+        invoiceData.itemDescription || 'ScrapDMS SaaS Platform Monthly Subscription',
+        formatIndianCurrency(invoiceData.price),
+        formatIndianCurrency(invoiceData.finalRate),
+        formatIndianCurrency(invoiceData.taxAmount),
+        formatIndianCurrency(invoiceData.totalAmount)
+      ];
 
   const custNameStr = (invoiceData.customerName || '').trim().toLowerCase().startsWith('m/s')
     ? invoiceData.customerName
@@ -508,7 +572,7 @@ export async function exportInvoiceToDocx(invoiceData) {
       rows: [
         new TableRow({
           tableHeader: true,
-          children: ['Sr.', 'Description', 'Price', 'Discount', 'Final Rate', taxHeader, 'Total'].map((title) =>
+          children: docxTableHeaders.map((title) =>
             new TableCell({
               shading: { fill: 'FFFFFF', type: ShadingType.CLEAR },
               margins: { top: 80, bottom: 80, left: 60, right: 60 },
@@ -523,15 +587,7 @@ export async function exportInvoiceToDocx(invoiceData) {
           )
         }),
         new TableRow({
-          children: [
-            '1',
-            invoiceData.itemDescription || 'ScrapDMS SaaS Platform Monthly Subscription',
-            formatIndianCurrency(invoiceData.price),
-            invoiceData.discountPercent ? `${invoiceData.discountPercent}%` : '0%',
-            formatIndianCurrency(invoiceData.finalRate),
-            formatIndianCurrency(invoiceData.taxAmount),
-            formatIndianCurrency(invoiceData.totalAmount)
-          ].map((val) =>
+          children: docxTableValues.map((val) =>
             new TableCell({
               margins: { top: 80, bottom: 80, left: 60, right: 60 },
               verticalAlign: VerticalAlign.CENTER,

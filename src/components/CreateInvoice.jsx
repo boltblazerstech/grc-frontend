@@ -74,7 +74,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
     billingPeriod: defaultBillingPeriod,
     itemDescription: 'ScrapDMS SaaS Platform Monthly Subscription',
     price: 40000,
-    discountPercent: 17.5,
+    discountPercent: 0,
     bankName: 'IDFC FIRST',
     accountName: 'SCRAPDMS',
     accountNo: '10252673565',
@@ -960,7 +960,12 @@ export default function CreateInvoice({ currentUser, onBack }) {
                 </div>
 
                 <div className="form-field">
-                  <label>Discount (%)</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>Discount (%)</label>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: (parseFloat(formData.discountPercent) > 0) ? '#10b981' : '#64748b' }}>
+                      {(parseFloat(formData.discountPercent) > 0) ? 'Column Visible' : 'Column Hidden'}
+                    </span>
+                  </div>
                   <input
                     type="number"
                     min={0}
@@ -968,7 +973,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
                     step={0.5}
                     value={formData.discountPercent}
                     onChange={e => setFormData({ ...formData, discountPercent: e.target.value })}
-                    placeholder="17.5"
+                    placeholder="0 (Optional - enter to show discount)"
                   />
                 </div>
               </div>
@@ -990,10 +995,12 @@ export default function CreateInvoice({ currentUser, onBack }) {
                 <strong>₹{formatIndianCurrency(calculations.rawPrice)}</strong>
               </div>
 
-              <div className="summary-row">
-                <span>Discount ({calculations.discountPercent}%):</span>
-                <span style={{ color: '#fca5a5' }}>− ₹{formatIndianCurrency(calculations.discountAmount)}</span>
-              </div>
+              {calculations.discountPercent > 0 && (
+                <div className="summary-row">
+                  <span>Discount ({calculations.discountPercent}%):</span>
+                  <span style={{ color: '#fca5a5' }}>− ₹{formatIndianCurrency(calculations.discountAmount)}</span>
+                </div>
+              )}
 
               <div className="summary-row">
                 <span>Final Rate (Taxable Value):</span>
