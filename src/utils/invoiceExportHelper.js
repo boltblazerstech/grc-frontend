@@ -290,27 +290,38 @@ export async function exportInvoiceToPdf(invoiceData) {
     curY += lines.length * 12 + 2;
   });
 
-  curY += 8;
+  curY += 10;
 
-  // 8. Query Contact & Non-overlapping Stamp + Signature
-  // In the docx: Signature is placed on the LEFT of the Stamp (side-by-side, NO overlap)
-  const stampSize = 78; // 1024x1024 -> 1:1
-  const stampX = pageWidth - rightMargin - stampSize;
-  const stampY = curY;
+  // 1-move this to above: Contact query right below Note section
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(...BLACK);
+  doc.text('For any query, please contact support@scrapdms.com.', leftMargin, curY);
+  curY += 22;
 
-  const sigW = 74;
-  const sigH = 28.5; // 288x111 -> 2.595:1
-  const sigX = stampX - sigW - 12; // 12pt gap between signature and stamp
-  const sigY = stampY + (stampSize - sigH) / 2;
+  // 8. Signatory Area:
+  // - 2-For Scrapdms to left side
+  // - 3-signed just above the For Scrapdms
+  // - 4-Stamp in middle and remove the background from stamp
+  const stampSize = 82; // 1:1 ratio
+  const stampX = (pageWidth - stampSize) / 2; // Centered in the middle of page
+  const stampY = curY - 6;
+
+  // Left side signature and "For ScrapDMS"
+  const sigW = 86;
+  const sigH = 33; // 2.595:1 ratio
+  const sigX = leftMargin;
+  const sigY = curY;
 
   if (assets.signatureDataUrl) {
     try {
-      doc.addImage(assets.signatureDataUrl, 'JPEG', sigX, sigY, sigW, sigH);
+      doc.addImage(assets.signatureDataUrl, 'PNG', sigX, sigY, sigW, sigH);
     } catch (e) {
       console.warn('Could not draw signature:', e);
     }
   }
 
+  // Centered Stamp with transparent background
   if (assets.stampDataUrl) {
     try {
       doc.addImage(assets.stampDataUrl, 'PNG', stampX, stampY, stampSize, stampSize);
@@ -319,17 +330,11 @@ export async function exportInvoiceToPdf(invoiceData) {
     }
   }
 
-  // Left query text aligned near bottom of signatory area
+  // "For ScrapDMS" on the left side, directly below the signature
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
+  doc.setFontSize(11);
   doc.setTextColor(...BLACK);
-  doc.text('For any query, please contact support@scrapdms.com.', leftMargin, stampY + stampSize - 10);
-
-  // "For ScrapDMS" below stamp
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10.5);
-  doc.setTextColor(...BLACK);
-  doc.text('For ScrapDMS', pageWidth - rightMargin, stampY + stampSize + 14, { align: 'right' });
+  doc.text('For ScrapDMS', leftMargin, sigY + sigH + 16);
 
   // 9. Page Footer matching footer1.xml
   const footerY = pageHeight - 36;
@@ -688,7 +693,7 @@ export async function exportInvoiceToDocx(invoiceData) {
       ]
     }),
     new Paragraph({
-      spacing: { after: 160 },
+      spacing: { after: 20 },
       indent: { left: 360 },
       children: [
         new TextRun({
@@ -699,59 +704,48 @@ export async function exportInvoiceToDocx(invoiceData) {
       ]
     }),
 
-    // Signatory and Support Contact Table (Signature left of Stamp, NO overlap)
+    // 1-move this to above: Contact query right below Note section
+    new Paragraph({
+      spacing: { before: 80, after: 180 },
+      children: [
+        new TextRun({
+          text: 'For any query, please contact support@scrapdms.com.',
+          size: 20,
+          color: '000000'
+        })
+      ]
+    }),
+
+    // Signatory Area:
+    // 2-For Scrapdms to left side
+    // 3-signed just above the For Scrapdms
+    // 4-Stamp in middle and remove the background from stamp
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: noBorders,
       rows: [
         new TableRow({
           children: [
+            // Left Column (35%): Signature on top, For ScrapDMS directly below
             new TableCell({
-              width: { size: 52, type: WidthType.PERCENTAGE },
+              width: { size: 35, type: WidthType.PERCENTAGE },
               borders: noBorders,
               verticalAlign: VerticalAlign.BOTTOM,
               children: [
-                new Paragraph({
-                  spacing: { before: 120 },
-                  children: [
-                    new TextRun({
-                      text: 'For any query, please contact support@scrapdms.com.',
-                      size: 20,
-                      color: '000000'
-                    })
-                  ]
-                })
-              ]
-            }),
-            new TableCell({
-              width: { size: 48, type: WidthType.PERCENTAGE },
-              borders: noBorders,
-              children: [
-                new Paragraph({
-                  alignment: AlignmentType.RIGHT,
-                  children: [
-                    ...(assets.signatureBytes
-                      ? [
+                ...(assets.signatureBytes
+                  ? [
+                      new Paragraph({
+                        spacing: { after: 80 },
+                        children: [
                           new ImageRun({
                             data: assets.signatureBytes,
-                            transformation: { width: 86, height: 33 } // Exact 2.595:1 ratio
-                          }),
-                          new TextRun({ text: '   ' }) // Clean gap before stamp
-                        ]
-                      : []),
-                    ...(assets.stampBytes
-                      ? [
-                          new ImageRun({
-                            data: assets.stampBytes,
-                            transformation: { width: 92, height: 92 } // Exact 1:1 ratio
+                            transformation: { width: 86, height: 33 } // 2.595:1 ratio
                           })
                         ]
-                      : [])
-                  ]
-                }),
+                      })
+                    ]
+                  : []),
                 new Paragraph({
-                  alignment: AlignmentType.RIGHT,
-                  spacing: { before: 60 },
                   children: [
                     new TextRun({
                       text: 'For ScrapDMS',
@@ -760,6 +754,37 @@ export async function exportInvoiceToDocx(invoiceData) {
                     })
                   ]
                 })
+              ]
+            }),
+
+            // Middle Column (30%): Stamp centered horizontally
+            new TableCell({
+              width: { size: 30, type: WidthType.PERCENTAGE },
+              borders: noBorders,
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [
+                    ...(assets.stampBytes
+                      ? [
+                          new ImageRun({
+                            data: assets.stampBytes,
+                            transformation: { width: 88, height: 88 } // 1:1 ratio
+                          })
+                        ]
+                      : [])
+                  ]
+                })
+              ]
+            }),
+
+            // Right Column (35%): Empty spacer to balance center alignment
+            new TableCell({
+              width: { size: 35, type: WidthType.PERCENTAGE },
+              borders: noBorders,
+              children: [
+                new Paragraph({ children: [] })
               ]
             })
           ]
