@@ -64,6 +64,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
   // Invoice Form State
   const [formData, setFormData] = useState({
     supplierGstin: '06AANHD7145Q1ZN',
+    supplierUdyam: 'UDYAM-HR-05-0154507',
     customerName: '',
     customerGstin: '',
     customerAddress: '',

@@ -47,14 +47,20 @@ export async function exportInvoiceToPdf(invoiceData) {
   let curY = 32;
 
   // 1. Top Header Band:
-  //    Left: Supplier GSTN | Center: ScrapDMS (Blue) + TAX INVOICE | Right: ScrapDMS Logo (unstretched 1.501:1)
+  //    Left: Supplier GSTN & Udyam | Center: ScrapDMS (Blue) + TAX INVOICE | Right: ScrapDMS Logo (unstretched 1.501:1)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(...NAVY_TEXT);
-  doc.text('GSTN: ', leftMargin, curY + 18);
+  doc.text('GSTN: ', leftMargin, curY + 16);
   const gstnLabelW = doc.getTextWidth('GSTN: ');
   doc.setFont('helvetica', 'normal');
-  doc.text(invoiceData.supplierGstin || '06AANHD7145Q1ZN', leftMargin + gstnLabelW, curY + 18);
+  doc.text(invoiceData.supplierGstin || '06AANHD7145Q1ZN', leftMargin + gstnLabelW, curY + 16);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Udyam: ', leftMargin, curY + 31);
+  const udyamLabelW = doc.getTextWidth('Udyam: ');
+  doc.setFont('helvetica', 'normal');
+  doc.text(invoiceData.supplierUdyam || 'UDYAM-HR-05-0154507', leftMargin + udyamLabelW, curY + 31);
 
   // Preserve exact logo aspect ratio (581 x 387 = 1.501 : 1)
   const logoW = 72;
@@ -81,7 +87,12 @@ export async function exportInvoiceToPdf(invoiceData) {
   doc.setTextColor(...NAVY_DARK);
   doc.text('TAX INVOICE', pageWidth / 2, curY + 46, { align: 'center' });
 
-  curY += 74;
+  // Light blue header divider line matching template
+  doc.setDrawColor(198, 217, 241);
+  doc.setLineWidth(0.8);
+  doc.line(leftMargin, curY + 62, pageWidth - rightMargin, curY + 62);
+
+  curY += 80;
 
   // 2. BILL TO Section (Row 1 - Full Width, Blue Heading #4F81BD)
   doc.setFont('helvetica', 'bold');
@@ -459,6 +470,13 @@ export async function exportInvoiceToDocx(invoiceData) {
                     new TextRun({ text: 'GSTN: ', bold: true, size: 20, color: '0F243E' }),
                     new TextRun({ text: invoiceData.supplierGstin || '06AANHD7145Q1ZN', size: 20, color: '0F243E' })
                   ]
+                }),
+                new Paragraph({
+                  spacing: { before: 40, after: 0 },
+                  children: [
+                    new TextRun({ text: 'Udyam: ', bold: true, size: 20, color: '0F243E' }),
+                    new TextRun({ text: invoiceData.supplierUdyam || 'UDYAM-HR-05-0154507', size: 20, color: '0F243E' })
+                  ]
                 })
               ]
             }),
@@ -519,7 +537,17 @@ export async function exportInvoiceToDocx(invoiceData) {
       ]
     }),
 
-    new Paragraph({ spacing: { before: 80, after: 80 } }),
+    new Paragraph({
+      border: {
+        bottom: {
+          color: 'C6D9F1',
+          space: 1,
+          style: BorderStyle.SINGLE,
+          size: 6
+        }
+      },
+      spacing: { before: 80, after: 120 }
+    }),
 
     // Row 1: BILL TO (Stacked vertically, blue heading #4F81BD)
     new Paragraph({
