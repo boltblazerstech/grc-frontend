@@ -788,15 +788,41 @@ export const apiClient = {
         return `${base}/${counter}`;
     },
 
-    async recordInvoice(invoiceNumber, companyName, month, year) {
+    async recordInvoice(invoiceData, companyName, month, year) {
+        if (!invoiceData) return;
+        const invoiceNumber = typeof invoiceData === 'string' ? invoiceData : (invoiceData.invoiceNo || invoiceData.invoiceNumber);
         if (!invoiceNumber) return;
+
+        const payload = typeof invoiceData === 'object' ? {
+            ...invoiceData,
+            invoiceNumber,
+            companyName: invoiceData.customerName || companyName,
+            billingMonth: month || invoiceData.billingMonth,
+            billingYear: year || invoiceData.billingYear,
+            jsonData: JSON.stringify(invoiceData)
+        } : {
+            invoiceNumber,
+            companyName,
+            billingMonth: month,
+            billingYear: year
+        };
+
         // Always save to local fallback cache
         try {
-            let saved = JSON.parse(localStorage.getItem('grc_recorded_invoices') || '[]');
+            let saved = JSON.parse(localStorage.getItem('grc_recent_invoices') || '[]');
             if (!Array.isArray(saved)) saved = [];
-            if (!saved.includes(invoiceNumber)) {
-                saved.push(invoiceNumber);
-                localStorage.setItem('grc_recorded_invoices', JSON.stringify(saved));
+            saved = saved.filter(x => (x.invoiceNumber || x.invoiceNo) !== invoiceNumber);
+            saved.unshift({
+                ...payload,
+                createdAt: new Date().toISOString()
+            });
+            localStorage.setItem('grc_recent_invoices', JSON.stringify(saved.slice(0, 50)));
+
+            let recordedNums = JSON.parse(localStorage.getItem('grc_recorded_invoices') || '[]');
+            if (!Array.isArray(recordedNums)) recordedNums = [];
+            if (!recordedNums.includes(invoiceNumber)) {
+                recordedNums.push(invoiceNumber);
+                localStorage.setItem('grc_recorded_invoices', JSON.stringify(recordedNums));
             }
         } catch {}
 
@@ -805,10 +831,31 @@ export const apiClient = {
             await fetch(`${API_INVOICE_URL}/record`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ invoiceNumber, companyName, month, year })
+                body: JSON.stringify(payload)
             });
         } catch (e) {
             console.warn('Backend record invoice failed:', e);
+        }
+    },
+
+    async getRecentInvoices() {
+        try {
+            const resp = await fetch(`${API_INVOICE_URL}/recent`);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    localStorage.setItem('grc_recent_invoices', JSON.stringify(data));
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.warn('Backend getRecentInvoices unavailable, using local cache:', e);
+        }
+
+        try {
+            return JSON.parse(localStorage.getItem('grc_recent_invoices') || '[]');
+        } catch {
+            return [];
         }
     },
 

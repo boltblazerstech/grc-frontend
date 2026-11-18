@@ -3,7 +3,7 @@ import {
   Receipt, Search, Building2, MapPin, Calendar, FileText, 
   Edit2, Download, Check, AlertCircle, RefreshCw, X, ArrowLeft,
   DollarSign, Percent, ShieldCheck, CreditCard, ChevronDown, CheckCircle2,
-  FileSpreadsheet, Sparkles, Loader2
+  FileSpreadsheet, Sparkles, Loader2, History, Clock, ArrowUpRight, FolderArchive, Eye
 } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 import { amountToIndianWords, formatIndianCurrency } from '../utils/numberToWords';
@@ -84,6 +84,50 @@ export default function CreateInvoice({ currentUser, onBack }) {
 
   const [downloadingFormat, setDownloadingFormat] = useState(null); // 'pdf' | 'docx' | null
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Tabs & Recent Invoices state (previous 2 months + current month)
+  const [activeTab, setActiveTab] = useState('create'); // 'create' | 'recent'
+  const [recentInvoices, setRecentInvoices] = useState([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+  const [recentFilterMonth, setRecentFilterMonth] = useState('ALL');
+  const [recentSearch, setRecentSearch] = useState('');
+
+  // 3-month window labels (current month + previous two months)
+  const windowMonths = useMemo(() => {
+    const today = new Date();
+    const list = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const mNum = d.getMonth() + 1;
+      const yNum = d.getFullYear();
+      const shortLabel = `${monthNames[d.getMonth()]}’ ${String(yNum).slice(-2)}`;
+      list.push({
+        key: `m${i}`,
+        month: mNum,
+        year: yNum,
+        label: i === 0 ? `Current Month (${shortLabel})` : i === 1 ? `Previous Month (${shortLabel})` : `2 Months Ago (${shortLabel})`,
+        shortLabel
+      });
+    }
+    return list;
+  }, []);
+
+  const loadRecentInvoices = async () => {
+    setLoadingRecent(true);
+    try {
+      const data = await apiClient.getRecentInvoices();
+      setRecentInvoices(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.warn('Failed to load recent invoices:', e);
+    } finally {
+      setLoadingRecent(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRecentInvoices();
+  }, []);
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -233,6 +277,34 @@ export default function CreateInvoice({ currentUser, onBack }) {
     ...calculations
   }), [formData, calculations]);
 
+  // Filtered recent invoices based on active month filter and search
+  const filteredRecentInvoices = useMemo(() => {
+    let list = recentInvoices;
+    if (recentFilterMonth !== 'ALL') {
+      const targetWindow = windowMonths.find(w => w.key === recentFilterMonth);
+      if (targetWindow) {
+        list = list.filter(inv => {
+          if (inv.billingMonth && inv.billingYear) {
+            return inv.billingMonth === targetWindow.month && inv.billingYear === targetWindow.year;
+          }
+          const mStr = String(targetWindow.month).padStart(2, '0');
+          const yStr = String(targetWindow.year).slice(-2);
+          return (inv.invoiceNumber && inv.invoiceNumber.includes(`/${mStr}/${yStr}`)) ||
+                 (inv.billingPeriod && inv.billingPeriod.toLowerCase().includes(targetWindow.shortLabel.toLowerCase()));
+        });
+      }
+    }
+    if (recentSearch.trim()) {
+      const q = recentSearch.trim().toLowerCase();
+      list = list.filter(inv =>
+        (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
+        (inv.companyName && inv.companyName.toLowerCase().includes(q)) ||
+        (inv.customerGstin && inv.customerGstin.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [recentInvoices, recentFilterMonth, windowMonths, recentSearch]);
+
   // Download Handlers
   const handleDownloadPdf = async () => {
     if (!formData.customerName || !formData.customerGstin) {
@@ -242,8 +314,9 @@ export default function CreateInvoice({ currentUser, onBack }) {
     setDownloadingFormat('pdf');
     try {
       await exportInvoiceToPdf(invoicePayload);
-      // Record invoice number in database list so subsequent ones increment
-      await apiClient.recordInvoice(formData.invoiceNo, formData.customerName, billingMonth, billingYear);
+      // Record invoice with full details in database list
+      await apiClient.recordInvoice(invoicePayload, formData.customerName, billingMonth, billingYear);
+      loadRecentInvoices();
       showToast('PDF Invoice generated and downloaded successfully!');
     } catch (err) {
       console.error('PDF export error:', err);
@@ -261,14 +334,72 @@ export default function CreateInvoice({ currentUser, onBack }) {
     setDownloadingFormat('docx');
     try {
       await exportInvoiceToDocx(invoicePayload);
-      // Record invoice number in database list so subsequent ones increment
-      await apiClient.recordInvoice(formData.invoiceNo, formData.customerName, billingMonth, billingYear);
+      // Record invoice with full details in database list
+      await apiClient.recordInvoice(invoicePayload, formData.customerName, billingMonth, billingYear);
+      loadRecentInvoices();
       showToast('Word DOCX Invoice generated and downloaded successfully!');
     } catch (err) {
       console.error('DOCX export error:', err);
       alert('Failed to generate DOCX: ' + (err.message || 'Unknown error'));
     } finally {
       setDownloadingFormat(null);
+    }
+  };
+
+  // Re-download directly from Recent Invoices table
+  const handleDownloadSavedPdf = async (inv) => {
+    try {
+      const payload = inv.jsonData ? JSON.parse(inv.jsonData) : {
+        ...inv,
+        invoiceNo: inv.invoiceNumber || inv.invoiceNo,
+        customerName: inv.customerName || inv.companyName
+      };
+      await exportInvoiceToPdf(payload);
+      showToast(`Downloaded PDF for ${inv.invoiceNumber || inv.invoiceNo}`);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to download PDF: ' + e.message);
+    }
+  };
+
+  const handleDownloadSavedDocx = async (inv) => {
+    try {
+      const payload = inv.jsonData ? JSON.parse(inv.jsonData) : {
+        ...inv,
+        invoiceNo: inv.invoiceNumber || inv.invoiceNo,
+        customerName: inv.customerName || inv.companyName
+      };
+      await exportInvoiceToDocx(payload);
+      showToast(`Downloaded Word DOCX for ${inv.invoiceNumber || inv.invoiceNo}`);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to download DOCX: ' + e.message);
+    }
+  };
+
+  const handleLoadSavedInvoice = (inv) => {
+    try {
+      const payload = inv.jsonData ? JSON.parse(inv.jsonData) : inv;
+      setFormData(prev => ({
+        ...prev,
+        customerName: payload.customerName || payload.companyName || prev.customerName,
+        customerGstin: payload.customerGstin || prev.customerGstin,
+        customerAddress: payload.customerAddress || prev.customerAddress,
+        natureOfSupply: payload.natureOfSupply || prev.natureOfSupply,
+        sacCode: payload.sacCode || prev.sacCode,
+        invoiceNo: payload.invoiceNumber || payload.invoiceNo || prev.invoiceNo,
+        invoiceDate: payload.invoiceDate || prev.invoiceDate,
+        billingPeriod: payload.billingPeriod || prev.billingPeriod,
+        itemDescription: payload.itemDescription || prev.itemDescription,
+        price: payload.price !== undefined ? payload.price : prev.price,
+        discountPercent: payload.discountPercent !== undefined ? payload.discountPercent : 0,
+      }));
+      if (payload.billingMonth) setBillingMonth(payload.billingMonth);
+      if (payload.billingYear) setBillingYear(payload.billingYear);
+      setActiveTab('create');
+      showToast(`Loaded ${inv.invoiceNumber || inv.invoiceNo} into editor!`);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -652,6 +783,353 @@ export default function CreateInvoice({ currentUser, onBack }) {
           transform: none;
         }
 
+        /* Nav Tabs */
+        .invoice-nav-tabs {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          margin-bottom: 1.5rem;
+          border-bottom: 2px solid #e2e8f0;
+          padding-bottom: 0.25rem;
+        }
+
+        .nav-tab-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.7rem 1.25rem;
+          border: none;
+          background: transparent;
+          font-size: 0.92rem;
+          font-weight: 700;
+          color: #64748b;
+          border-radius: 10px 10px 0 0;
+          cursor: pointer;
+          position: relative;
+          transition: all 0.2s ease;
+        }
+
+        .nav-tab-btn:hover {
+          color: #1e293b;
+          background: #f1f5f9;
+        }
+
+        .nav-tab-btn.active {
+          color: #7c3aed;
+          background: #ffffff;
+          box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+        }
+
+        .nav-tab-btn.active::after {
+          content: '';
+          position: absolute;
+          bottom: -0.35rem;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: #7c3aed;
+          border-radius: 3px 3px 0 0;
+        }
+
+        .tab-badge {
+          background: #ede9fe;
+          color: #7c3aed;
+          font-size: 0.72rem;
+          font-weight: 800;
+          padding: 0.15rem 0.5rem;
+          border-radius: 999px;
+        }
+
+        .nav-tab-btn.active .tab-badge {
+          background: #7c3aed;
+          color: #ffffff;
+        }
+
+        /* Recent Invoices Card & Elements */
+        .recent-card {
+          background: #ffffff;
+          border-radius: 16px;
+          padding: 1.75rem;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+          border: 1px solid #e2e8f0;
+          margin-bottom: 2rem;
+        }
+
+        .recent-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.25rem;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+
+        .recent-title-group h2 {
+          font-size: 1.25rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin: 0 0 0.25rem 0;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .recent-title-group p {
+          font-size: 0.85rem;
+          color: #64748b;
+          margin: 0;
+        }
+
+        .recent-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          flex-wrap: wrap;
+          margin-bottom: 1.25rem;
+          padding: 0.9rem 1.1rem;
+          background: #f8fafc;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .recent-chips-container {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+        }
+
+        .filter-chip {
+          padding: 0.4rem 0.85rem;
+          border-radius: 999px;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #475569;
+          font-size: 0.78rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .filter-chip:hover {
+          border-color: #7c3aed;
+          color: #7c3aed;
+        }
+
+        .filter-chip.active {
+          background: #7c3aed;
+          border-color: #7c3aed;
+          color: #ffffff;
+        }
+
+        .recent-search-box {
+          position: relative;
+          min-width: 260px;
+        }
+
+        .recent-search-box input {
+          width: 100%;
+          padding: 0.5rem 0.85rem 0.5rem 2.2rem;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          font-size: 0.82rem;
+          font-family: inherit;
+          color: #0f172a;
+          background: #ffffff;
+          outline: none;
+        }
+
+        .recent-search-box input:focus {
+          border-color: #7c3aed;
+          box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .recent-search-icon {
+          position: absolute;
+          left: 0.75rem;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #94a3b8;
+        }
+
+        /* Recent Table */
+        .recent-table-wrapper {
+          overflow-x: auto;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .recent-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.86rem;
+          text-align: left;
+        }
+
+        .recent-table th {
+          background: #f1f5f9;
+          padding: 0.75rem 1rem;
+          color: #475569;
+          font-weight: 800;
+          font-size: 0.76rem;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          border-bottom: 1px solid #cbd5e1;
+          white-space: nowrap;
+        }
+
+        .recent-table td {
+          padding: 0.85rem 1rem;
+          border-bottom: 1px solid #f1f5f9;
+          color: #1e293b;
+          vertical-align: middle;
+        }
+
+        .recent-table tr:hover td {
+          background: #f8fafc;
+        }
+
+        .inv-badge-num {
+          display: inline-block;
+          font-family: 'JetBrains Mono', monospace, monospace;
+          font-weight: 800;
+          color: #0f172a;
+          font-size: 0.85rem;
+          background: #f1f5f9;
+          padding: 0.2rem 0.5rem;
+          border-radius: 6px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .inv-company-cell {
+          font-weight: 700;
+          color: #0f172a;
+        }
+
+        .inv-gstin-sub {
+          font-size: 0.75rem;
+          color: #64748b;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .inv-period-badge {
+          display: inline-block;
+          background: #eff6ff;
+          color: #2563eb;
+          padding: 0.2rem 0.55rem;
+          border-radius: 6px;
+          font-size: 0.78rem;
+          font-weight: 700;
+        }
+
+        .inv-amt-cell {
+          font-weight: 800;
+          color: #059669;
+          font-size: 0.92rem;
+        }
+
+        .table-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+
+        .btn-table-action {
+          padding: 0.35rem 0.65rem;
+          border-radius: 6px;
+          font-size: 0.76rem;
+          font-weight: 700;
+          cursor: pointer;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          transition: all 0.15s ease;
+        }
+
+        .btn-table-action.pdf {
+          color: #dc2626;
+          border-color: #fecaca;
+          background: #fef2f2;
+        }
+
+        .btn-table-action.pdf:hover {
+          background: #dc2626;
+          color: #ffffff;
+        }
+
+        .btn-table-action.docx {
+          color: #2563eb;
+          border-color: #bfdbfe;
+          background: #eff6ff;
+        }
+
+        .btn-table-action.docx:hover {
+          background: #2563eb;
+          color: #ffffff;
+        }
+
+        .btn-table-action.load {
+          color: #7c3aed;
+          border-color: #ddd6fe;
+          background: #f5f3ff;
+        }
+
+        .btn-table-action.load:hover {
+          background: #7c3aed;
+          color: #ffffff;
+        }
+
+        /* Quick Reference Drawer on Create Tab */
+        .recent-reference-box {
+          margin-top: 2rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          padding: 1.25rem 1.5rem;
+        }
+
+        .recent-ref-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.9rem;
+        }
+
+        .recent-ref-header h3 {
+          margin: 0;
+          font-size: 0.98rem;
+          font-weight: 800;
+          color: #0f172a;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .recent-ref-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 0.75rem;
+        }
+
+        .recent-ref-card {
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 10px;
+          padding: 0.75rem 0.9rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+          transition: all 0.15s ease;
+        }
+
+        .recent-ref-card:hover {
+          border-color: #cbd5e1;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
         /* Toast notification */
         .invoice-toast {
           position: fixed;
@@ -701,6 +1179,173 @@ export default function CreateInvoice({ currentUser, onBack }) {
           </div>
         </div>
 
+        {/* Navigation Tabs */}
+        <div className="invoice-nav-tabs">
+          <button
+            type="button"
+            className={`nav-tab-btn ${activeTab === 'create' ? 'active' : ''}`}
+            onClick={() => setActiveTab('create')}
+          >
+            <Receipt size={17} /> Create Tax Invoice
+          </button>
+          <button
+            type="button"
+            className={`nav-tab-btn ${activeTab === 'recent' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('recent'); loadRecentInvoices(); }}
+          >
+            <Clock size={17} /> Recent Invoices (Previous 2 Months & Current)
+            {recentInvoices.length > 0 && (
+              <span className="tab-badge">{recentInvoices.length}</span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === 'recent' ? (
+          <div className="recent-card">
+            <div className="recent-header">
+              <div className="recent-title-group">
+                <h2><History size={22} color="#7c3aed" /> Generated Invoices (Rolling 3 Months)</h2>
+                <p>Access, view, reload, and re-download invoices generated for the previous two months and current month.</p>
+              </div>
+              <button
+                className="btn-table-action"
+                style={{ background: '#f8fafc', padding: '0.5rem 0.9rem', fontSize: '0.82rem' }}
+                onClick={loadRecentInvoices}
+                disabled={loadingRecent}
+              >
+                <RefreshCw size={14} className={loadingRecent ? 'spin-icon' : ''} /> Refresh
+              </button>
+            </div>
+
+            {/* Filter & Search Toolbar */}
+            <div className="recent-toolbar">
+              <div className="recent-chips-container">
+                <button
+                  type="button"
+                  className={`filter-chip ${recentFilterMonth === 'ALL' ? 'active' : ''}`}
+                  onClick={() => setRecentFilterMonth('ALL')}
+                >
+                  All (3 Months)
+                </button>
+                {windowMonths.map(w => (
+                  <button
+                    key={w.key}
+                    type="button"
+                    className={`filter-chip ${recentFilterMonth === w.key ? 'active' : ''}`}
+                    onClick={() => setRecentFilterMonth(w.key)}
+                  >
+                    {w.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="recent-search-box">
+                <Search size={15} className="recent-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Filter by invoice #, company, GSTIN..."
+                  value={recentSearch}
+                  onChange={e => setRecentSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            {filteredRecentInvoices.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+                <FolderArchive size={42} color="#cbd5e1" style={{ marginBottom: '0.75rem' }} />
+                <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1e293b', marginBottom: '0.35rem' }}>
+                  No generated invoices found for this selection
+                </div>
+                <div style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                  Invoices generated for the current and past two months will appear here automatically.
+                </div>
+                <button
+                  type="button"
+                  className="btn-table-action load"
+                  style={{ padding: '0.6rem 1.25rem', fontSize: '0.86rem', display: 'inline-flex' }}
+                  onClick={() => setActiveTab('create')}
+                >
+                  <Receipt size={16} /> Create an Invoice Now
+                </button>
+              </div>
+            ) : (
+              <div className="recent-table-wrapper">
+                <table className="recent-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice No & Date</th>
+                      <th>Customer Name & GSTIN</th>
+                      <th>Billing Period</th>
+                      <th>Total (INR)</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRecentInvoices.map((inv, idx) => {
+                      const invNumber = inv.invoiceNumber || inv.invoiceNo || 'N/A';
+                      const compName = inv.customerName || inv.companyName || 'N/A';
+                      const gstin = inv.customerGstin || inv.gstin || '-';
+                      const period = inv.billingPeriod || (inv.billingMonth && inv.billingYear ? `${inv.billingMonth}/${inv.billingYear}` : '-');
+                      const invDate = inv.invoiceDate || (inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-');
+                      const total = inv.totalAmount !== undefined ? formatIndianCurrency(inv.totalAmount) : (inv.jsonData ? formatIndianCurrency(JSON.parse(inv.jsonData).totalAmount) : '-');
+
+                      return (
+                        <tr key={inv.id || idx}>
+                          <td>
+                            <div className="inv-badge-num">{invNumber}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                              {invDate}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="inv-company-cell">{compName}</div>
+                            <div className="inv-gstin-sub">GSTIN: {gstin}</div>
+                          </td>
+                          <td>
+                            <span className="inv-period-badge">{period}</span>
+                          </td>
+                          <td>
+                            <span className="inv-amt-cell">₹{total}</span>
+                          </td>
+                          <td>
+                            <div className="table-actions" style={{ justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="btn-table-action pdf"
+                                title="Download PDF"
+                                onClick={() => handleDownloadSavedPdf(inv)}
+                              >
+                                <FileText size={14} /> PDF
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-table-action docx"
+                                title="Download DOCX"
+                                onClick={() => handleDownloadSavedDocx(inv)}
+                              >
+                                <Edit2 size={14} /> DOCX
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-table-action load"
+                                title="Load into Invoice Form"
+                                onClick={() => handleLoadSavedInvoice(inv)}
+                              >
+                                <ArrowUpRight size={14} /> Load Form
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
         {/* Search Bar Card */}
         <div className="search-card" ref={searchContainerRef}>
           <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>
@@ -1062,6 +1707,67 @@ export default function CreateInvoice({ currentUser, onBack }) {
             )}
           </button>
         </div>
+
+        {/* Quick Reference Box for Recent Invoices */}
+        {recentInvoices.length > 0 && (
+          <div className="recent-reference-box">
+            <div className="recent-ref-header">
+              <h3>
+                <Clock size={18} color="#7c3aed" /> Recent Generated Invoices (Rolling 3 Months)
+              </h3>
+              <button
+                type="button"
+                className="btn-table-action load"
+                onClick={() => setActiveTab('recent')}
+                style={{ fontSize: '0.8rem' }}
+              >
+                View Full List ({recentInvoices.length}) <ArrowUpRight size={14} />
+              </button>
+            </div>
+            <div className="recent-ref-grid">
+              {recentInvoices.slice(0, 3).map((inv, idx) => (
+                <div key={inv.id || idx} className="recent-ref-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="inv-badge-num" style={{ fontSize: '0.78rem' }}>
+                      {inv.invoiceNumber || inv.invoiceNo}
+                    </span>
+                    <span className="inv-period-badge" style={{ fontSize: '0.72rem' }}>
+                      {inv.billingPeriod || `${inv.billingMonth}/${inv.billingYear}`}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {inv.customerName || inv.companyName}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669' }}>
+                      ₹{formatIndianCurrency(inv.totalAmount || 0)}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                      <button
+                        type="button"
+                        className="btn-table-action pdf"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}
+                        onClick={() => handleDownloadSavedPdf(inv)}
+                      >
+                        PDF
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-table-action load"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}
+                        onClick={() => handleLoadSavedInvoice(inv)}
+                      >
+                        Load
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+          </>
+        )}
       </div>
     </div>
   );
