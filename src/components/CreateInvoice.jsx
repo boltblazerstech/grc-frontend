@@ -29,14 +29,37 @@ export default function CreateInvoice({ currentUser, onBack }) {
     return `${day}${suffix} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
   }, []);
 
+  const MONTH_OPTIONS = useMemo(() => [
+    { value: 1, label: '01 - January', short: 'Jan' },
+    { value: 2, label: '02 - February', short: 'Feb' },
+    { value: 3, label: '03 - March', short: 'Mar' },
+    { value: 4, label: '04 - April', short: 'Apr' },
+    { value: 5, label: '05 - May', short: 'May' },
+    { value: 6, label: '06 - June', short: 'Jun' },
+    { value: 7, label: '07 - July', short: 'Jul' },
+    { value: 8, label: '08 - August', short: 'Aug' },
+    { value: 9, label: '09 - September', short: 'Sep' },
+    { value: 10, label: '10 - October', short: 'Oct' },
+    { value: 11, label: '11 - November', short: 'Nov' },
+    { value: 12, label: '12 - December', short: 'Dec' },
+  ], []);
+
+  const YEAR_OPTIONS = useMemo(() => [2024, 2025, 2026, 2027, 2028, 2029, 2030], []);
+
+  // Default to previous month
+  const now = new Date();
+  const initMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // 1..12
+  const initYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+
+  const [billingMonth, setBillingMonth] = useState(initMonth);
+  const [billingYear, setBillingYear] = useState(initYear);
+  const [autoGenLoading, setAutoGenLoading] = useState(false);
+
   const defaultBillingPeriod = useMemo(() => {
-    const d = new Date();
-    // Default to previous month or current month
-    d.setMonth(d.getMonth() - 1);
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const curYear = String(d.getFullYear()).slice(-2);
-    return `${monthNames[d.getMonth()]}’ ${curYear}`;
-  }, []);
+    const shortMonth = MONTH_OPTIONS.find(m => m.value === Number(initMonth))?.short || 'Oct';
+    const curYear = String(initYear).slice(-2);
+    return `${shortMonth}’ ${curYear}`;
+  }, [MONTH_OPTIONS, initMonth, initYear]);
 
   // Invoice Form State
   const [formData, setFormData] = useState({
@@ -109,18 +132,38 @@ export default function CreateInvoice({ currentUser, onBack }) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Automatic Invoice Number recalculation when Company Name, Month, or Year changes
+  useEffect(() => {
+    const custName = formData.customerName;
+    if (!custName || !custName.trim()) return;
+
+    let active = true;
+    setAutoGenLoading(true);
+
+    apiClient.getNextInvoiceNumber(custName, billingMonth, billingYear)
+      .then(nextNo => {
+        if (!active || !nextNo) return;
+        const shortMonth = MONTH_OPTIONS.find(m => m.value === Number(billingMonth))?.short || 'Oct';
+        const shortYear = String(billingYear).slice(-2);
+        setFormData(prev => ({
+          ...prev,
+          invoiceNo: nextNo,
+          billingPeriod: `${shortMonth}’ ${shortYear}`
+        }));
+      })
+      .catch(err => console.warn('Failed to auto-generate invoice number:', err))
+      .finally(() => {
+        if (active) setAutoGenLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [formData.customerName, billingMonth, billingYear, MONTH_OPTIONS]);
+
   // Handle company selection
   const handleSelectCompany = (company) => {
     setSelectedCompany(company);
     setShowDropdown(false);
     setSearchQuery('');
-
-    // Generate short identifier for invoice number
-    const cleanName = (company.name || company.tradeName || company.legalName || 'Client')
-      .replace(/[^a-zA-Z0-9]/g, '');
-    const shortPrefix = cleanName.length > 8 ? cleanName.substring(0, 8) : cleanName;
-    const year = new Date().getFullYear();
-    const suggestedInvoiceNo = `${shortPrefix}/${year}-1`;
 
     const cName = company.name || company.tradeName || company.legalName || '';
     const formattedCustName = cName.toLowerCase().startsWith('m/s') ? cName : `M/s ${cName}`;
@@ -129,8 +172,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
       ...prev,
       customerName: formattedCustName,
       customerGstin: company.gstin || '',
-      customerAddress: company.address || '',
-      invoiceNo: prev.invoiceNo || suggestedInvoiceNo
+      customerAddress: company.address || ''
     }));
 
     showToast(`Loaded details for ${cName}`);
@@ -200,6 +242,8 @@ export default function CreateInvoice({ currentUser, onBack }) {
     setDownloadingFormat('pdf');
     try {
       await exportInvoiceToPdf(invoicePayload);
+      // Record invoice number in database list so subsequent ones increment
+      await apiClient.recordInvoice(formData.invoiceNo, formData.customerName, billingMonth, billingYear);
       showToast('PDF Invoice generated and downloaded successfully!');
     } catch (err) {
       console.error('PDF export error:', err);
@@ -217,6 +261,8 @@ export default function CreateInvoice({ currentUser, onBack }) {
     setDownloadingFormat('docx');
     try {
       await exportInvoiceToDocx(invoicePayload);
+      // Record invoice number in database list so subsequent ones increment
+      await apiClient.recordInvoice(formData.invoiceNo, formData.customerName, billingMonth, billingYear);
       showToast('Word DOCX Invoice generated and downloaded successfully!');
     } catch (err) {
       console.error('DOCX export error:', err);
@@ -479,7 +525,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
           letter-spacing: 0.4px;
         }
 
-        .form-field input, .form-field textarea {
+        .form-field input, .form-field textarea, .form-field select {
           padding: 0.65rem 0.85rem;
           border-radius: 10px;
           border: 1px solid #cbd5e1;
@@ -488,10 +534,11 @@ export default function CreateInvoice({ currentUser, onBack }) {
           font-weight: 600;
           color: #0f172a;
           outline: none;
+          background: #ffffff;
           transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .form-field input:focus, .form-field textarea:focus {
+        .form-field input:focus, .form-field textarea:focus, .form-field select:focus {
           border-color: #7c3aed;
           box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
         }
@@ -779,18 +826,62 @@ export default function CreateInvoice({ currentUser, onBack }) {
               />
             </div>
 
-            <div className="section-header-title" style={{ marginTop: '0.75rem' }}>
-              <Receipt size={18} color="#7c3aed" /> Invoice Details
+            <div className="section-header-title" style={{ marginTop: '0.75rem', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Receipt size={18} color="#7c3aed" /> Invoice Details
+              </div>
+              <span style={{ fontSize: '0.72rem', color: '#6d28d9', background: '#ede9fe', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 700 }}>
+                Auto-updates Invoice No.
+              </span>
+            </div>
+
+            {/* Select Month and Year for automatic numbering */}
+            <div className="form-row-2col">
+              <div className="form-field">
+                <label>Billing Month *</label>
+                <select
+                  value={billingMonth}
+                  onChange={e => setBillingMonth(Number(e.target.value))}
+                >
+                  {MONTH_OPTIONS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-field">
+                <label>Billing Year *</label>
+                <select
+                  value={billingYear}
+                  onChange={e => setBillingYear(Number(e.target.value))}
+                >
+                  {YEAR_OPTIONS.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="form-row-2col">
               <div className="form-field">
-                <label>Invoice Number *</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label>Invoice Number *</label>
+                  {autoGenLoading ? (
+                    <span style={{ fontSize: '0.7rem', color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                      <Loader2 size={12} className="spin-icon" /> Calculating...
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 700 }}>
+                      Auto-generated
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={formData.invoiceNo}
                   onChange={e => setFormData({ ...formData, invoiceNo: e.target.value })}
-                  placeholder="e.g. AjarAmar/2026-1"
+                  placeholder="e.g. Scrapdmss/10/26"
+                  style={{ fontWeight: 800, color: '#1e1b4b', letterSpacing: '0.3px' }}
                 />
               </div>
 

@@ -4,6 +4,7 @@ const _BACKEND = (typeof window !== 'undefined' && (window.location.hostname ===
 const API_BASE_URL = `${_BACKEND}/api/grc`;
 const API_USER_URL = `${_BACKEND}/api/users`;
 const API_CLIENTS_URL = `${_BACKEND}/api/admin/clients`;
+const API_INVOICE_URL = `${_BACKEND}/api/admin/invoices`;
 
 let _cachedDetails = null;
 
@@ -732,5 +733,94 @@ export const apiClient = {
         }
 
         return [];
+    },
+
+    formatCompanyCode(companyName) {
+        if (!companyName || !companyName.trim()) return 'Company00';
+        let cleaned = companyName.trim();
+        if (cleaned.toLowerCase().startsWith('m/s.')) cleaned = cleaned.substring(4).trim();
+        else if (cleaned.toLowerCase().startsWith('m/s ')) cleaned = cleaned.substring(4).trim();
+        else if (cleaned.toLowerCase().startsWith('m/s')) cleaned = cleaned.substring(3).trim();
+        cleaned = cleaned.replace(/[^a-zA-Z0-9]/g, '');
+        if (!cleaned) cleaned = 'Company';
+        if (cleaned.length < 9) {
+            return cleaned.padEnd(9, '0');
+        }
+        return cleaned.substring(0, 9);
+    },
+
+    async getNextInvoiceNumber(companyName, month, year) {
+        // 1. Try Backend API
+        try {
+            const resp = await fetch(
+                `${API_INVOICE_URL}/next-number?companyName=${encodeURIComponent(companyName || '')}&month=${month}&year=${year}`
+            );
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && data.invoiceNumber) {
+                    return data.invoiceNumber;
+                }
+            }
+        } catch (e) {
+            console.warn('Backend next-number unavailable, using client fallback:', e);
+        }
+
+        // 2. Client-side local fallback
+        const companyCode = this.formatCompanyCode(companyName);
+        const mStr = String(Math.max(1, Math.min(12, Number(month) || 1))).padStart(2, '0');
+        const yStr = String(Math.abs(Number(year) || 26) % 100).padStart(2, '0');
+        const base = `${companyCode}/${mStr}/${yStr}`;
+
+        let saved = [];
+        try {
+            saved = JSON.parse(localStorage.getItem('grc_recorded_invoices') || '[]');
+        } catch {}
+
+        const set = new Set(Array.isArray(saved) ? saved : []);
+        if (!set.has(base)) {
+            return base;
+        }
+
+        let counter = 2;
+        while (set.has(`${base}/${counter}`)) {
+            counter++;
+        }
+        return `${base}/${counter}`;
+    },
+
+    async recordInvoice(invoiceNumber, companyName, month, year) {
+        if (!invoiceNumber) return;
+        // Always save to local fallback cache
+        try {
+            let saved = JSON.parse(localStorage.getItem('grc_recorded_invoices') || '[]');
+            if (!Array.isArray(saved)) saved = [];
+            if (!saved.includes(invoiceNumber)) {
+                saved.push(invoiceNumber);
+                localStorage.setItem('grc_recorded_invoices', JSON.stringify(saved));
+            }
+        } catch {}
+
+        // Send to backend
+        try {
+            await fetch(`${API_INVOICE_URL}/record`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invoiceNumber, companyName, month, year })
+            });
+        } catch (e) {
+            console.warn('Backend record invoice failed:', e);
+        }
+    },
+
+    async getAllInvoiceNumbers() {
+        try {
+            const resp = await fetch(`${API_INVOICE_URL}/all`);
+            if (resp.ok) return await resp.json();
+        } catch {}
+        try {
+            return JSON.parse(localStorage.getItem('grc_recorded_invoices') || '[]');
+        } catch {
+            return [];
+        }
     }
 };
