@@ -822,6 +822,25 @@ export const apiClient = {
         return response.json();
     },
 
+    async replaceClientVendors(clientId, vendorGstins) {
+        const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendorGstins })
+        });
+        if (!response.ok) {
+            let msg = 'Failed to replace client vendors';
+            try {
+                const b = await response.json();
+                msg = b.details || b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
     async unmapVendor(clientId, vendorGstin) {
         return this.unmapVendorFromClient(clientId, vendorGstin);
     },

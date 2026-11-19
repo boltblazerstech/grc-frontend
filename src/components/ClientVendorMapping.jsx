@@ -107,6 +107,7 @@ export default function ClientVendorMapping({ currentUser }) {
   const [mapSearch, setMapSearch] = useState('');
   const [selectedGstinsToMap, setSelectedGstinsToMap] = useState(new Set());
   const [mappingSubmitting, setMappingSubmitting] = useState(false);
+  const [mapActionType, setMapActionType] = useState('append'); // 'append' | 'replace'
 
   // Import Sheet Modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -126,6 +127,17 @@ export default function ClientVendorMapping({ currentUser }) {
   // Edit Vendor Modal
   const [selectedVendorForModal, setSelectedVendorForModal] = useState(null);
   const [thresholds, setThresholds] = useState({});
+
+  // Report-Level Excluded Vendors (hides/removes from report and downloads; DOES NOT delete from DB)
+  const [excludedGstins, setExcludedGstins] = useState(new Set());
+
+  // Import Mode: 'CLIENT_REPLACE' (default) | 'CLIENT_APPEND' | 'GLOBAL_REPLACE'
+  const [importMode, setImportMode] = useState('CLIENT_REPLACE');
+
+  // Reset report exclusions whenever selectedClient changes
+  useEffect(() => {
+    setExcludedGstins(new Set());
+  }, [selectedClient?.id]);
 
   useEffect(() => {
     apiClient.getRuleConfig().then(config => {
@@ -251,10 +263,32 @@ export default function ClientVendorMapping({ currentUser }) {
         localStore = JSON.parse(localStorage.getItem('grc_delayed_months_store') || '{}');
       } catch (e) {}
 
+      // If any vendor has missing tradeName/legalName, fetch global details to enrich trader names
+      let globalVendorMap = {};
+      const needsNameEnrichment = list.some(v => 
+        (!v.tradeName || v.tradeName === 'N/A' || v.tradeName === v.vendorGstin) && 
+        (!v.legalName || v.legalName === 'N/A' || v.legalName === v.vendorGstin)
+      );
+      if (needsNameEnrichment) {
+        try {
+          const allDetails = await apiClient.getDetails();
+          (allDetails || []).forEach(d => {
+            if (d.gstin) {
+              globalVendorMap[d.gstin.trim().toUpperCase()] = d;
+            }
+          });
+        } catch (e) {}
+      }
+
       const hydrated = list.map(v => {
         const local = localStore[v.vendorGstin];
+        const gstinUpper = (v.vendorGstin || '').trim().toUpperCase();
+        const globalInfo = globalVendorMap[gstinUpper];
         return {
           ...v,
+          tradeName: v.tradeName || globalInfo?.tradeName || globalInfo?.traderName || '',
+          legalName: v.legalName || globalInfo?.legalName || globalInfo?.name || '',
+          gstStatus: (v.gstStatus && v.gstStatus.toLowerCase() !== 'unknown') ? v.gstStatus : (globalInfo?.status || globalInfo?.gstStatus || v.gstStatus || 'Active'),
           delayedMonthsGstr1: v.delayedMonthsGstr1 || local?.gstr1Months || '',
           delayedMonthsGstr3b: v.delayedMonthsGstr3b || local?.gstr3bMonths || ''
         };
@@ -752,6 +786,20 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
+  // ── Report-Level Removal Handler (Hides/removes from report and downloads; DOES NOT delete from DB) ──
+  const handleRemoveVendorFromReport = (vendorGstin) => {
+    if (!vendorGstin) return;
+    if (!window.confirm(`Remove vendor "${vendorGstin}" from this assessment report?\n\n(Note: This removes the vendor from this downloaded report and view, but does NOT delete it from the database.)`)) {
+      return;
+    }
+    setExcludedGstins(prev => {
+      const next = new Set(prev);
+      next.add(vendorGstin);
+      return next;
+    });
+    showToast(`Vendor ${vendorGstin} removed from report (database preserved)`, 'info');
+  };
+
   // ── Vendor Unmapping & Editing Handlers ─────────────────────────────────────
 
   const handleUnmapVendor = async (vendorGstin) => {
@@ -829,6 +877,7 @@ export default function ClientVendorMapping({ currentUser }) {
   const openMapModal = async (client) => {
     setSelectedGstinsToMap(new Set());
     setMapSearch('');
+    setMapActionType('append');
     setShowMapModal(true);
     setAllVendorsLoading(true);
 
@@ -861,8 +910,13 @@ export default function ClientVendorMapping({ currentUser }) {
     setMappingSubmitting(true);
     try {
       const gstinsArray = Array.from(selectedGstinsToMap);
-      const res = await apiClient.mapVendors(selectedClient.id, gstinsArray);
-      showToast(`Successfully mapped ${res.mappedCount || gstinsArray.length} vendor(s)`);
+      if (mapActionType === 'replace') {
+        await apiClient.replaceClientVendors(selectedClient.id, gstinsArray);
+        showToast(`Replaced vendors for ${selectedClient.clientName} (${gstinsArray.length} vendor(s)). Other clients preserved.`);
+      } else {
+        const res = await apiClient.mapVendors(selectedClient.id, gstinsArray);
+        showToast(`Successfully mapped ${res.mappedCount || gstinsArray.length} vendor(s)`);
+      }
       setShowMapModal(false);
       fetchMappedVendors(selectedClient.id);
       fetchClients(selectedClient.id);
@@ -1121,7 +1175,9 @@ export default function ClientVendorMapping({ currentUser }) {
     setImportSubmitting(true);
     try {
       const payload = {
-        replaceExisting: true,
+        importMode: importMode,
+        replaceAll: importMode === 'GLOBAL_REPLACE',
+        replaceClientVendors: importMode === 'CLIENT_REPLACE',
         clients: parsedImportData.map(c => ({
           clientName: c.clientName,
           clientGstin: c.clientGstin,
@@ -1130,12 +1186,18 @@ export default function ClientVendorMapping({ currentUser }) {
       };
 
       const result = await apiClient.bulkImportClients(payload);
-      showToast(`Sheet imported successfully! Replaced with ${result.clientsCreated} client(s) and ${result.vendorsMapped} vendor(s) mapped.`);
+      const msg = importMode === 'CLIENT_REPLACE'
+        ? `Vendor data updated client-wise successfully! Replaced vendors for imported client(s) while all other clients remained safe.`
+        : importMode === 'CLIENT_APPEND'
+          ? `Vendors merged & appended successfully without deleting existing vendors.`
+          : `Database replaced with ${result.clientsCreated} client(s) and ${result.vendorsMapped} vendor(s).`;
+      showToast(msg);
       setShowImportModal(false);
       setParsedImportData([]);
-      setSelectedClient(null);
-      setMappedVendors([]);
-      await fetchClients();
+      await fetchClients(selectedClient?.id);
+      if (selectedClient?.id) {
+        await fetchMappedVendors(selectedClient.id);
+      }
     } catch (err) {
       alert(err.message || 'Import failed');
     } finally {
@@ -1694,7 +1756,7 @@ export default function ClientVendorMapping({ currentUser }) {
   };
 
   const filteredMappedVendors = useMemo(() => {
-    let list = mappedVendors;
+    let list = mappedVendors.filter(v => !excludedGstins.has(v.vendorGstin));
     const q = vendorSearch.trim().toLowerCase();
 
     if (q) {
@@ -1777,7 +1839,7 @@ export default function ClientVendorMapping({ currentUser }) {
     }
 
     return list;
-  }, [mappedVendors, vendorSearch, statusFilter, inlineCompliance]);
+  }, [mappedVendors, excludedGstins, vendorSearch, statusFilter, inlineCompliance]);
 
   const availableVendorsFiltered = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
@@ -3818,8 +3880,8 @@ export default function ClientVendorMapping({ currentUser }) {
                           <button
                             type="button"
                             className="btn-table-action btn-table-danger"
-                            onClick={() => handleUnmapVendor(gstin)}
-                            title="Remove / Unmap Vendor from Client"
+                            onClick={() => handleRemoveVendorFromReport(gstin)}
+                            title="Remove vendor from this report (does not delete from database)"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -3849,8 +3911,32 @@ export default function ClientVendorMapping({ currentUser }) {
                 GRC &gt; 30: Risky category
               </span>
             </div>
-            <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 600 }}>
-              Showing {filteredMappedVendors.length} of {mappedVendors.length} vendors
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <span style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 600 }}>
+                Showing {filteredMappedVendors.length} of {mappedVendors.length} vendors
+              </span>
+              {excludedGstins.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setExcludedGstins(new Set())}
+                  title="Restore all vendors hidden from this report session"
+                  style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    color: '#2563eb',
+                    borderRadius: '6px',
+                    padding: '2px 8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <RotateCcw size={11} /> Restore {excludedGstins.size} hidden
+                </button>
+              )}
             </div>
           </div>
         </>
@@ -4127,19 +4213,48 @@ export default function ClientVendorMapping({ currentUser }) {
                 </div>
               )}
             </div>
-            <div className="modal-footer">
-              <span style={{ marginRight: 'auto', fontSize: '0.82rem', color: '#64748b', alignSelf: 'center' }}>
-                Selected: <strong>{selectedGstinsToMap.size}</strong> vendor(s)
-              </span>
-              <button type="button" className="btn-ghost-sm" onClick={() => setShowMapModal(false)} disabled={mappingSubmitting}>Cancel</button>
-              <button
-                type="button"
-                className="btn-primary-gradient"
-                disabled={mappingSubmitting || selectedGstinsToMap.size === 0}
-                onClick={handleConfirmMapping}
-              >
-                {mappingSubmitting ? 'Mapping...' : `Map Selected (${selectedGstinsToMap.size})`}
-              </button>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                  Selected: <strong>{selectedGstinsToMap.size}</strong> vendor(s)
+                </span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', cursor: 'pointer', color: '#334155', fontWeight: 600 }}>
+                  <input
+                    type="radio"
+                    name="mapActionType"
+                    value="append"
+                    checked={mapActionType === 'append'}
+                    onChange={() => setMapActionType('append')}
+                  />
+                  Append / Add to client
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', cursor: 'pointer', color: '#b91c1c', fontWeight: 600 }} title="Replaces only this client's mapped vendors. Leaves other clients untouched.">
+                  <input
+                    type="radio"
+                    name="mapActionType"
+                    value="replace"
+                    checked={mapActionType === 'replace'}
+                    onChange={() => setMapActionType('replace')}
+                  />
+                  Replace this client's vendors
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" className="btn-ghost-sm" onClick={() => setShowMapModal(false)} disabled={mappingSubmitting}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn-primary-gradient"
+                  disabled={mappingSubmitting || selectedGstinsToMap.size === 0}
+                  onClick={handleConfirmMapping}
+                >
+                  {mappingSubmitting 
+                    ? 'Saving...' 
+                    : mapActionType === 'replace'
+                      ? `Replace Vendors (${selectedGstinsToMap.size})`
+                      : `Map Selected (${selectedGstinsToMap.size})`
+                  }
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -4211,23 +4326,69 @@ export default function ClientVendorMapping({ currentUser }) {
                     </button>
                   </div>
 
+                  {/* Import Mode Selector — Client-Wise Update vs Append vs Global */}
                   <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.65rem',
-                    padding: '0.65rem 0.9rem',
-                    background: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
-                    fontSize: '0.82rem',
-                    color: '#92400e',
-                    lineHeight: 1.4
+                    padding: '0.85rem 1rem',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    marginBottom: '1rem'
                   }}>
-                    <AlertTriangle size={18} color="#d97706" style={{ flexShrink: 0 }} />
-                    <span>
-                      <strong>Replace Existing Clients:</strong> All current clients and their mapped vendors will be replaced with the data from this sheet upon import.
-                    </span>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.5rem' }}>
+                      Choose How to Update Vendor Data:
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="CLIENT_REPLACE"
+                          checked={importMode === 'CLIENT_REPLACE'}
+                          onChange={() => setImportMode('CLIENT_REPLACE')}
+                          style={{ marginTop: '2px' }}
+                        />
+                        <div>
+                          <strong style={{ color: '#0f172a' }}>Client-Wise Replace (Recommended):</strong> Replace vendor data only for the client(s) in this sheet.
+                          <div style={{ color: '#16a34a', fontSize: '0.74rem', fontWeight: 600 }}>
+                            ✓ Existing vendor data of all other clients is safely preserved and not touched.
+                          </div>
+                        </div>
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="CLIENT_APPEND"
+                          checked={importMode === 'CLIENT_APPEND'}
+                          onChange={() => setImportMode('CLIENT_APPEND')}
+                          style={{ marginTop: '2px' }}
+                        />
+                        <div>
+                          <strong style={{ color: '#0f172a' }}>Merge / Append:</strong> Add new vendors to the existing vendor list for each client.
+                          <div style={{ color: '#64748b', fontSize: '0.74rem' }}>
+                            Keeps existing vendors and adds any newly detected vendors from this upload.
+                          </div>
+                        </div>
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="GLOBAL_REPLACE"
+                          checked={importMode === 'GLOBAL_REPLACE'}
+                          onChange={() => setImportMode('GLOBAL_REPLACE')}
+                          style={{ marginTop: '2px' }}
+                        />
+                        <div>
+                          <strong style={{ color: '#dc2626' }}>Global Replace:</strong> Clear all existing clients and replace entire database.
+                          <div style={{ color: '#dc2626', fontSize: '0.74rem' }}>
+                            ⚠ Warning: Replaces all clients and all vendor mappings across the system.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
                   {/* Client Cards List */}
@@ -4353,7 +4514,14 @@ export default function ClientVendorMapping({ currentUser }) {
                   disabled={importSubmitting || !parsedImportData.length}
                   onClick={handleConfirmImport}
                 >
-                  {importSubmitting ? 'Replacing & Importing...' : `Replace & Import All (${parsedImportData.length} Clients)`}
+                  {importSubmitting 
+                    ? 'Updating Vendor Data...' 
+                    : importMode === 'CLIENT_REPLACE'
+                      ? `Replace Vendors (${parsedImportData.length} Client(s))`
+                      : importMode === 'CLIENT_APPEND'
+                        ? `Append Vendors (${parsedImportData.length} Client(s))`
+                        : `Replace Entire Database (${parsedImportData.length} Client(s))`
+                  }
                 </button>
               </div>
             </div>
