@@ -479,12 +479,24 @@ export const exportReportToPdf = async ({
       }
     },
     didParseCell: (data) => {
+      // 1. HEADER ROW: Strictly enforce pure white text, bold font, and purple background for all headers
+      if (data.section === 'head') {
+        data.cell.styles.textColor = [255, 255, 255];
+        data.cell.styles.fillColor = [59, 24, 95];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.halign = 'center';
+        return;
+      }
+
+      // Guard: Only apply body cell styles below to the body section
+      if (data.section !== 'body') return;
+
       const rowIdx = data.row.index;
       const v = vendors[rowIdx];
       if (!v) return;
 
       // Ensure body cells in column 1 maintain left padding for dot
-      if (data.section === 'body' && data.column.index === 1) {
+      if (data.column.index === 1) {
         data.cell.styles.cellPadding = { top: 2.2, bottom: 2.2, left: 14, right: 2.2 };
       }
 
