@@ -19,15 +19,33 @@ import {
 } from '../utils/reportExportHelper';
 
 export default function ClientVendorMapping({ currentUser }) {
-  // Dynamically compute the last 12 months including the current month
-  const last12Months = useMemo(() => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const now = new Date();
-    const curIdx = now.getMonth();
+  // Available delayed months: 3 previous months (2025) + current year months (Jan, Feb, March, etc.)
+  const previousMonths2025 = useMemo(() => [
+    'September 2025',
+    'October 2025',
+    'November 2025'
+  ], []);
+
+  const currentYearMonths = useMemo(() => [
+    'Jan', 'Feb', 'March', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ], []);
+
+  const allSelectableMonths = useMemo(() => [
+    ...previousMonths2025,
+    ...currentYearMonths
+  ], [previousMonths2025, currentYearMonths]);
+
+  // Keep last12Months pointing to all selectable months for backwards compatibility
+  const last12Months = allSelectableMonths;
+
+  // Recent 3 active/rolling months of the current year for Scenario 8 "Risky" determination
+  const recent3CurrentMonths = useMemo(() => {
+    const curMonthIdx = new Date().getMonth();
+    const monthShorts = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
     const list = [];
-    for (let i = 11; i >= 0; i--) {
-      const idx = (curIdx - i + 120) % 12;
-      list.push(monthNames[idx]);
+    for (let i = 2; i >= 0; i--) {
+      const idx = (curMonthIdx - i + 12) % 12;
+      list.push(monthShorts[idx]);
     }
     return list;
   }, []);
@@ -396,7 +414,18 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  // ── Month Picker Handlers (Last 12 Months Only) ───────────────────────────
+  // ── Month Picker Handlers (3 Previous Months + Current Year) ─────────────
+  const isMonthSelected = (selectedList, monthName) => {
+    if (!Array.isArray(selectedList) || selectedList.length === 0) return false;
+    const t = monthName.trim().toLowerCase();
+    return selectedList.some(m => {
+      const s = m.trim().toLowerCase();
+      if (s === t) return true;
+      if ((s === 'mar' && t === 'march') || (s === 'march' && t === 'mar')) return true;
+      return false;
+    });
+  };
+
   const openMonthPicker = (vendor, field) => {
     const gstin = vendor.vendorGstin;
     const currentVal = inlineCompliance[gstin];
@@ -404,9 +433,13 @@ export default function ClientVendorMapping({ currentUser }) {
       ? (currentVal?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '')
       : (currentVal?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '');
 
-    // Extract month names, stripping any trailing numbers or years
+    // Extract month names, normalizing 'Mar' to 'March' if needed
     const tokens = existingStr
-      ? existingStr.split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean)
+      ? existingStr.split(',').map(s => {
+          const t = s.trim().replace(/-\d+$/, '');
+          if (t.toLowerCase() === 'mar') return 'March';
+          return t;
+        }).filter(Boolean)
       : [];
 
     setMonthPicker({
@@ -420,9 +453,15 @@ export default function ClientVendorMapping({ currentUser }) {
 
   const handleToggleMonth = (monthName) => {
     setMonthPicker(prev => {
-      const exists = prev.selectedMonths.includes(monthName);
-      const updated = exists
-        ? prev.selectedMonths.filter(m => m !== monthName)
+      const isSel = isMonthSelected(prev.selectedMonths, monthName);
+      const updated = isSel
+        ? prev.selectedMonths.filter(m => {
+            const s = m.trim().toLowerCase();
+            const t = monthName.trim().toLowerCase();
+            if (s === t) return false;
+            if ((s === 'mar' && t === 'march') || (s === 'march' && t === 'mar')) return false;
+            return true;
+          })
         : [...prev.selectedMonths, monthName];
       return {
         ...prev,
@@ -1102,7 +1141,7 @@ export default function ClientVendorMapping({ currentUser }) {
         right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
       };
 
-      const last3Months = last12Months.slice(-3);
+      const last3Lower = recent3CurrentMonths;
 
       filteredMappedVendors.forEach((v, idx) => {
         const gstin = v.vendorGstin;
@@ -1127,11 +1166,11 @@ export default function ClientVendorMapping({ currentUser }) {
         const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
         const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
 
-        // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in the last 3 months
-        const last3Lower = last3Months.map(m => m.toLowerCase());
+        // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in recent 3 months of current year
         const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
         const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
           const token = m.trim().toLowerCase();
+          if (token.includes('2025')) return false;
           return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
         });
         const isRisky = showRedCross && hasLast3MonthsDelay;
@@ -1320,8 +1359,7 @@ export default function ClientVendorMapping({ currentUser }) {
   };
 
   const getPreparedVendorsForExport = () => {
-    const last3Months = last12Months.slice(-3);
-    const last3Lower = last3Months.map(m => m.toLowerCase());
+    const last3Lower = recent3CurrentMonths;
 
     return filteredMappedVendors.map((v) => {
       const gstin = v.vendorGstin;
@@ -1344,10 +1382,11 @@ export default function ClientVendorMapping({ currentUser }) {
       const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
       const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
 
-      // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in the last 3 months
+      // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in recent 3 months of current year
       const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
       const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
         const token = m.trim().toLowerCase();
+        if (token.includes('2025')) return false;
         return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
       });
       const isRisky = showRedCross && hasLast3MonthsDelay;
@@ -3244,12 +3283,12 @@ export default function ClientVendorMapping({ currentUser }) {
                   const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
                   const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
 
-                  // Scenario 8: Risky badge if conditions of Scenario 6 are met PLUS delayed in the last 3 months
-                  const last3Months = last12Months.slice(-3);
-                  const last3Lower = last3Months.map(m => m.toLowerCase());
+                  // Scenario 8: Risky badge if conditions of Scenario 6 are met PLUS delayed in recent 3 months of current year
+                  const last3Lower = recent3CurrentMonths;
                   const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
                   const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
                     const token = m.trim().toLowerCase();
+                    if (token.includes('2025')) return false;
                     return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
                   });
                   const isRisky = showRedCross && hasLast3MonthsDelay;
@@ -3976,7 +4015,7 @@ export default function ClientVendorMapping({ currentUser }) {
         >
           <div
             className="modal-card"
-            style={{ maxWidth: '440px', borderRadius: '16px' }}
+            style={{ maxWidth: '480px', borderRadius: '16px' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header" style={{ padding: '1.1rem 1.35rem' }}>
@@ -4012,17 +4051,65 @@ export default function ClientVendorMapping({ currentUser }) {
                 Vendor: <strong style={{ color: '#0f172a' }}>{monthPicker.vendorName}</strong>
               </div>
 
-              {/* Grid of the last 12 months only */}
+              {/* Previous Months (2025) */}
+              <div style={{ fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: '0.45rem' }}>
+                Previous Months (2025)
+              </div>
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '0.65rem',
+                  gap: '0.6rem',
+                  marginBottom: '1rem'
+                }}
+              >
+                {previousMonths2025.map(month => {
+                  const isSelected = isMonthSelected(monthPicker.selectedMonths, month);
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      onClick={() => handleToggleMonth(month)}
+                      style={{
+                        padding: '0.7rem 0.35rem',
+                        fontFamily: 'inherit',
+                        fontSize: '0.80rem',
+                        fontWeight: 700,
+                        borderRadius: '10px',
+                        border: isSelected ? '2px solid #dc2626' : '1.5px solid #e2e8f0',
+                        background: isSelected ? '#fee2e2' : '#f8fafc',
+                        color: isSelected ? '#b91c1c' : '#334155',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.3rem',
+                        whiteSpace: 'nowrap',
+                        boxShadow: isSelected ? '0 2px 6px rgba(220, 38, 38, 0.18)' : 'none'
+                      }}
+                    >
+                      {isSelected && <Check size={13} color="#b91c1c" strokeWidth={3} />}
+                      <span>{month}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Current Year */}
+              <div style={{ fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', marginBottom: '0.45rem' }}>
+                Current Year (2026)
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '0.6rem',
                   marginBottom: '1.25rem'
                 }}
               >
-                {last12Months.map(month => {
-                  const isSelected = monthPicker.selectedMonths.includes(month);
+                {currentYearMonths.map(month => {
+                  const isSelected = isMonthSelected(monthPicker.selectedMonths, month);
                   return (
                     <button
                       key={month}
