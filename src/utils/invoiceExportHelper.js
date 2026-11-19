@@ -138,6 +138,13 @@ export async function exportInvoiceToPdf(invoiceData) {
     `Billing Period: ${invoiceData.billingPeriod || ''}`
   ];
 
+  if (invoiceData.poNumber && invoiceData.poNumber.trim()) {
+    invoiceMetaLines.push(`PO Number: ${invoiceData.poNumber.trim()}`);
+  }
+  if (invoiceData.poDate && invoiceData.poDate.trim()) {
+    invoiceMetaLines.push(`PO Date: ${invoiceData.poDate.trim()}`);
+  }
+
   invoiceMetaLines.forEach((line) => {
     doc.text(line, leftMargin, curY);
     curY += 15;
@@ -599,9 +606,21 @@ export async function exportInvoiceToDocx(invoiceData) {
       children: [new TextRun({ text: `Invoice Date: ${invoiceData.invoiceDate || ''}`, size: 22, color: '000000' })]
     }),
     new Paragraph({
-      spacing: { after: 180 },
+      spacing: { after: (invoiceData.poNumber || invoiceData.poDate) ? 30 : 180 },
       children: [new TextRun({ text: `Billing Period: ${invoiceData.billingPeriod || ''}`, size: 22, color: '000000' })]
     }),
+    ...(invoiceData.poNumber && invoiceData.poNumber.trim() ? [
+      new Paragraph({
+        spacing: { after: (invoiceData.poDate && invoiceData.poDate.trim()) ? 30 : 180 },
+        children: [new TextRun({ text: `PO Number: ${invoiceData.poNumber.trim()}`, size: 22, color: '000000' })]
+      })
+    ] : []),
+    ...(invoiceData.poDate && invoiceData.poDate.trim() ? [
+      new Paragraph({
+        spacing: { after: 180 },
+        children: [new TextRun({ text: `PO Date: ${invoiceData.poDate.trim()}`, size: 22, color: '000000' })]
+      })
+    ] : []),
 
     // Items Table
     new Table({

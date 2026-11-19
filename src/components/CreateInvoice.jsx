@@ -73,6 +73,8 @@ export default function CreateInvoice({ currentUser, onBack }) {
     invoiceNo: '',
     invoiceDate: todayFormatted,
     billingPeriod: defaultBillingPeriod,
+    poNumber: '',
+    poDate: '',
     itemDescription: 'ScrapDMS SaaS Platform Monthly Subscription',
     price: 40000,
     discountPercent: 0,
@@ -300,7 +302,8 @@ export default function CreateInvoice({ currentUser, onBack }) {
       list = list.filter(inv =>
         (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
         (inv.companyName && inv.companyName.toLowerCase().includes(q)) ||
-        (inv.customerGstin && inv.customerGstin.toLowerCase().includes(q))
+        (inv.customerGstin && inv.customerGstin.toLowerCase().includes(q)) ||
+        (inv.poNumber && inv.poNumber.toLowerCase().includes(q))
       );
     }
     return list;
@@ -391,6 +394,8 @@ export default function CreateInvoice({ currentUser, onBack }) {
         invoiceNo: payload.invoiceNumber || payload.invoiceNo || prev.invoiceNo,
         invoiceDate: payload.invoiceDate || prev.invoiceDate,
         billingPeriod: payload.billingPeriod || prev.billingPeriod,
+        poNumber: payload.poNumber !== undefined ? payload.poNumber : (prev.poNumber || ''),
+        poDate: payload.poDate !== undefined ? payload.poDate : (prev.poDate || ''),
         itemDescription: payload.itemDescription || prev.itemDescription,
         price: payload.price !== undefined ? payload.price : prev.price,
         discountPercent: payload.discountPercent !== undefined ? payload.discountPercent : 0,
@@ -1572,6 +1577,28 @@ export default function CreateInvoice({ currentUser, onBack }) {
                 onChange={e => setFormData({ ...formData, natureOfSupply: e.target.value })}
                 placeholder="SaaS / Software Services"
               />
+            </div>
+
+            <div className="form-row-2col">
+              <div className="form-field">
+                <label>PO Number</label>
+                <input
+                  type="text"
+                  value={formData.poNumber}
+                  onChange={e => setFormData({ ...formData, poNumber: e.target.value })}
+                  placeholder="e.g. PO/2026/089"
+                />
+              </div>
+
+              <div className="form-field">
+                <label>PO Date</label>
+                <input
+                  type="text"
+                  value={formData.poDate}
+                  onChange={e => setFormData({ ...formData, poDate: e.target.value })}
+                  placeholder="e.g. 15th Nov 2026"
+                />
+              </div>
             </div>
           </div>
 
