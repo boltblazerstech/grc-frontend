@@ -591,25 +591,86 @@ export const apiClient = {
 
     async getClientLogoInfoByGstin(gstin) {
         if (!gstin || gstin.trim().length < 5) return { hasLogo: false, gstin, logoUrl: null };
+        const clean = gstin.trim().toUpperCase();
+
+        // 1. Check live clients list (guaranteed active on backend)
         try {
-            const clean = gstin.trim().toUpperCase();
+            const clients = await this.getClients();
+            if (Array.isArray(clients)) {
+                const matched = clients.find(c => c.clientGstin && c.clientGstin.toUpperCase() === clean);
+                if (matched && matched.hasLogo) {
+                    return {
+                        hasLogo: true,
+                        gstin: clean,
+                        clientId: matched.id,
+                        clientName: matched.clientName,
+                        logoUrl: this.getClientLogoUrl(matched.id)
+                    };
+                }
+            }
+        } catch (e) {
+            console.warn('Clients query for logo notice:', e);
+        }
+
+        // 2. Check dedicated endpoint if available
+        try {
             const response = await fetch(`${API_CLIENTS_URL}/logo-info/by-gstin/${encodeURIComponent(clean)}`);
             if (response.ok) {
                 return await response.json();
             }
-        } catch (e) {
-            console.warn('Failed to fetch client logo info by GSTIN:', e);
+        } catch {
+            // ignore unmapped endpoint on old deployments
         }
-        return { hasLogo: false, gstin, logoUrl: null };
+
+        return { hasLogo: false, gstin: clean, logoUrl: null };
     },
 
     async uploadClientLogoByGstin(gstin, file, clientName = '') {
         if (!gstin) throw new Error('Customer GSTIN is required to map logo.');
         const clean = gstin.trim().toUpperCase();
+
+        // 1. Resolve client by GSTIN from live clients list
+        let targetClientId = null;
+        try {
+            const clients = await this.getClients();
+            if (Array.isArray(clients)) {
+                const matched = clients.find(c => c.clientGstin && c.clientGstin.toUpperCase() === clean);
+                if (matched) {
+                    targetClientId = matched.id;
+                }
+            }
+        } catch (e) {
+            console.warn('Clients list query before upload notice:', e);
+        }
+
+        // 2. If client does not exist, create client record
+        if (!targetClientId) {
+            try {
+                const created = await this.createClient({
+                    clientGstin: clean,
+                    clientName: clientName || clean
+                });
+                targetClientId = created?.id;
+            } catch (createErr) {
+                console.warn('Client auto-create notice:', createErr);
+            }
+        }
+
+        // 3. Upload to client ID (guaranteed working endpoint on Cloud Run)
+        if (targetClientId) {
+            await this.uploadClientLogo(targetClientId, file);
+            return {
+                hasLogo: true,
+                gstin: clean,
+                clientId: targetClientId,
+                logoUrl: this.getClientLogoUrl(targetClientId)
+            };
+        }
+
+        // 4. Fallback to /logo/by-gstin/
         const formData = new FormData();
         formData.append('file', file);
         if (clientName) formData.append('clientName', clientName);
-
         const response = await fetch(`${API_CLIENTS_URL}/logo/by-gstin/${encodeURIComponent(clean)}`, {
             method: 'POST',
             body: formData

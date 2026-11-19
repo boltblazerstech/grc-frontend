@@ -18,6 +18,7 @@ import {
 } from 'docx';
 import { loadInvoiceAssets, dataUrlToUint8Array } from './invoiceAssets';
 import { formatIndianCurrency } from './numberToWords';
+import { apiClient } from '../api/apiClient';
 
 /**
  * Generates and downloads the Invoice as a high-quality PDF matching the ScrapDMS Word template
@@ -30,15 +31,18 @@ export async function exportInvoiceToPdf(invoiceData) {
   if (!clientLogoDataUrl && invoiceData.customerGstin) {
     try {
       const gstin = invoiceData.customerGstin.trim().toUpperCase();
-      const res = await fetch(`/api/admin/clients/logo/by-gstin/${encodeURIComponent(gstin)}`);
-      if (res.ok) {
-        const blob = await res.blob();
-        clientLogoDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(blob);
-        });
+      const logoInfo = await apiClient.getClientLogoInfoByGstin(gstin);
+      if (logoInfo?.hasLogo && logoInfo?.logoUrl) {
+        const res = await fetch(logoInfo.logoUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          clientLogoDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
       }
     } catch (e) {
       console.warn('Could not auto-fetch client logo by GSTIN for invoice:', e);
@@ -428,15 +432,18 @@ export async function exportInvoiceToDocx(invoiceData) {
     if (!cDataUrl && invoiceData.customerGstin) {
       try {
         const gstin = invoiceData.customerGstin.trim().toUpperCase();
-        const res = await fetch(`/api/admin/clients/logo/by-gstin/${encodeURIComponent(gstin)}`);
-        if (res.ok) {
-          const blob = await res.blob();
-          cDataUrl = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(blob);
-          });
+        const logoInfo = await apiClient.getClientLogoInfoByGstin(gstin);
+        if (logoInfo?.hasLogo && logoInfo?.logoUrl) {
+          const res = await fetch(logoInfo.logoUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            cDataUrl = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.onerror = () => resolve(null);
+              reader.readAsDataURL(blob);
+            });
+          }
         }
       } catch (e) {
         console.warn('Could not auto-fetch client logo by GSTIN for docx invoice:', e);

@@ -102,9 +102,10 @@ export default function CreateInvoice({ currentUser, onBack }) {
       let cancelled = false;
       apiClient.getClientLogoInfoByGstin(gstin).then(info => {
         if (!cancelled) {
+          const resolvedUrl = info?.logoUrl ? `${info.logoUrl}?v=${Date.now()}` : (info?.hasLogo ? `${apiClient.getClientLogoByGstinUrl(gstin)}?v=${Date.now()}` : null);
           setCustomerLogoInfo({
             hasLogo: Boolean(info?.hasLogo),
-            logoUrl: info?.hasLogo ? `${apiClient.getClientLogoByGstinUrl(gstin)}?v=${Date.now()}` : null,
+            logoUrl: resolvedUrl,
             gstin
           });
         }
@@ -129,10 +130,11 @@ export default function CreateInvoice({ currentUser, onBack }) {
     }
     setIsUploadingLogo(true);
     try {
-      await apiClient.uploadClientLogoByGstin(gstin, file, formData.customerName);
+      const uploadRes = await apiClient.uploadClientLogoByGstin(gstin, file, formData.customerName);
+      const resolvedUrl = uploadRes?.logoUrl ? `${uploadRes.logoUrl}?v=${Date.now()}` : `${apiClient.getClientLogoByGstinUrl(gstin)}?v=${Date.now()}`;
       setCustomerLogoInfo({
         hasLogo: true,
-        logoUrl: `${apiClient.getClientLogoByGstinUrl(gstin)}?v=${Date.now()}`,
+        logoUrl: resolvedUrl,
         gstin
       });
       showToast(`Logo mapped with GSTIN ${gstin} and auto-saved for all future invoices & reports!`);

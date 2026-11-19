@@ -704,10 +704,10 @@ export default function ClientVendorMapping({ currentUser }) {
 
     setLogoSubmitting(true);
     try {
-      if (logoTargetClient.clientGstin) {
-        await apiClient.uploadClientLogoByGstin(logoTargetClient.clientGstin, directLogoFile, logoTargetClient.clientName);
-      } else {
+      if (logoTargetClient.id) {
         await apiClient.uploadClientLogo(logoTargetClient.id, directLogoFile);
+      } else if (logoTargetClient.clientGstin) {
+        await apiClient.uploadClientLogoByGstin(logoTargetClient.clientGstin, directLogoFile, logoTargetClient.clientName);
       }
       showToast('Logo uploaded and mapped to GSTIN successfully');
       setShowLogoModal(false);
