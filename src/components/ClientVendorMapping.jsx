@@ -4,7 +4,7 @@ import {
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
   ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
   UploadCloud, ChevronDown, ChevronUp, AlertTriangle, Download,
-  Copy, CheckCircle2, Loader2, ArrowUpDown, Save, Calendar,
+  Copy, CheckCircle2, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Save, Calendar,
   FileText, Sliders, RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -130,6 +130,17 @@ export default function ClientVendorMapping({ currentUser }) {
 
   // Report-Level Excluded Vendors (hides/removes from report and downloads; DOES NOT delete from DB)
   const [excludedGstins, setExcludedGstins] = useState(new Set());
+
+  // Alphabetical Sorting for Company Name: null (default/original) | 'asc' (A to Z) | 'desc' (Z to A)
+  const [nameSortOrder, setNameSortOrder] = useState(null);
+
+  const toggleNameSort = () => {
+    setNameSortOrder(prev => {
+      if (prev === 'asc') return 'desc';
+      if (prev === 'desc') return null;
+      return 'asc';
+    });
+  };
 
   // Import Mode: 'CLIENT_REPLACE' (default) | 'CLIENT_APPEND' | 'GLOBAL_REPLACE'
   const [importMode, setImportMode] = useState('CLIENT_REPLACE');
@@ -1838,8 +1849,23 @@ export default function ClientVendorMapping({ currentUser }) {
       });
     }
 
+    // Alphabetical Sorting by Company / Vendor Name (A to Z or Z to A)
+    if (nameSortOrder === 'asc') {
+      list = [...list].sort((a, b) => {
+        const nameA = getVendorDisplayName(a).trim().toLowerCase();
+        const nameB = getVendorDisplayName(b).trim().toLowerCase();
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    } else if (nameSortOrder === 'desc') {
+      list = [...list].sort((a, b) => {
+        const nameA = getVendorDisplayName(a).trim().toLowerCase();
+        const nameB = getVendorDisplayName(b).trim().toLowerCase();
+        return nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    }
+
     return list;
-  }, [mappedVendors, excludedGstins, vendorSearch, statusFilter, inlineCompliance]);
+  }, [mappedVendors, excludedGstins, vendorSearch, statusFilter, inlineCompliance, nameSortOrder]);
 
   const availableVendorsFiltered = useMemo(() => {
     const q = mapSearch.trim().toLowerCase();
@@ -2450,6 +2476,16 @@ export default function ClientVendorMapping({ currentUser }) {
 
         .assessment-table th.th-company {
           text-align: left;
+        }
+
+        .assessment-table th.th-sortable {
+          cursor: pointer;
+          user-select: none;
+          transition: background 0.15s ease;
+        }
+
+        .assessment-table th.th-sortable:hover {
+          background: #4c268f;
         }
 
         .assessment-table th:last-child {
@@ -3575,7 +3611,48 @@ export default function ClientVendorMapping({ currentUser }) {
               <thead>
                 <tr>
                   <th style={{ width: '45px', textAlign: 'center' }}>Sl. No.</th>
-                  <th className="th-company" style={{ minWidth: '220px', textAlign: 'left' }}>Company Name</th>
+                  <th
+                    className="th-company th-sortable"
+                    style={{ minWidth: '230px', textAlign: 'left' }}
+                    onClick={toggleNameSort}
+                    title={
+                      nameSortOrder === 'asc'
+                        ? 'Sorted A → Z (Click to sort Z → A)'
+                        : nameSortOrder === 'desc'
+                          ? 'Sorted Z → A (Click to reset to default order)'
+                          : 'Click to sort alphabetically (A → Z)'
+                    }
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Company Name</span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          background: nameSortOrder ? 'rgba(255, 255, 255, 0.22)' : 'transparent',
+                          fontSize: '0.72rem',
+                          fontWeight: 700
+                        }}
+                      >
+                        {nameSortOrder === 'asc' ? (
+                          <>
+                            <ArrowUp size={13} style={{ strokeWidth: 2.5 }} />
+                            <span>A-Z</span>
+                          </>
+                        ) : nameSortOrder === 'desc' ? (
+                          <>
+                            <ArrowDown size={13} style={{ strokeWidth: 2.5 }} />
+                            <span>Z-A</span>
+                          </>
+                        ) : (
+                          <ArrowUpDown size={13} style={{ opacity: 0.65 }} />
+                        )}
+                      </span>
+                    </div>
+                  </th>
                   <th style={{ minWidth: '150px', textAlign: 'center' }}>GSTN</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>Type</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
