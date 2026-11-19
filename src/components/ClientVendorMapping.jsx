@@ -2181,6 +2181,11 @@ export default function ClientVendorMapping({ currentUser }) {
           white-space: nowrap;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
           border-bottom: 2px solid #28124d;
+          text-align: center;
+        }
+
+        .assessment-table th.th-company {
+          text-align: left;
         }
 
         .assessment-table th:last-child {
@@ -2228,8 +2233,9 @@ export default function ClientVendorMapping({ currentUser }) {
           font-size: 0.82rem;
           font-weight: 700;
           color: #334155;
-          display: flex;
+          display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 0.4rem;
         }
 
@@ -2249,10 +2255,11 @@ export default function ClientVendorMapping({ currentUser }) {
           background: #f1f5f9;
         }
 
-        /* Editable Compliance Cell */
+        /* Editable Compliance Cell - Centered in middle */
         .compliance-cell {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 0.4rem;
         }
 
@@ -3290,21 +3297,21 @@ export default function ClientVendorMapping({ currentUser }) {
               <thead>
                 <tr>
                   <th style={{ width: '45px', textAlign: 'center' }}>Sl. No.</th>
-                  <th style={{ minWidth: '220px' }}>Company Name</th>
-                  <th style={{ minWidth: '150px' }}>GSTN</th>
-                  <th style={{ minWidth: '130px' }}>Type</th>
+                  <th className="th-company" style={{ minWidth: '220px', textAlign: 'left' }}>Company Name</th>
+                  <th style={{ minWidth: '150px', textAlign: 'center' }}>GSTN</th>
+                  <th style={{ minWidth: '130px', textAlign: 'center' }}>Type</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
                   <th style={{ width: '85px', textAlign: 'center' }}>GST Status</th>
-                  <th style={{ minWidth: '110px' }} title="Editable field — edit and click 'Save Changes' above">
+                  <th style={{ minWidth: '110px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR1 ✎
                   </th>
-                  <th style={{ minWidth: '150px' }} title="Editable field — edit and click 'Save Changes' above">
+                  <th style={{ minWidth: '150px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR3B (Delayed) ✎
                   </th>
-                  <th style={{ minWidth: '160px' }}>GSTR7R</th>
+                  <th style={{ minWidth: '160px', textAlign: 'center' }}>GSTR7R</th>
                   <th style={{ minWidth: '110px', textAlign: 'center' }}>Aadhaar Authenticated</th>
-                  <th style={{ minWidth: '170px' }}>Core Activity</th>
-                  <th style={{ minWidth: '130px' }}>Turn over</th>
+                  <th style={{ minWidth: '170px', textAlign: 'center' }}>Core Activity</th>
+                  <th style={{ minWidth: '130px', textAlign: 'center' }}>Turn over</th>
                   <th style={{ minWidth: '100px', textAlign: 'center' }}>Score & Action</th>
                 </tr>
               </thead>
@@ -3386,7 +3393,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* GSTN */}
-                      <td>
+                      <td style={{ textAlign: 'center' }}>
                         <div className="gstn-cell">
                           <span>{gstin}</span>
                           <button
@@ -3401,7 +3408,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Type */}
-                      <td style={{ color: isEntireRowRed ? '#ffffff' : '#475569', fontSize: '0.82rem' }}>
+                      <td style={{ textAlign: 'center', color: isEntireRowRed ? '#ffffff' : '#475569', fontSize: '0.82rem' }}>
                         {vendor.gstType || 'Partnership'}
                       </td>
 
@@ -3423,7 +3430,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* GSTR1 (Directly Editable) */}
-                      <td>
+                      <td style={{ textAlign: 'center' }}>
                         <div className="compliance-cell">
                           <span
                             className="circular-dot-indicator"
@@ -3466,7 +3473,10 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* GSTR3B (Delayed) (Directly Editable) */}
-                      <td className={!isEntireRowRed ? (gstr3bVal > 2 ? 'cell-bg-red' : (gstr3bVal >= 1 ? 'cell-bg-yellow' : '')) : ''}>
+                      <td
+                        className={!isEntireRowRed ? (gstr3bVal > 2 ? 'cell-bg-red' : (gstr3bVal >= 1 ? 'cell-bg-yellow' : '')) : ''}
+                        style={{ textAlign: 'center' }}
+                      >
                         <div className="compliance-cell">
                           <input
                             type="number"
@@ -3506,7 +3516,10 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* GSTR7R */}
-                      <td className={!isEntireRowRed && isTrader && isGstr7NA ? 'cell-bg-red' : ''}>
+                      <td
+                        className={!isEntireRowRed && isTrader && isGstr7NA ? 'cell-bg-red' : ''}
+                        style={{ textAlign: 'center' }}
+                      >
                         <span
                           className="gstr7-badge"
                           style={isEntireRowRed ? {
@@ -3539,14 +3552,14 @@ export default function ClientVendorMapping({ currentUser }) {
                       </td>
 
                       {/* Core Activity */}
-                      <td style={{ color: isEntireRowRed ? '#ffffff' : '#475569', fontSize: '0.82rem' }}>
+                      <td style={{ textAlign: 'center', color: isEntireRowRed ? '#ffffff' : '#475569', fontSize: '0.82rem' }}>
                         {vendor.coreActivity || 'Manufacturer'}
                       </td>
 
                       {/* Turn over */}
                       <td
                         className={!isEntireRowRed && isLowTurnover ? 'cell-bg-yellow' : ''}
-                        style={{ color: isEntireRowRed ? '#ffffff' : (!isEntireRowRed && isLowTurnover ? '#713f12' : '#334155'), fontWeight: 600, fontSize: '0.82rem' }}
+                        style={{ textAlign: 'center', color: isEntireRowRed ? '#ffffff' : (!isEntireRowRed && isLowTurnover ? '#713f12' : '#334155'), fontWeight: 600, fontSize: '0.82rem' }}
                       >
                         {vendor.aggregateTurnover || 'N/A'}
                       </td>

@@ -15,7 +15,8 @@ import {
   WidthType,
   BorderStyle,
   HeadingLevel,
-  ShadingType
+  ShadingType,
+  VerticalAlign
 } from 'docx';
 
 // Default template texts matching the official Vendor Assessment Report format
@@ -421,25 +422,22 @@ export const exportReportToPdf = async ({
       valign: 'middle'
     },
     columnStyles: {
-      0: { cellWidth: 24, halign: 'center' },  // Sl. No.
+      0: { cellWidth: 22, halign: 'center' },  // Sl. No.
       1: { 
-        cellWidth: 140,
-        cellPadding: { top: 2.2, bottom: 2.2, left: 15, right: 2.2 }
-      },                                      // Company Name (15pt left padding keeps text away from dot)
-      2: { cellWidth: 80 },                   // GSTN (standard clean helvetica)
-      3: { cellWidth: 62 },                   // Type
+        cellWidth: 135,
+        cellPadding: { top: 2.2, bottom: 2.2, left: 14, right: 2.2 }
+      },                                      // Company Name
+      2: { cellWidth: 78, halign: 'center' },  // GSTN
+      3: { cellWidth: 60, halign: 'center' },  // Type
       4: { cellWidth: 20, halign: 'center' },  // Age
       5: { cellWidth: 42, halign: 'center' },  // GST Status
-      6: { 
-        cellWidth: 46,
-        cellPadding: { top: 2.2, bottom: 2.2, left: 15, right: 2.2 }
-      },                                      // GSTR1 (15pt left padding keeps text away from dot)
-      7: { cellWidth: 62 },                   // GSTR3B (Delayed)
-      8: { cellWidth: 76 },                   // GSTR7R
+      6: { cellWidth: 48, halign: 'center' },  // GSTR1
+      7: { cellWidth: 62, halign: 'center' },  // GSTR3B (Delayed)
+      8: { cellWidth: 78, halign: 'center' },  // GSTR7R
       9: { cellWidth: 50, halign: 'center' },  // Aadhaar Authenticated
-      10: { cellWidth: 78 },                  // Core Activity
-      11: { cellWidth: 58 },                  // Turn over
-      12: { cellWidth: 48, halign: 'center' }  // Score & Action (Fits completely without truncation!)
+      10: { cellWidth: 78, halign: 'center' }, // Core Activity
+      11: { cellWidth: 60, halign: 'center' }, // Turn over
+      12: { cellWidth: 48, halign: 'center' }  // Score & Action
     },
     didDrawPage: (data) => {
       drawPageHeaderAndFooter(doc, false);
@@ -453,22 +451,24 @@ export const exportReportToPdf = async ({
         if (data.column.index === 1) {
           const dotColor = hexToRgb(v.companyDotColorHex || '#10b981');
           doc.setFillColor(dotColor.r, dotColor.g, dotColor.b);
-          // Dot placed at left: cx = 6.8, radius = 3.0 (spans x=3.8 to 9.8)
-          // With left cellPadding = 15, text begins at x=15, leaving 5.2pt clear gap
           const cx = data.cell.x + 6.8;
           const lineCount = Array.isArray(data.cell.text) ? data.cell.text.length : 1;
           const cy = (data.cell.y + data.cell.height / 2) - ((lineCount - 1) * 4.2);
           doc.circle(cx, cy, 3.0, 'F');
         }
 
-        // Native vector circular dot in Column 6 (GSTR1)
+        // Native vector circular dot in Column 6 (GSTR1) positioned right before centered text
         if (data.column.index === 6) {
           const dotColor = hexToRgb(v.gstr1DotColorHex || '#10b981');
           doc.setFillColor(dotColor.r, dotColor.g, dotColor.b);
-          const cx = data.cell.x + 6.8;
-          const lineCount = Array.isArray(data.cell.text) ? data.cell.text.length : 1;
-          const cy = (data.cell.y + data.cell.height / 2) - ((lineCount - 1) * 4.2);
-          doc.circle(cx, cy, 3.0, 'F');
+          const lines = Array.isArray(data.cell.text) ? data.cell.text : [data.cell.text || ''];
+          const firstLine = lines[0] || '';
+          const textW = doc.getTextWidth(firstLine);
+          const cellCenterX = data.cell.x + data.cell.width / 2;
+          const cx = Math.max(data.cell.x + 3.5, cellCenterX - (textW / 2) - 4.5);
+          const lineCount = lines.length;
+          const cy = (data.cell.y + data.cell.height / 2) - ((lineCount - 1) * 3.8);
+          doc.circle(cx, cy, 2.3, 'F');
         }
       }
     },
@@ -477,9 +477,9 @@ export const exportReportToPdf = async ({
       const v = vendors[rowIdx];
       if (!v) return;
 
-      // Ensure body cells in column 1 & 6 maintain left padding for dot
-      if (data.section === 'body' && (data.column.index === 1 || data.column.index === 6)) {
-        data.cell.styles.cellPadding = { top: 2.2, bottom: 2.2, left: 15, right: 2.2 };
+      // Ensure body cells in column 1 maintain left padding for dot
+      if (data.section === 'body' && data.column.index === 1) {
+        data.cell.styles.cellPadding = { top: 2.2, bottom: 2.2, left: 14, right: 2.2 };
       }
 
       // Scenario 9: Critical risk whole row red
@@ -757,7 +757,8 @@ export const exportReportToDocx = async ({
     children: tableHeaders.map(title =>
       new TableCell({
         shading: { fill: '3B185F', type: ShadingType.CLEAR }, // Deep Purple Header
-        margins: { top: 100, bottom: 100, left: 80, right: 80 },
+        verticalAlign: VerticalAlign.CENTER,
+        margins: { top: 110, bottom: 110, left: 70, right: 70 },
         children: [
           new Paragraph({
             alignment: AlignmentType.CENTER,
@@ -794,7 +795,7 @@ export const exportReportToDocx = async ({
       else if (v.gstr3bVal >= 1) gstr3bCellBg = 'FEF08A';
     }
 
-    // Company Name formatted
+    // Company Name formatted (Left-aligned for readability, vertically centered)
     const compChildren = [];
     if (v.isRisky || showRedCross) {
       compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
@@ -803,17 +804,17 @@ export const exportReportToDocx = async ({
     compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
     compChildren.push(new TextRun({ text: v.companyName, bold: v.isEntireRowRed, color: rowTextColor, size: 17 }));
 
-    // GSTR1 Cell formatted
+    // GSTR1 Cell formatted (Centered in cell)
     const gstr1DotColor = (v.gstr1DotColorHex || '10B981').replace('#', '');
     const gstr1Children = [
-      new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : gstr1DotColor, size: 22 }),
+      new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : gstr1DotColor, size: 20 }),
       new TextRun({ text: `${v.gstr1Val}`, bold: true, color: rowTextColor, size: 17 })
     ];
     if (v.gstr1Months) {
       gstr1Children.push(new TextRun({ text: `  ${v.gstr1Months}`, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 16 }));
     }
 
-    // GSTR3B Cell formatted
+    // GSTR3B Cell formatted (Centered in cell)
     const gstr3bChildren = [
       new TextRun({ text: `${v.gstr3bVal}`, bold: true, color: rowTextColor, size: 17 })
     ];
@@ -821,57 +822,85 @@ export const exportReportToDocx = async ({
       gstr3bChildren.push(new TextRun({ text: `  ${v.gstr3bMonths}`, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 16 }));
     }
 
+    const cellMargins = { top: 90, bottom: 90, left: 60, right: 60 };
+
     return new TableRow({
       children: [
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
           children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${idx + 1}`, size: 17, color: rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: compChildren })]
+          children: [new Paragraph({ alignment: AlignmentType.LEFT, children: compChildren })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: [new TextRun({ text: v.gstin, size: 16, font: 'Courier New', color: rowTextColor })] })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.gstin, size: 16, font: 'Courier New', color: rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: [new TextRun({ text: v.gstType || 'Partnership', size: 17, color: rowTextColor })] })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.gstType || 'Partnership', size: 17, color: rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : (typeof v.ageDisplay === 'number' && v.ageDisplay < 2 ? { fill: 'DBEAFE', type: ShadingType.CLEAR } : undefined),
           children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${v.ageDisplay}`, size: 17, color: rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
           children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.gstStatus || 'Active', bold: true, size: 17, color: v.isEntireRowRed ? 'FFFFFF' : '16A34A' })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: gstr1Children })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: gstr1Children })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: gstr3bCellBg ? { fill: gstr3bCellBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: gstr3bChildren })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: gstr3bChildren })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: [new TextRun({ text: v.gstr7Text || 'N/A', size: 17, color: rowTextColor })] })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.gstr7Text || 'N/A', size: 17, color: (v.gstr7Text === 'N/A' && !v.isEntireRowRed) ? 'DC2626' : rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
           children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.aadhaarValidation || 'N/A', bold: (v.aadhaarValidation || '').toLowerCase() === 'no', size: 17, color: (v.aadhaarValidation || '').toLowerCase() === 'no' && !v.isEntireRowRed ? 'DC2626' : rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
-          children: [new Paragraph({ children: [new TextRun({ text: v.coreActivity || 'Manufacturer', size: 17, color: rowTextColor })] })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.coreActivity || 'Manufacturer', size: 17, color: rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : (v.isLowTurnover ? { fill: 'FEF3C7', type: ShadingType.CLEAR } : undefined),
-          children: [new Paragraph({ children: [new TextRun({ text: v.aggregateTurnover || 'N/A', size: 17, color: rowTextColor })] })]
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: v.aggregateTurnover || 'N/A', size: 17, color: rowTextColor })] })]
         }),
         new TableCell({
+          verticalAlign: VerticalAlign.CENTER,
+          margins: cellMargins,
           shading: rowBg ? { fill: rowBg, type: ShadingType.CLEAR } : undefined,
           children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${v.grcScore ?? 'N/A'}`, size: 17, color: rowTextColor })] })]
         })
