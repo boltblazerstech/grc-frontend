@@ -133,6 +133,19 @@ const MasterView = ({ currentUser }) => {
     }
   };
 
+  const isInvalidName = (s) => {
+    if (!s) return true;
+    const t = String(s).trim().toLowerCase();
+    return t === "" || t === "na" || t === "n/a" || t === "null" || t === "none" || t === "-" || t === "undefined";
+  };
+
+  const getCompanyDisplayName = (c) => {
+    if (!c) return "N/A";
+    const trade = !isInvalidName(c.tradeName) ? c.tradeName.trim() : null;
+    const legal = !isInvalidName(c.legalName) ? c.legalName.trim() : null;
+    return trade || legal || c.gstin || "N/A";
+  };
+
   const filteredCompanies = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return sortedCompanies.filter((c) => {
@@ -550,7 +563,7 @@ const MasterView = ({ currentUser }) => {
                         </td>
                       )}
                       <td className="row-num">{index + 1}</td>
-                      <td>{c.tradeName || c.legalName || "N/A"}</td>
+                      <td>{getCompanyDisplayName(c)}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <div
                           style={{

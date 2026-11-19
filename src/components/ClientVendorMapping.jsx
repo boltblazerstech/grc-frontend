@@ -1567,11 +1567,18 @@ export default function ClientVendorMapping({ currentUser }) {
       return s === '' || s === 'na' || s === 'n/a' || s === 'null' || s === 'none' || s === 'undefined' || s === '-';
     };
 
-    const trade = !isInvalid(vendor.tradeName) ? vendor.tradeName.trim() : null;
-    const legal = !isInvalid(vendor.legalName) ? vendor.legalName.trim() : null;
+    // Trader Name / Trade Name from GSTN details
+    const traderName = !isInvalid(vendor.tradeName)
+      ? vendor.tradeName.trim()
+      : (!isInvalid(vendor.traderName) ? vendor.traderName.trim() : (!isInvalid(vendor.businessName) ? vendor.businessName.trim() : null));
 
-    // Prioritize trade name; if null/NA, fallback to legal name; if both fail, GSTIN
-    return trade || legal || vendor.vendorGstin || vendor.gstin || '';
+    // Vendor Name / Legal Name from GSTN details or import
+    const vendorName = !isInvalid(vendor.vendorName)
+      ? vendor.vendorName.trim()
+      : (!isInvalid(vendor.legalName) ? vendor.legalName.trim() : (!isInvalid(vendor.name) ? vendor.name.trim() : null));
+
+    // If Vendor Name is blank or NA, automatically populate Trader Name (and vice versa); fallback to GSTIN if both missing
+    return traderName || vendorName || vendor.vendorGstin || vendor.gstin || '';
   };
 
   const computeAge = (regDate) => {
