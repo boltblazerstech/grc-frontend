@@ -584,6 +584,49 @@ export const apiClient = {
         return `${API_CLIENTS_URL}/${clientId}/logo`;
     },
 
+    getClientLogoByGstinUrl(gstin) {
+        if (!gstin) return '';
+        return `${API_CLIENTS_URL}/logo/by-gstin/${encodeURIComponent(gstin.trim().toUpperCase())}`;
+    },
+
+    async getClientLogoInfoByGstin(gstin) {
+        if (!gstin || gstin.trim().length < 5) return { hasLogo: false, gstin, logoUrl: null };
+        try {
+            const clean = gstin.trim().toUpperCase();
+            const response = await fetch(`${API_CLIENTS_URL}/logo-info/by-gstin/${encodeURIComponent(clean)}`);
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (e) {
+            console.warn('Failed to fetch client logo info by GSTIN:', e);
+        }
+        return { hasLogo: false, gstin, logoUrl: null };
+    },
+
+    async uploadClientLogoByGstin(gstin, file, clientName = '') {
+        if (!gstin) throw new Error('Customer GSTIN is required to map logo.');
+        const clean = gstin.trim().toUpperCase();
+        const formData = new FormData();
+        formData.append('file', file);
+        if (clientName) formData.append('clientName', clientName);
+
+        const response = await fetch(`${API_CLIENTS_URL}/logo/by-gstin/${encodeURIComponent(clean)}`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            let msg = 'Failed to upload client logo for GSTIN';
+            try {
+                const b = await response.json();
+                msg = b.details || b.message || b.error || msg;
+            } catch {
+                msg = (await response.text()) || msg;
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    },
+
     async getClientVendors(clientId) {
         const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors`);
         if (!response.ok) throw new Error('Failed to fetch mapped vendors');

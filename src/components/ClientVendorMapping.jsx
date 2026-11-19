@@ -592,7 +592,10 @@ export default function ClientVendorMapping({ currentUser }) {
       clientName: client.clientName || '',
       logoFile: null
     });
-    setLogoPreview(client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+    const logoUrl = client.clientGstin
+      ? apiClient.getClientLogoByGstinUrl(client.clientGstin)
+      : (client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+    setLogoPreview(client.hasLogo ? logoUrl : null);
     setShowClientModal(true);
   };
 
@@ -600,7 +603,10 @@ export default function ClientVendorMapping({ currentUser }) {
     e?.stopPropagation();
     setLogoTargetClient(client);
     setDirectLogoFile(null);
-    setDirectLogoPreview(client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+    const logoUrl = client.clientGstin
+      ? apiClient.getClientLogoByGstinUrl(client.clientGstin)
+      : (client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+    setDirectLogoPreview(client.hasLogo ? logoUrl : null);
     setShowLogoModal(true);
   };
 
@@ -673,8 +679,12 @@ export default function ClientVendorMapping({ currentUser }) {
 
     setLogoSubmitting(true);
     try {
-      await apiClient.uploadClientLogo(logoTargetClient.id, directLogoFile);
-      showToast('Logo uploaded successfully');
+      if (logoTargetClient.clientGstin) {
+        await apiClient.uploadClientLogoByGstin(logoTargetClient.clientGstin, directLogoFile, logoTargetClient.clientName);
+      } else {
+        await apiClient.uploadClientLogo(logoTargetClient.id, directLogoFile);
+      }
+      showToast('Logo uploaded and mapped to GSTIN successfully');
       setShowLogoModal(false);
       fetchClients(logoTargetClient.id);
     } catch (err) {
@@ -1347,9 +1357,17 @@ export default function ClientVendorMapping({ currentUser }) {
   // ── PDF & DOCX Assessment Report Generators ───────────────────────────────
 
   const getClientLogoBase64 = async () => {
-    if (!selectedClient?.id) return null;
-    const url = apiClient.getClientLogoUrl(selectedClient.id);
-    return await loadImageAsBase64(url);
+    if (selectedClient?.id) {
+      const url = apiClient.getClientLogoUrl(selectedClient.id);
+      const base64 = await loadImageAsBase64(url);
+      if (base64) return base64;
+    }
+    if (selectedClient?.clientGstin) {
+      const url = apiClient.getClientLogoByGstinUrl(selectedClient.clientGstin);
+      const base64 = await loadImageAsBase64(url);
+      if (base64) return base64;
+    }
+    return null;
   };
 
   const getPreparedVendorsForExport = () => {

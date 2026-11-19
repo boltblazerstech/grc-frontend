@@ -3,11 +3,13 @@ import {
   Receipt, Search, Building2, MapPin, Calendar, FileText, 
   Edit2, Download, Check, AlertCircle, RefreshCw, X, ArrowLeft,
   DollarSign, Percent, ShieldCheck, CreditCard, ChevronDown, CheckCircle2,
-  FileSpreadsheet, Sparkles, Loader2, History, Clock, ArrowUpRight, FolderArchive, Eye
+  FileSpreadsheet, Sparkles, Loader2, History, Clock, ArrowUpRight, FolderArchive, Eye,
+  UploadCloud, Image as ImageIcon
 } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 import { amountToIndianWords, formatIndianCurrency } from '../utils/numberToWords';
 import { exportInvoiceToPdf, exportInvoiceToDocx } from '../utils/invoiceExportHelper';
+import { loadImageAsBase64 } from '../utils/reportExportHelper';
 
 export default function CreateInvoice({ currentUser, onBack }) {
   // Search state
@@ -87,6 +89,59 @@ export default function CreateInvoice({ currentUser, onBack }) {
 
   const [downloadingFormat, setDownloadingFormat] = useState(null); // 'pdf' | 'docx' | null
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Client Logo mapped by GSTIN (Auto-saved & reused across invoices & reports)
+  const [customerLogoInfo, setCustomerLogoInfo] = useState({ hasLogo: false, logoUrl: null, gstin: '' });
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const logoInputRef = useRef(null);
+
+  // Automatically check if client logo is mapped whenever customerGstin changes
+  useEffect(() => {
+    const gstin = (formData.customerGstin || '').trim().toUpperCase();
+    if (gstin.length >= 10) {
+      let cancelled = false;
+      apiClient.getClientLogoInfoByGstin(gstin).then(info => {
+        if (!cancelled) {
+          setCustomerLogoInfo({
+            hasLogo: Boolean(info?.hasLogo),
+            logoUrl: info?.hasLogo ? `${apiClient.getClientLogoByGstinUrl(gstin)}?v=${Date.now()}` : null,
+            gstin
+          });
+        }
+      }).catch(() => {
+        if (!cancelled) setCustomerLogoInfo({ hasLogo: false, logoUrl: null, gstin });
+      });
+      return () => { cancelled = true; };
+    } else {
+      setCustomerLogoInfo({ hasLogo: false, logoUrl: null, gstin: '' });
+    }
+  }, [formData.customerGstin]);
+
+  const handleCustomerLogoUpload = async (file) => {
+    const gstin = (formData.customerGstin || '').trim().toUpperCase();
+    if (!gstin || gstin.length !== 15) {
+      alert('Please enter a valid 15-character Customer GSTIN before uploading a logo.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Logo file must be smaller than 2MB.');
+      return;
+    }
+    setIsUploadingLogo(true);
+    try {
+      await apiClient.uploadClientLogoByGstin(gstin, file, formData.customerName);
+      setCustomerLogoInfo({
+        hasLogo: true,
+        logoUrl: `${apiClient.getClientLogoByGstinUrl(gstin)}?v=${Date.now()}`,
+        gstin
+      });
+      showToast(`Logo mapped with GSTIN ${gstin} and auto-saved for all future invoices & reports!`);
+    } catch (err) {
+      alert(err.message || 'Failed to upload client logo');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   // Tabs & Recent Invoices state (previous 2 months + current month)
   const [activeTab, setActiveTab] = useState('create'); // 'create' | 'recent'
@@ -317,7 +372,14 @@ export default function CreateInvoice({ currentUser, onBack }) {
     }
     setDownloadingFormat('pdf');
     try {
-      await exportInvoiceToPdf(invoicePayload);
+      let clientLogoDataUrl = null;
+      if (customerLogoInfo.hasLogo && customerLogoInfo.logoUrl) {
+        clientLogoDataUrl = await loadImageAsBase64(customerLogoInfo.logoUrl);
+      }
+      await exportInvoiceToPdf({
+        ...invoicePayload,
+        clientLogoDataUrl
+      });
       // Record invoice with full details in database list
       await apiClient.recordInvoice(invoicePayload, formData.customerName, billingMonth, billingYear);
       loadRecentInvoices();
@@ -337,7 +399,14 @@ export default function CreateInvoice({ currentUser, onBack }) {
     }
     setDownloadingFormat('docx');
     try {
-      await exportInvoiceToDocx(invoicePayload);
+      let clientLogoDataUrl = null;
+      if (customerLogoInfo.hasLogo && customerLogoInfo.logoUrl) {
+        clientLogoDataUrl = await loadImageAsBase64(customerLogoInfo.logoUrl);
+      }
+      await exportInvoiceToDocx({
+        ...invoicePayload,
+        clientLogoDataUrl
+      });
       // Record invoice with full details in database list
       await apiClient.recordInvoice(invoicePayload, formData.customerName, billingMonth, billingYear);
       loadRecentInvoices();
@@ -1413,7 +1482,25 @@ export default function CreateInvoice({ currentUser, onBack }) {
           {selectedCompany && (
             <div className="selected-company-banner">
               <div className="company-pill-content">
-                <Building2 size={20} color="#7c3aed" />
+                {customerLogoInfo.hasLogo ? (
+                  <div style={{
+                    width: '42px',
+                    height: '32px',
+                    background: 'white',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2px',
+                    overflow: 'hidden',
+                    flexShrink: 0
+                  }}>
+                    <img src={customerLogoInfo.logoUrl} alt="Logo" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                  </div>
+                ) : (
+                  <Building2 size={20} color="#7c3aed" />
+                )}
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#1e1b4b' }}>
                     {selectedCompany.name}
@@ -1465,6 +1552,110 @@ export default function CreateInvoice({ currentUser, onBack }) {
                 placeholder="e.g. 03ABMFA6469N1ZW"
                 style={{ fontFamily: 'monospace' }}
               />
+            </div>
+
+            {/* Client Logo mapped with GSTIN */}
+            <div style={{
+              marginTop: '0.2rem',
+              marginBottom: '0.75rem',
+              padding: '0.75rem 0.9rem',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                {customerLogoInfo.hasLogo ? (
+                  <div style={{
+                    width: '60px',
+                    height: '40px',
+                    background: 'white',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2px',
+                    overflow: 'hidden',
+                    flexShrink: 0
+                  }}>
+                    <img
+                      src={customerLogoInfo.logoUrl}
+                      alt="Client Logo"
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    background: '#ede9fe',
+                    color: '#7c3aed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <ImageIcon size={20} />
+                  </div>
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    Client Logo
+                    {customerLogoInfo.hasLogo && (
+                      <span style={{ fontSize: '0.68rem', background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                        ✓ Mapped & Auto-Saved
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {customerLogoInfo.hasLogo
+                      ? `Mapped to ${formData.customerGstin} • Reused for all future invoices & reports`
+                      : (formData.customerGstin ? `Upload once for ${formData.customerGstin} to auto-reuse` : 'Enter Customer GSTIN to map logo')}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  ref={logoInputRef}
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleCustomerLogoUpload(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isUploadingLogo || !formData.customerGstin}
+                  onClick={() => logoInputRef.current?.click()}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    borderRadius: '7px',
+                    border: '1px solid #7c3aed',
+                    background: customerLogoInfo.hasLogo ? 'white' : '#7c3aed',
+                    color: customerLogoInfo.hasLogo ? '#7c3aed' : 'white',
+                    cursor: formData.customerGstin ? 'pointer' : 'not-allowed',
+                    opacity: formData.customerGstin ? 1 : 0.6,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={!formData.customerGstin ? 'Enter Customer GSTIN first' : 'Upload or change client logo'}
+                >
+                  <UploadCloud size={14} />
+                  {isUploadingLogo ? 'Saving...' : customerLogoInfo.hasLogo ? 'Change' : 'Upload Logo'}
+                </button>
+              </div>
             </div>
 
             <div className="form-field">

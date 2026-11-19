@@ -16,7 +16,7 @@ import {
   ShadingType,
   VerticalAlign
 } from 'docx';
-import { loadInvoiceAssets } from './invoiceAssets';
+import { loadInvoiceAssets, dataUrlToUint8Array } from './invoiceAssets';
 import { formatIndianCurrency } from './numberToWords';
 
 /**
@@ -24,6 +24,26 @@ import { formatIndianCurrency } from './numberToWords';
  */
 export async function exportInvoiceToPdf(invoiceData) {
   const assets = await loadInvoiceAssets();
+
+  // Auto-resolve client logo by GSTIN if not already provided as Data URL
+  let clientLogoDataUrl = invoiceData.clientLogoDataUrl || null;
+  if (!clientLogoDataUrl && invoiceData.customerGstin) {
+    try {
+      const gstin = invoiceData.customerGstin.trim().toUpperCase();
+      const res = await fetch(`/api/admin/clients/logo/by-gstin/${encodeURIComponent(gstin)}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        clientLogoDataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch (e) {
+      console.warn('Could not auto-fetch client logo by GSTIN for invoice:', e);
+    }
+  }
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -99,6 +119,21 @@ export async function exportInvoiceToPdf(invoiceData) {
   doc.setFontSize(15);
   doc.setTextColor(...BLUE_HEADING);
   doc.text('BILL TO:', leftMargin, curY);
+
+  // If customer logo is mapped, render it neatly on the right side across BILL TO
+  if (clientLogoDataUrl) {
+    try {
+      let fmt = 'PNG';
+      if (clientLogoDataUrl.startsWith('data:image/jpeg') || clientLogoDataUrl.startsWith('data:image/jpg')) fmt = 'JPEG';
+      else if (clientLogoDataUrl.startsWith('data:image/webp')) fmt = 'WEBP';
+      const cLogoW = 90;
+      const cLogoH = 40;
+      doc.addImage(clientLogoDataUrl, fmt, pageWidth - rightMargin - cLogoW, curY - 14, cLogoW, cLogoH);
+    } catch (e) {
+      console.warn('Could not add client logo to PDF invoice:', e);
+    }
+  }
+
   curY += 18;
 
   const custNameStr = (invoiceData.customerName || '').trim().toLowerCase().startsWith('m/s')
@@ -115,7 +150,8 @@ export async function exportInvoiceToPdf(invoiceData) {
   doc.text(`Customer GSTN: ${invoiceData.customerGstin || 'N/A'}`, leftMargin, curY);
   curY += 15;
 
-  const splitAddress = doc.splitTextToSize(`Address: ${invoiceData.customerAddress || 'N/A'}`, contentWidth);
+  const addrWidth = clientLogoDataUrl ? contentWidth - 100 : contentWidth;
+  const splitAddress = doc.splitTextToSize(`Address: ${invoiceData.customerAddress || 'N/A'}`, addrWidth);
   doc.text(splitAddress, leftMargin, curY);
   curY += splitAddress.length * 14 + 10;
 
@@ -385,6 +421,32 @@ export async function exportInvoiceToPdf(invoiceData) {
 export async function exportInvoiceToDocx(invoiceData) {
   const assets = await loadInvoiceAssets();
 
+  // Auto-resolve client logo bytes by GSTIN if not provided
+  let clientLogoBytes = invoiceData.clientLogoBytes || null;
+  if (!clientLogoBytes) {
+    let cDataUrl = invoiceData.clientLogoDataUrl || null;
+    if (!cDataUrl && invoiceData.customerGstin) {
+      try {
+        const gstin = invoiceData.customerGstin.trim().toUpperCase();
+        const res = await fetch(`/api/admin/clients/logo/by-gstin/${encodeURIComponent(gstin)}`);
+        if (res.ok) {
+          const blob = await res.blob();
+          cDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch (e) {
+        console.warn('Could not auto-fetch client logo by GSTIN for docx invoice:', e);
+      }
+    }
+    if (cDataUrl) {
+      clientLogoBytes = dataUrlToUint8Array(cDataUrl);
+    }
+  }
+
   const isInterState = invoiceData.isInterState;
   const taxHeader = isInterState ? `IGST ${invoiceData.igstRate}%` : 'GST 18%';
 
@@ -560,29 +622,95 @@ export async function exportInvoiceToDocx(invoiceData) {
       spacing: { before: 80, after: 120 }
     }),
 
-    // Row 1: BILL TO (Stacked vertically, blue heading #4F81BD)
-    new Paragraph({
-      spacing: { after: 60 },
-      children: [new TextRun({ text: 'BILL TO:', bold: true, size: 32, color: '4F81BD' })]
-    }),
-    new Paragraph({
-      spacing: { after: 30 },
-      children: [
-        new TextRun({ text: `Customer Name: ${custNameStr}`, size: 22, color: '000000' })
-      ]
-    }),
-    new Paragraph({
-      spacing: { after: 30 },
-      children: [
-        new TextRun({ text: `Customer GSTN: ${invoiceData.customerGstin || 'N/A'}`, size: 22, color: '000000' })
-      ]
-    }),
-    new Paragraph({
-      spacing: { after: 160 },
-      children: [
-        new TextRun({ text: `Address: ${invoiceData.customerAddress || 'N/A'}`, size: 22, color: '000000' })
-      ]
-    }),
+    // Row 1: BILL TO (If client logo exists, two-column layout; otherwise clean paragraphs)
+    ...(clientLogoBytes ? [
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.NONE },
+          bottom: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.NONE },
+          right: { style: BorderStyle.NONE }
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 70, type: WidthType.PERCENTAGE },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE }
+                },
+                children: [
+                  new Paragraph({
+                    spacing: { after: 60 },
+                    children: [new TextRun({ text: 'BILL TO:', bold: true, size: 32, color: '4F81BD' })]
+                  }),
+                  new Paragraph({
+                    spacing: { after: 30 },
+                    children: [new TextRun({ text: `Customer Name: ${custNameStr}`, size: 22, color: '000000' })]
+                  }),
+                  new Paragraph({
+                    spacing: { after: 30 },
+                    children: [new TextRun({ text: `Customer GSTN: ${invoiceData.customerGstin || 'N/A'}`, size: 22, color: '000000' })]
+                  }),
+                  new Paragraph({
+                    spacing: { after: 140 },
+                    children: [new TextRun({ text: `Address: ${invoiceData.customerAddress || 'N/A'}`, size: 22, color: '000000' })]
+                  })
+                ]
+              }),
+              new TableCell({
+                width: { size: 30, type: WidthType.PERCENTAGE },
+                verticalAlign: VerticalAlign.CENTER,
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE }
+                },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      new ImageRun({
+                        data: clientLogoBytes,
+                        transformation: { width: 120, height: 48 }
+                      })
+                    ]
+                  })
+                ]
+              })
+            ]
+          })
+        ]
+      })
+    ] : [
+      new Paragraph({
+        spacing: { after: 60 },
+        children: [new TextRun({ text: 'BILL TO:', bold: true, size: 32, color: '4F81BD' })]
+      }),
+      new Paragraph({
+        spacing: { after: 30 },
+        children: [
+          new TextRun({ text: `Customer Name: ${custNameStr}`, size: 22, color: '000000' })
+        ]
+      }),
+      new Paragraph({
+        spacing: { after: 30 },
+        children: [
+          new TextRun({ text: `Customer GSTN: ${invoiceData.customerGstin || 'N/A'}`, size: 22, color: '000000' })
+        ]
+      }),
+      new Paragraph({
+        spacing: { after: 160 },
+        children: [
+          new TextRun({ text: `Address: ${invoiceData.customerAddress || 'N/A'}`, size: 22, color: '000000' })
+        ]
+      })
+    ]),
 
     // Row 2: Invoice Details (Directly below BILL TO, blue heading #4F81BD)
     new Paragraph({
