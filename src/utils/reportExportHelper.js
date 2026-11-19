@@ -801,9 +801,6 @@ export const exportReportToDocx = async ({
     }
     const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
     compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
-    if (showRedCross) {
-      compChildren.push(new TextRun({ text: '⊗ ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 19 }));
-    }
     compChildren.push(new TextRun({ text: v.companyName, bold: v.isEntireRowRed, color: rowTextColor, size: 17 }));
 
     // GSTR1 Cell formatted

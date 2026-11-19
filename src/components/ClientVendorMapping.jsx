@@ -1195,12 +1195,6 @@ export default function ClientVendorMapping({ currentUser }) {
           text: '● ',
           font: { name: 'Arial', size: 12, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : companyDotColorArgb } }
         });
-        if (showRedCross) {
-          companyRichText.push({
-            text: '⊗ ',
-            font: { name: 'Arial', size: 10, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
-          });
-        }
         companyRichText.push({
           text: getVendorDisplayName(v),
           font: { name: 'Arial', size: 9.5, bold: isEntireRowRed, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FF1E293B' } }
@@ -3318,14 +3312,6 @@ export default function ClientVendorMapping({ currentUser }) {
                             style={{ backgroundColor: companyDotColor }}
                             title={gstr3bVal > 2 ? 'High delay risk' : gstr3bVal >= 1 ? 'Moderate delay' : 'Compliant'}
                           />
-                          {showRedCross && (
-                            <span
-                              className="red-cross-indicator"
-                              title="Scenario 6: Individual firm or Trader with GSTR-3B delayed > 2"
-                            >
-                              <X size={12} strokeWidth={3.5} />
-                            </span>
-                          )}
                           <span className="company-name-text">
                             {getVendorDisplayName(vendor)}
                           </span>
