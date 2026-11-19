@@ -1199,7 +1199,16 @@ export default function ClientVendorMapping({ currentUser }) {
       filteredMappedVendors.forEach((v, idx) => {
         const gstin = v.vendorGstin;
         const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
-        const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+        const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
+        const isGstr3bMissing = (
+          gstr3bRaw === null ||
+          gstr3bRaw === undefined ||
+          String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
+          String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
+          String(gstr3bRaw).trim() === '' ||
+          ((v.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
+        );
+        const gstr3bVal = isGstr3bMissing ? 'N/A' : (typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0);
         const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '').trim();
         const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
         const gstr7Info = getGstr7Display(v);
@@ -1217,7 +1226,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
         // Scenario 6: Red Cross if individual firm or traders && GSTR3B delayed > 2
         const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
-        const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+        const showRedCross = isIndividualFirmOrTrader && typeof gstr3bVal === 'number' && gstr3bVal > 2;
 
         // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in recent 3 months of current year
         const curYearStr = String(new Date().getFullYear());
@@ -1230,14 +1239,14 @@ export default function ClientVendorMapping({ currentUser }) {
         });
         const isRisky = showRedCross && hasLast3MonthsDelay;
 
-        // Scenario 9: Critical risk whole row red
-        const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
+        // Scenario 9 or missing GSTR-3B: Critical risk whole row red
+        const isEntireRowRed = isGstr3bMissing || (typeof gstr3bVal === 'number' && gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA);
 
         // Excel Colored Dots & Rich Text formatting
         const isScoreRisky = v.grcScore !== null && v.grcScore !== undefined && Number(v.grcScore) > 30;
-        const companyDotColorArgb = isEntireRowRed || gstr3bVal > 2 || isScoreRisky
+        const companyDotColorArgb = isEntireRowRed || (typeof gstr3bVal === 'number' && gstr3bVal > 2) || isScoreRisky
           ? 'FFDC2626' 
-          : (gstr3bVal >= 1 || gstr1Val >= 1 || (v.grcScore !== null && Number(v.grcScore) >= 20) ? 'FFF59E0B' : 'FF10B981');
+          : ((typeof gstr3bVal === 'number' && gstr3bVal >= 1) || gstr1Val >= 1 || (v.grcScore !== null && Number(v.grcScore) >= 20) ? 'FFF59E0B' : 'FF10B981');
 
         const companyRichText = [];
         if (isRisky || showRedCross) {
@@ -1422,7 +1431,16 @@ export default function ClientVendorMapping({ currentUser }) {
     return filteredMappedVendors.map((v) => {
       const gstin = v.vendorGstin;
       const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
-      const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+      const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
+      const isGstr3bMissing = (
+        gstr3bRaw === null ||
+        gstr3bRaw === undefined ||
+        String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
+        String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
+        String(gstr3bRaw).trim() === '' ||
+        ((v.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
+      );
+      const gstr3bVal = isGstr3bMissing ? 'N/A' : (typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0);
       const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '').trim();
       const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
       const gstr7Info = getGstr7Display(v);
@@ -1438,7 +1456,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
       // Scenario 6: Red Cross if individual firm or traders && GSTR3B delayed > 2
       const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
-      const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+      const showRedCross = isIndividualFirmOrTrader && typeof gstr3bVal === 'number' && gstr3bVal > 2;
 
       // Scenario 8: Risky ONLY if conditions of Scenario 6 are met AND delayed in recent 3 months of current year
       const curYearStr = String(new Date().getFullYear());
@@ -1451,12 +1469,12 @@ export default function ClientVendorMapping({ currentUser }) {
       });
       const isRisky = showRedCross && hasLast3MonthsDelay;
 
-      // Scenario 9: Critical risk whole row red
-      const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
+      // Scenario 9 or missing GSTR-3B: Critical risk whole row red
+      const isEntireRowRed = isGstr3bMissing || (typeof gstr3bVal === 'number' && gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA);
 
       // Colored circular dot indicator colors matching website table
       const isScoreRisky = v.grcScore !== null && v.grcScore !== undefined && Number(v.grcScore) > 30;
-      const companyDotColorHex = isEntireRowRed || gstr3bVal > 2 || isScoreRisky ? '#dc2626' : (gstr3bVal >= 1 || gstr1Val >= 1 || (v.grcScore !== null && Number(v.grcScore) >= 20) ? '#f59e0b' : '#10b981');
+      const companyDotColorHex = isEntireRowRed || (typeof gstr3bVal === 'number' && gstr3bVal > 2) || isScoreRisky ? '#dc2626' : ((typeof gstr3bVal === 'number' && gstr3bVal >= 1) || gstr1Val >= 1 || (v.grcScore !== null && Number(v.grcScore) >= 20) ? '#f59e0b' : '#10b981');
       const gstr1DotColorHex = gstr1Val > 2 ? '#dc2626' : (gstr1Val >= 1 ? '#f59e0b' : '#10b981');
 
       return {
@@ -1467,6 +1485,7 @@ export default function ClientVendorMapping({ currentUser }) {
         isRisky,
         showRedCross,
         isEntireRowRed,
+        isGstr3bMissing,
         gstType: v.gstType || 'Partnership',
         ageDisplay,
         gstStatus: v.gstStatus || 'Active',
@@ -1623,7 +1642,22 @@ export default function ClientVendorMapping({ currentUser }) {
 
       list = list.filter(v => {
         const gstin = v.vendorGstin;
-        const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+        const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
+        const isGstr3bMissing = (
+          gstr3bRaw === null ||
+          gstr3bRaw === undefined ||
+          String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
+          String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
+          String(gstr3bRaw).trim() === '' ||
+          ((v.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
+        );
+
+        // 0. Missing GSTR-3B is critical risk!
+        if (isGstr3bMissing) {
+          return true;
+        }
+
+        const gstr3bVal = typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0;
         const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
 
         // 1. GRC Score > 30 is the Risky category
@@ -1965,6 +1999,25 @@ export default function ClientVendorMapping({ currentUser }) {
 
         .row-critical-risk .status-pill.status-inactive .dot {
           background-color: #dc2626 !important;
+        }
+
+        .gstr3b-na-badge {
+          display: inline-block;
+          padding: 0.22rem 0.65rem;
+          background-color: #fee2e2;
+          color: #dc2626;
+          font-weight: 800;
+          font-size: 0.78rem;
+          border-radius: 6px;
+          border: 1px solid #fca5a5;
+          letter-spacing: 0.02em;
+        }
+
+        .row-critical-risk .gstr3b-na-badge {
+          background-color: #ffffff !important;
+          color: #dc2626 !important;
+          border: 1px solid #fca5a5 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         .row-critical-risk .gstr7-badge {
@@ -3387,7 +3440,16 @@ export default function ClientVendorMapping({ currentUser }) {
                 {filteredMappedVendors.map((vendor, index) => {
                   const gstin = vendor.vendorGstin;
                   const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? vendor.delayCountGstr1 ?? 0;
-                  const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? vendor.delayCountGstr3b ?? 0;
+                  const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : vendor.delayCountGstr3b;
+                  const isGstr3bMissing = (
+                    gstr3bRaw === null ||
+                    gstr3bRaw === undefined ||
+                    String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
+                    String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
+                    String(gstr3bRaw).trim() === '' ||
+                    ((vendor.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
+                  );
+                  const gstr3bVal = isGstr3bMissing ? 'N/A' : (typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0);
                   const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '').trim();
                   const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '').trim();
                   const origGstr1 = vendor.delayCountGstr1 ?? 0;
@@ -3415,7 +3477,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
                   // Scenario 6: Red Cross if individual firm or traders && GSTR3B delayed > 2
                   const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
-                  const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+                  const showRedCross = isIndividualFirmOrTrader && typeof gstr3bVal === 'number' && gstr3bVal > 2;
 
                   // Scenario 8: Risky badge if conditions of Scenario 6 are met PLUS delayed in recent 3 months of current year
                   const curYearStr = String(new Date().getFullYear());
@@ -3429,15 +3491,15 @@ export default function ClientVendorMapping({ currentUser }) {
                   });
                   const isRisky = showRedCross && hasLast3MonthsDelay;
 
-                  // Scenario 9: GSTR3B delayed > 2 && traders && Aadhaar No && GSTR7 N/A -> Whole line red with white text
-                  const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
+                  // Scenario 9 or missing GSTR-3B: Whole line red with white text
+                  const isEntireRowRed = isGstr3bMissing || (typeof gstr3bVal === 'number' && gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA);
 
                   // Scenario 2: GSTR1 circular dot color
                   const gstr1DotColor = gstr1Val > 2 ? '#ef4444' : gstr1Val >= 1 ? '#f59e0b' : '#10b981';
 
                   // Circular dot color before company name
                   const isScoreRisky = vendor.grcScore !== null && vendor.grcScore !== undefined && Number(vendor.grcScore) > 30;
-                  const companyDotColor = isEntireRowRed || gstr3bVal > 2 || isScoreRisky ? '#ef4444' : (gstr3bVal >= 1 || gstr1Val >= 1 || (vendor.grcScore !== null && Number(vendor.grcScore) >= 20) ? '#f59e0b' : '#10b981');
+                  const companyDotColor = isEntireRowRed || (typeof gstr3bVal === 'number' && gstr3bVal > 2) || isScoreRisky ? '#ef4444' : ((typeof gstr3bVal === 'number' && gstr3bVal >= 1) || gstr1Val >= 1 || (vendor.grcScore !== null && Number(vendor.grcScore) >= 20) ? '#f59e0b' : '#10b981');
 
                   return (
                     <tr key={gstin} className={isEntireRowRed ? 'row-critical-risk' : ''}>
@@ -3543,28 +3605,39 @@ export default function ClientVendorMapping({ currentUser }) {
 
                       {/* GSTR3B (Delayed) (Directly Editable) */}
                       <td
-                        className={!isEntireRowRed ? (gstr3bVal > 2 ? 'cell-bg-red' : (gstr3bVal >= 1 ? 'cell-bg-yellow' : '')) : ''}
+                        className={!isEntireRowRed ? (typeof gstr3bVal === 'number' && gstr3bVal > 2 ? 'cell-bg-red' : (typeof gstr3bVal === 'number' && gstr3bVal >= 1 ? 'cell-bg-yellow' : '')) : ''}
                         style={{ textAlign: 'center' }}
                       >
                         <div className="compliance-cell">
-                          <input
-                            type="number"
-                            min="0"
-                            max="36"
-                            className={`compliance-edit-box ${
-                              isGstr3bModified
-                                ? 'is-dirty'
-                                : gstr3bVal >= 2 
-                                  ? 'compliance-high-delay' 
-                                  : gstr3bVal > 0 
-                                    ? 'compliance-has-delay' 
-                                    : 'compliance-zero'
-                            }`}
-                            value={gstr3bVal}
-                            onChange={(e) => handleComplianceChange(gstin, 'gstr3b', e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSaveAllCompliance()}
-                            title="Edit GSTR-3B delay count"
-                          />
+                          {isGstr3bMissing ? (
+                            <span
+                              className="gstr3b-na-badge"
+                              title="GSTR-3B is missing (N/A) — row marked critical risk red. Click to set delay count."
+                              onClick={() => handleComplianceChange(gstin, 'gstr3b', 0)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              N/A
+                            </span>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0"
+                              max="36"
+                              className={`compliance-edit-box ${
+                                isGstr3bModified
+                                  ? 'is-dirty'
+                                  : gstr3bVal >= 2 
+                                    ? 'compliance-high-delay' 
+                                    : gstr3bVal > 0 
+                                      ? 'compliance-has-delay' 
+                                      : 'compliance-zero'
+                              }`}
+                              value={gstr3bVal}
+                              onChange={(e) => handleComplianceChange(gstin, 'gstr3b', e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleSaveAllCompliance()}
+                              title="Edit GSTR-3B delay count"
+                            />
+                          )}
                           <button
                             type="button"
                             className={`btn-month-picker ${gstr3bMonths ? 'has-months' : ''}`}

@@ -383,8 +383,8 @@ export const exportReportToPdf = async ({
     if (v.gstr1Months) gstr1Display += `  ${v.gstr1Months}`;
 
     // GSTR3B cell
-    let gstr3bDisplay = `${v.gstr3bVal}`;
-    if (v.gstr3bMonths) gstr3bDisplay += `  ${v.gstr3bMonths}`;
+    let gstr3bDisplay = (v.isGstr3bMissing || v.gstr3bVal === null || v.gstr3bVal === undefined || v.gstr3bVal === 'N/A') ? 'N/A' : `${v.gstr3bVal}`;
+    if (!v.isGstr3bMissing && v.gstr3bVal !== 'N/A' && v.gstr3bMonths) gstr3bDisplay += `  ${v.gstr3bMonths}`;
 
     return [
       idx + 1,
@@ -500,8 +500,8 @@ export const exportReportToPdf = async ({
         data.cell.styles.cellPadding = { top: 2.2, bottom: 2.2, left: 14, right: 2.2 };
       }
 
-      // Scenario 9: Critical risk whole row red
-      if (v.isEntireRowRed) {
+      // Scenario 9 or missing GSTR-3B: Critical risk whole row red
+      if (v.isEntireRowRed || v.isGstr3bMissing) {
         data.cell.styles.fillColor = [220, 38, 38];
         data.cell.styles.textColor = [255, 255, 255];
         data.cell.styles.fontStyle = 'bold';
@@ -810,12 +810,13 @@ export const exportReportToDocx = async ({
     const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
     const showRedCross = isIndividualFirmOrTrader && v.gstr3bVal > 2;
 
-    const rowBg = v.isEntireRowRed ? 'DC2626' : undefined;
-    const rowTextColor = v.isEntireRowRed ? 'FFFFFF' : '1E293B';
+    const isRowRed = v.isEntireRowRed || v.isGstr3bMissing;
+    const rowBg = isRowRed ? 'DC2626' : undefined;
+    const rowTextColor = isRowRed ? 'FFFFFF' : '1E293B';
 
     // Cell GSTR3B background
     let gstr3bCellBg = rowBg;
-    if (!v.isEntireRowRed) {
+    if (!isRowRed) {
       if (v.gstr3bVal > 2) gstr3bCellBg = 'FECACA';
       else if (v.gstr3bVal >= 1) gstr3bCellBg = 'FEF08A';
     }
@@ -823,29 +824,29 @@ export const exportReportToDocx = async ({
     // Company Name formatted (Left-aligned for readability, vertically centered)
     const compChildren = [];
     if (v.isRisky || showRedCross) {
-      compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
+      compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: isRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
     const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
-    compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
-    compChildren.push(new TextRun({ text: v.companyName, bold: v.isEntireRowRed, color: rowTextColor, size: 17 }));
+    compChildren.push(new TextRun({ text: `● `, bold: true, color: isRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
+    compChildren.push(new TextRun({ text: v.companyName, bold: isRowRed, color: rowTextColor, size: 17 }));
 
     // GSTR1 Cell formatted (Centered in cell)
     const gstr1DotColor = (v.gstr1DotColorHex || '10B981').replace('#', '');
     const gstr1Children = [
-      new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : gstr1DotColor, size: 20 }),
+      new TextRun({ text: `● `, bold: true, color: isRowRed ? 'FFFFFF' : gstr1DotColor, size: 20 }),
       new TextRun({ text: `${v.gstr1Val}`, bold: true, color: rowTextColor, size: 17 })
     ];
     if (v.gstr1Months) {
-      gstr1Children.push(new TextRun({ text: `  ${v.gstr1Months}`, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 16 }));
+      gstr1Children.push(new TextRun({ text: `  ${v.gstr1Months}`, bold: true, color: isRowRed ? 'FFFFFF' : 'DC2626', size: 16 }));
     }
 
     // GSTR3B Cell formatted (Centered in cell)
-    const gstr3bChildren = [
-      new TextRun({ text: `${v.gstr3bVal}`, bold: true, color: rowTextColor, size: 17 })
+    const gstr3bChildren = (v.isGstr3bMissing || v.gstr3bVal === null || v.gstr3bVal === undefined || v.gstr3bVal === 'N/A') ? [
+      new TextRun({ text: 'N/A', bold: true, color: rowTextColor, size: 17 })
+    ] : [
+      new TextRun({ text: `${v.gstr3bVal}`, bold: true, color: rowTextColor, size: 17 }),
+      ...(v.gstr3bMonths ? [new TextRun({ text: `  ${v.gstr3bMonths}`, bold: true, color: isRowRed ? 'FFFFFF' : 'DC2626', size: 16 })] : [])
     ];
-    if (v.gstr3bMonths) {
-      gstr3bChildren.push(new TextRun({ text: `  ${v.gstr3bMonths}`, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 16 }));
-    }
 
     const cellMargins = { top: 90, bottom: 90, left: 60, right: 60 };
 
