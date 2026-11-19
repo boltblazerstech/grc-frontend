@@ -1270,14 +1270,7 @@ export default function ClientVendorMapping({ currentUser }) {
         const gstin = v.vendorGstin;
         const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
         const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
-        const isGstr3bMissing = (
-          gstr3bRaw === null ||
-          gstr3bRaw === undefined ||
-          String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
-          String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
-          String(gstr3bRaw).trim() === '' ||
-          ((v.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
-        );
+        const isGstr3bMissing = checkIsGstr3bMissing(v);
         const gstr3bVal = isGstr3bMissing ? 'N/A' : (typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0);
         const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '').trim();
         const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
@@ -1502,14 +1495,7 @@ export default function ClientVendorMapping({ currentUser }) {
       const gstin = v.vendorGstin;
       const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? v.delayCountGstr1 ?? 0;
       const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
-      const isGstr3bMissing = (
-        gstr3bRaw === null ||
-        gstr3bRaw === undefined ||
-        String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
-        String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
-        String(gstr3bRaw).trim() === '' ||
-        ((v.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
-      );
+      const isGstr3bMissing = checkIsGstr3bMissing(v);
       const gstr3bVal = isGstr3bMissing ? 'N/A' : (typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0);
       const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? v.delayedMonthsGstr1 ?? '').trim();
       const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
@@ -1683,6 +1669,30 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
+  const checkIsGstr3bMissing = (vendor) => {
+    if (!vendor) return true;
+    const gstin = vendor.vendorGstin || vendor.gstin;
+    const status = (vendor.gstStatus || '').trim().toLowerCase();
+    const inlineEntry = inlineCompliance ? inlineCompliance[gstin] : undefined;
+    
+    // If reviewer explicitly set an inline override number, respect it
+    if (inlineEntry?.gstr3b !== undefined && inlineEntry?.gstr3b !== null) {
+      const s = String(inlineEntry.gstr3b).trim().toUpperCase();
+      if (s === 'N/A' || s === 'NA' || s === '') return true;
+      return false;
+    }
+    
+    // Unknown or Error GST status means return filing history was not fetched / missing
+    if (status === 'unknown' || status === 'error' || !status) {
+      return true;
+    }
+    
+    const raw = vendor.delayCountGstr3b;
+    if (raw === null || raw === undefined) return true;
+    const rawStr = String(raw).trim().toUpperCase();
+    return rawStr === 'N/A' || rawStr === 'NA' || rawStr === '';
+  };
+
   const filteredMappedVendors = useMemo(() => {
     let list = mappedVendors;
     const q = vendorSearch.trim().toLowerCase();
@@ -1712,20 +1722,14 @@ export default function ClientVendorMapping({ currentUser }) {
 
       list = list.filter(v => {
         const gstin = v.vendorGstin;
-        const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
-        const isGstr3bMissing = (
-          gstr3bRaw === null ||
-          gstr3bRaw === undefined ||
-          String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
-          String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
-          String(gstr3bRaw).trim() === '' ||
-          ((v.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
-        );
+        const isGstr3bMissing = checkIsGstr3bMissing(v);
 
         // 0. Missing GSTR-3B is critical risk!
         if (isGstr3bMissing) {
           return true;
         }
+
+        const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : v.delayCountGstr3b;
 
         const gstr3bVal = typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0;
         const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
@@ -3532,14 +3536,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   const gstin = vendor.vendorGstin;
                   const gstr1Val = inlineCompliance[gstin]?.gstr1 ?? vendor.delayCountGstr1 ?? 0;
                   const gstr3bRaw = inlineCompliance[gstin]?.gstr3b !== undefined ? inlineCompliance[gstin]?.gstr3b : vendor.delayCountGstr3b;
-                  const isGstr3bMissing = (
-                    gstr3bRaw === null ||
-                    gstr3bRaw === undefined ||
-                    String(gstr3bRaw).trim().toUpperCase() === 'N/A' ||
-                    String(gstr3bRaw).trim().toUpperCase() === 'NA' ||
-                    String(gstr3bRaw).trim() === '' ||
-                    ((vendor.gstStatus || '').toLowerCase() === 'unknown' && inlineCompliance[gstin]?.gstr3b === undefined)
-                  );
+                  const isGstr3bMissing = checkIsGstr3bMissing(vendor);
                   const gstr3bVal = isGstr3bMissing ? 'N/A' : (typeof gstr3bRaw === 'number' ? gstr3bRaw : parseInt(gstr3bRaw, 10) || 0);
                   const gstr1Months = (inlineCompliance[gstin]?.gstr1Months ?? vendor.delayedMonthsGstr1 ?? '').trim();
                   const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? vendor.delayedMonthsGstr3b ?? '').trim();
