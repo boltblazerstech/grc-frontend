@@ -4,7 +4,7 @@ import {
   Edit2, Download, Check, AlertCircle, RefreshCw, X, ArrowLeft,
   DollarSign, Percent, ShieldCheck, CreditCard, ChevronDown, CheckCircle2,
   FileSpreadsheet, Sparkles, Loader2, History, Clock, ArrowUpRight, FolderArchive, Eye,
-  UploadCloud, Image as ImageIcon
+  UploadCloud, Image as ImageIcon, Trash2
 } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
 import { amountToIndianWords, formatIndianCurrency } from '../utils/numberToWords';
@@ -91,7 +91,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
   const [toastMessage, setToastMessage] = useState(null);
 
   // Client Logo mapped by GSTIN (Auto-saved & reused across invoices & reports)
-  const [customerLogoInfo, setCustomerLogoInfo] = useState({ hasLogo: false, logoUrl: null, gstin: '' });
+  const [customerLogoInfo, setCustomerLogoInfo] = useState({ hasLogo: false, logoUrl: null, gstin: '', clientId: null });
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const logoInputRef = useRef(null);
 
@@ -106,15 +106,16 @@ export default function CreateInvoice({ currentUser, onBack }) {
           setCustomerLogoInfo({
             hasLogo: Boolean(info?.hasLogo),
             logoUrl: resolvedUrl,
-            gstin
+            gstin,
+            clientId: info?.clientId || null
           });
         }
       }).catch(() => {
-        if (!cancelled) setCustomerLogoInfo({ hasLogo: false, logoUrl: null, gstin });
+        if (!cancelled) setCustomerLogoInfo({ hasLogo: false, logoUrl: null, gstin, clientId: null });
       });
       return () => { cancelled = true; };
     } else {
-      setCustomerLogoInfo({ hasLogo: false, logoUrl: null, gstin: '' });
+      setCustomerLogoInfo({ hasLogo: false, logoUrl: null, gstin: '', clientId: null });
     }
   }, [formData.customerGstin]);
 
@@ -135,11 +136,35 @@ export default function CreateInvoice({ currentUser, onBack }) {
       setCustomerLogoInfo({
         hasLogo: true,
         logoUrl: resolvedUrl,
-        gstin
+        gstin,
+        clientId: uploadRes?.clientId || null
       });
       showToast(`Logo mapped with GSTIN ${gstin} and auto-saved for all future invoices & reports!`);
     } catch (err) {
       alert(err.message || 'Failed to upload client logo');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveCustomerLogo = async () => {
+    const gstin = (formData.customerGstin || customerLogoInfo.gstin || '').trim().toUpperCase();
+    if (!window.confirm(`Are you sure you want to remove the mapped logo for ${gstin || 'this client'}?`)) {
+      return;
+    }
+    setIsUploadingLogo(true);
+    try {
+      await apiClient.deleteClientLogo(customerLogoInfo.clientId, gstin);
+      setCustomerLogoInfo({
+        hasLogo: false,
+        logoUrl: null,
+        gstin,
+        clientId: null
+      });
+      showToast('Client logo removed successfully.');
+    } catch (err) {
+      console.error('Failed to remove client logo:', err);
+      alert('Failed to remove logo: ' + (err.message || 'Unknown error'));
     } finally {
       setIsUploadingLogo(false);
     }
@@ -1622,7 +1647,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
                 </div>
               </div>
 
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
                 <input
                   type="file"
                   ref={logoInputRef}
@@ -1631,6 +1656,7 @@ export default function CreateInvoice({ currentUser, onBack }) {
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) handleCustomerLogoUpload(f);
+                    e.target.value = '';
                   }}
                 />
                 <button
@@ -1657,6 +1683,31 @@ export default function CreateInvoice({ currentUser, onBack }) {
                   <UploadCloud size={14} />
                   {isUploadingLogo ? 'Saving...' : customerLogoInfo.hasLogo ? 'Change' : 'Upload Logo'}
                 </button>
+                {customerLogoInfo.hasLogo && (
+                  <button
+                    type="button"
+                    disabled={isUploadingLogo}
+                    onClick={handleRemoveCustomerLogo}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      borderRadius: '7px',
+                      border: '1px solid #ef4444',
+                      background: 'white',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Remove client logo"
+                  >
+                    <Trash2 size={13} />
+                    Remove
+                  </button>
+                )}
               </div>
             </div>
 

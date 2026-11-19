@@ -8,6 +8,46 @@ const API_INVOICE_URL = `${_BACKEND}/api/admin/invoices`;
 
 let _cachedDetails = null;
 
+// ── Client Logo Removal Persistence Helpers ─────────────────────────────
+export function getRemovedLogos() {
+    try {
+        const raw = localStorage.getItem('grc_removed_client_logos');
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+export function markLogoRemoved(gstin) {
+    if (!gstin) return;
+    const clean = gstin.trim().toUpperCase();
+    try {
+        const current = getRemovedLogos();
+        if (!current.includes(clean)) {
+            localStorage.setItem('grc_removed_client_logos', JSON.stringify([...current, clean]));
+        }
+    } catch (e) {
+        console.warn('Could not save removed logo GSTIN to localStorage:', e);
+    }
+}
+
+export function unmarkLogoRemoved(gstin) {
+    if (!gstin) return;
+    const clean = gstin.trim().toUpperCase();
+    try {
+        const current = getRemovedLogos();
+        localStorage.setItem('grc_removed_client_logos', JSON.stringify(current.filter(g => g !== clean)));
+    } catch (e) {
+        console.warn('Could not unmark removed logo GSTIN from localStorage:', e);
+    }
+}
+
+export function isLogoRemoved(gstin) {
+    if (!gstin) return false;
+    const clean = gstin.trim().toUpperCase();
+    return getRemovedLogos().includes(clean);
+}
+
 export const apiClient = {
     async getDetails() {
         if (_cachedDetails && Array.isArray(_cachedDetails) && _cachedDetails.length > 0) {
@@ -496,7 +536,16 @@ export const apiClient = {
     async getClients() {
         const response = await fetch(API_CLIENTS_URL);
         if (!response.ok) throw new Error('Failed to fetch clients');
-        return response.json();
+        const list = await response.json();
+        if (Array.isArray(list)) {
+            return list.map(c => {
+                if (c.clientGstin && isLogoRemoved(c.clientGstin)) {
+                    return { ...c, hasLogo: false, logoUrl: null };
+                }
+                return c;
+            });
+        }
+        return list;
     },
 
     async getClientById(id) {
@@ -577,7 +626,11 @@ export const apiClient = {
             }
             throw new Error(msg);
         }
-        return response.json();
+        const data = await response.json();
+        if (data?.clientGstin) {
+            unmarkLogoRemoved(data.clientGstin);
+        }
+        return data;
     },
 
     getClientLogoUrl(clientId) {
@@ -592,6 +645,11 @@ export const apiClient = {
     async getClientLogoInfoByGstin(gstin) {
         if (!gstin || gstin.trim().length < 5) return { hasLogo: false, gstin, logoUrl: null };
         const clean = gstin.trim().toUpperCase();
+
+        // If explicitly removed by user, immediately treat as no logo
+        if (isLogoRemoved(clean)) {
+            return { hasLogo: false, gstin: clean, logoUrl: null };
+        }
 
         // 1. Check live clients list (guaranteed active on backend)
         try {
@@ -628,6 +686,7 @@ export const apiClient = {
     async uploadClientLogoByGstin(gstin, file, clientName = '') {
         if (!gstin) throw new Error('Customer GSTIN is required to map logo.');
         const clean = gstin.trim().toUpperCase();
+        unmarkLogoRemoved(clean);
 
         // 1. Resolve client by GSTIN from live clients list
         let targetClientId = null;
@@ -686,6 +745,50 @@ export const apiClient = {
             throw new Error(msg);
         }
         return response.json();
+    },
+
+    async deleteClientLogo(clientId, gstin) {
+        const clean = gstin ? gstin.trim().toUpperCase() : null;
+        if (clean) markLogoRemoved(clean);
+
+        let targetId = clientId;
+        if (!targetId && clean) {
+            try {
+                const clients = await this.getClients();
+                if (Array.isArray(clients)) {
+                    const matched = clients.find(c => c.clientGstin && c.clientGstin.toUpperCase() === clean);
+                    if (matched) targetId = matched.id;
+                }
+            } catch {}
+        }
+
+        if (targetId && !clean) {
+            try {
+                const clients = await this.getClients();
+                const matched = clients.find(c => c.id === targetId);
+                if (matched?.clientGstin) markLogoRemoved(matched.clientGstin);
+            } catch {}
+        }
+
+        // 1. Try backend DELETE /{id}/logo
+        if (targetId) {
+            try {
+                await fetch(`${API_CLIENTS_URL}/${targetId}/logo`, { method: 'DELETE' });
+            } catch (e) {
+                console.warn('Backend DELETE client logo notice:', e);
+            }
+        }
+
+        // 2. Try backend DELETE /logo/by-gstin/{gstin}
+        if (clean) {
+            try {
+                await fetch(`${API_CLIENTS_URL}/logo/by-gstin/${encodeURIComponent(clean)}`, { method: 'DELETE' });
+            } catch (e) {
+                console.warn('Backend DELETE logo by gstin notice:', e);
+            }
+        }
+
+        return { success: true };
     },
 
     async getClientVendors(clientId) {

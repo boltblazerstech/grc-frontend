@@ -719,6 +719,24 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
+  const handleRemoveDirectLogo = async () => {
+    if (!logoTargetClient) return;
+    if (!window.confirm(`Are you sure you want to remove the logo for "${logoTargetClient.clientName}"?`)) {
+      return;
+    }
+    setLogoSubmitting(true);
+    try {
+      await apiClient.deleteClientLogo(logoTargetClient.id, logoTargetClient.clientGstin);
+      showToast('Client logo removed successfully');
+      setShowLogoModal(false);
+      fetchClients(logoTargetClient.id);
+    } catch (err) {
+      alert(err.message || 'Failed to remove logo');
+    } finally {
+      setLogoSubmitting(false);
+    }
+  };
+
   // ── Vendor Unmapping Handler ──────────────────────────────────────────────
 
   const handleUnmapVendor = async (vendorGstin) => {
@@ -3699,11 +3717,38 @@ export default function ClientVendorMapping({ currentUser }) {
                   )}
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn-ghost-sm" onClick={() => setShowLogoModal(false)} disabled={logoSubmitting}>Cancel</button>
-                <button type="submit" className="btn-primary-gradient" disabled={logoSubmitting || !directLogoFile}>
-                  {logoSubmitting ? 'Uploading...' : 'Upload Logo'}
-                </button>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  {logoTargetClient?.hasLogo && (
+                    <button
+                      type="button"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        border: '1px solid #ef4444',
+                        color: '#ef4444',
+                        background: 'white',
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                      onClick={handleRemoveDirectLogo}
+                      disabled={logoSubmitting}
+                    >
+                      <Trash2 size={13} />
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="button" className="btn-ghost-sm" onClick={() => setShowLogoModal(false)} disabled={logoSubmitting}>Cancel</button>
+                  <button type="submit" className="btn-primary-gradient" disabled={logoSubmitting || !directLogoFile}>
+                    {logoSubmitting ? 'Uploading...' : 'Upload Logo'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
