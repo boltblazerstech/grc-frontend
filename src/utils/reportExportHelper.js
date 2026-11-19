@@ -367,8 +367,7 @@ export const exportReportToPdf = async ({
 
     // Clean text prefixes: avoid unicode emojis/bullets that cause %Ï garbling in PDF
     let compText = '';
-    if (v.isRisky) compText += '[Risky] ';
-    if (showRedCross) compText += '[X] ';
+    if (v.isRisky || showRedCross) compText += '[Risky] ';
     compText += v.companyName;
     const companyDisplay = compText;
 
@@ -797,13 +796,13 @@ export const exportReportToDocx = async ({
 
     // Company Name formatted
     const compChildren = [];
-    if (v.isRisky) {
+    if (v.isRisky || showRedCross) {
       compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
     const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
     compChildren.push(new TextRun({ text: `● `, bold: true, color: v.isEntireRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
     if (showRedCross) {
-      compChildren.push(new TextRun({ text: '[X] ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
+      compChildren.push(new TextRun({ text: '⊗ ', bold: true, color: v.isEntireRowRed ? 'FFFFFF' : 'DC2626', size: 19 }));
     }
     compChildren.push(new TextRun({ text: v.companyName, bold: v.isEntireRowRed, color: rowTextColor, size: 17 }));
 

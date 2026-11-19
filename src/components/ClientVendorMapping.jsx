@@ -1184,7 +1184,7 @@ export default function ClientVendorMapping({ currentUser }) {
           : (gstr3bVal >= 1 || gstr1Val >= 1 ? 'FFF59E0B' : 'FF10B981');
 
         const companyRichText = [];
-        if (isRisky) {
+        if (isRisky || showRedCross) {
           companyRichText.push({
             text: '[Risky] ',
             font: { name: 'Arial', size: 9.5, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
@@ -1197,8 +1197,8 @@ export default function ClientVendorMapping({ currentUser }) {
         });
         if (showRedCross) {
           companyRichText.push({
-            text: '❌ ',
-            font: { name: 'Arial', size: 9.5, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
+            text: '⊗ ',
+            font: { name: 'Arial', size: 10, bold: true, color: { argb: isEntireRowRed ? 'FFFFFFFF' : 'FFDC2626' } }
           });
         }
         companyRichText.push({
@@ -3312,7 +3312,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       {/* Company Name */}
                       <td>
                         <div className="company-cell">
-                          {isRisky && <span className="badge-risky">Risky</span>}
+                          {(isRisky || showRedCross) && <span className="badge-risky">Risky</span>}
                           <span
                             className="circular-dot-indicator"
                             style={{ backgroundColor: companyDotColor }}
