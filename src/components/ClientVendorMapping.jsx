@@ -1125,11 +1125,7 @@ export default function ClientVendorMapping({ currentUser }) {
       ]);
       headerRow.height = 28;
 
-      headerRow.eachCell((cell, colNumber) => {
-        let textColor = 'FFFFFFFF';
-        if (colNumber === 6) textColor = 'FF22C55E'; // GST Status (Green)
-        else if (colNumber === 9) textColor = 'FFEF4444'; // GSTR7R (Red)
-
+      headerRow.eachCell((cell) => {
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
@@ -1139,7 +1135,7 @@ export default function ClientVendorMapping({ currentUser }) {
           name: 'Arial',
           size: 10,
           bold: true,
-          color: { argb: textColor }
+          color: { argb: 'FFFFFFFF' }
         };
         cell.alignment = {
           vertical: 'middle',
@@ -3317,14 +3313,14 @@ export default function ClientVendorMapping({ currentUser }) {
                   <th style={{ minWidth: '150px', textAlign: 'center' }}>GSTN</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>Type</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
-                  <th style={{ width: '85px', textAlign: 'center', color: '#22c55e' }}>GST Status</th>
+                  <th style={{ width: '85px', textAlign: 'center' }}>GST Status</th>
                   <th style={{ minWidth: '110px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR1 ✎
                   </th>
                   <th style={{ minWidth: '150px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR3B (Delayed) ✎
                   </th>
-                  <th style={{ minWidth: '160px', textAlign: 'center', color: '#ef4444' }}>GSTR7R</th>
+                  <th style={{ minWidth: '160px', textAlign: 'center' }}>GSTR7R</th>
                   <th style={{ minWidth: '110px', textAlign: 'center' }}>Aadhaar Authenticated</th>
                   <th style={{ minWidth: '170px', textAlign: 'center' }}>Core Activity</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>Turn over</th>

@@ -479,16 +479,6 @@ export const exportReportToPdf = async ({
       }
     },
     didParseCell: (data) => {
-      // Header text coloring matching original report styling (GST Status in Green, GSTR7R in Red)
-      if (data.section === 'head') {
-        if (data.column.index === 5) {
-          data.cell.styles.textColor = [34, 197, 94]; // Vibrant Green for GST Status
-        } else if (data.column.index === 8) {
-          data.cell.styles.textColor = [239, 68, 68]; // Vibrant Red for GSTR7R
-        }
-        return;
-      }
-
       const rowIdx = data.row.index;
       const v = vendors[rowIdx];
       if (!v) return;
@@ -777,12 +767,8 @@ export const exportReportToDocx = async ({
 
   const headerRow = new TableRow({
     tableHeader: true,
-    children: tableHeaders.map(title => {
-      let headerTextColor = 'FFFFFF';
-      if (title === 'GST Status') headerTextColor = '22C55E';
-      else if (title === 'GSTR7R') headerTextColor = 'EF4444';
-
-      return new TableCell({
+    children: tableHeaders.map(title =>
+      new TableCell({
         shading: { fill: '3B185F', type: ShadingType.CLEAR }, // Deep Purple Header
         verticalAlign: VerticalAlign.CENTER,
         margins: { top: 110, bottom: 110, left: 70, right: 70 },
@@ -794,13 +780,13 @@ export const exportReportToDocx = async ({
                 text: title,
                 bold: true,
                 size: 17,
-                color: headerTextColor
+                color: 'FFFFFF'
               })
             ]
           })
         ]
-      });
-    })
+      })
+    )
   });
 
   // Table Data Rows
