@@ -822,6 +822,10 @@ export const apiClient = {
         return response.json();
     },
 
+    async unmapVendor(clientId, vendorGstin) {
+        return this.unmapVendorFromClient(clientId, vendorGstin);
+    },
+
     async unmapVendorFromClient(clientId, vendorGstin) {
         const response = await fetch(`${API_CLIENTS_URL}/${clientId}/vendors/${encodeURIComponent(vendorGstin)}`, {
             method: 'DELETE'

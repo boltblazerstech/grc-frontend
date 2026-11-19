@@ -17,6 +17,7 @@ import {
   exportReportToDocx,
   loadImageAsBase64
 } from '../utils/reportExportHelper';
+import GstDetailsModal from './GstDetailsModal';
 
 export default function ClientVendorMapping({ currentUser }) {
   // Dynamic Rolling 15 Months relative to current calendar/filing period
@@ -121,6 +122,20 @@ export default function ClientVendorMapping({ currentUser }) {
   const [directLogoFile, setDirectLogoFile] = useState(null);
   const [directLogoPreview, setDirectLogoPreview] = useState(null);
   const [logoSubmitting, setLogoSubmitting] = useState(false);
+
+  // Edit Vendor Modal
+  const [selectedVendorForModal, setSelectedVendorForModal] = useState(null);
+  const [thresholds, setThresholds] = useState({});
+
+  useEffect(() => {
+    apiClient.getRuleConfig().then(config => {
+      const configMap = {};
+      (config || []).forEach(item => {
+        configMap[item.configKey] = item.configValue;
+      });
+      setThresholds(configMap);
+    }).catch(() => {});
+  }, []);
 
   // Report Template State (defaults to official PDF template, editable and persistent)
   const [reportTemplate, setReportTemplate] = useState(() => {
@@ -737,20 +752,75 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  // ── Vendor Unmapping Handler ──────────────────────────────────────────────
+  // ── Vendor Unmapping & Editing Handlers ─────────────────────────────────────
 
   const handleUnmapVendor = async (vendorGstin) => {
     if (!selectedClient) return;
-    if (!window.confirm(`Unmap vendor "${vendorGstin}" from "${selectedClient.clientName}"?`)) {
+    if (!window.confirm(`Are you sure you want to remove/unmap vendor "${vendorGstin}" from "${selectedClient.clientName}"?`)) {
       return;
     }
     try {
-      await apiClient.unmapVendor(selectedClient.id, vendorGstin);
-      showToast(`Vendor ${vendorGstin} unmapped`);
-      fetchMappedVendors(selectedClient.id);
-      fetchClients(selectedClient.id);
+      if (apiClient.unmapVendorFromClient) {
+        await apiClient.unmapVendorFromClient(selectedClient.id, vendorGstin);
+      } else {
+        await apiClient.unmapVendor(selectedClient.id, vendorGstin);
+      }
+      showToast(`Vendor ${vendorGstin} removed successfully`);
+      setMappedVendors(prev => prev.filter(v => (v.vendorGstin || v.gstin) !== vendorGstin));
+      if (selectedVendorForModal && (selectedVendorForModal.vendorGstin || selectedVendorForModal.gstin) === vendorGstin) {
+        setSelectedVendorForModal(null);
+      }
+      if (selectedClient?.id) {
+        fetchMappedVendors(selectedClient.id);
+        fetchClients(selectedClient.id);
+      }
     } catch (err) {
-      showToast(err.message || 'Failed to unmap vendor', 'error');
+      showToast(err.message || 'Failed to remove vendor', 'error');
+    }
+  };
+
+  const handleEditVendorClick = async (vendor) => {
+    const gstin = vendor.vendorGstin || vendor.gstin;
+    try {
+      const detail = await apiClient.getDetailByGstin(gstin);
+      setSelectedVendorForModal(detail || { ...vendor, gstin });
+    } catch (err) {
+      setSelectedVendorForModal({
+        ...vendor,
+        gstin: gstin,
+        legalName: vendor.legalName || vendor.vendorName || '',
+        tradeName: vendor.tradeName || vendor.traderName || '',
+        status: vendor.gstStatus || 'Active',
+        delayCountGstr1: vendor.delayCountGstr1 ?? 0,
+        delayCountGstr3b: vendor.delayCountGstr3b ?? 0,
+        coreActivity: vendor.coreActivity || 'Manufacturer',
+        aggregateTurnover: vendor.aggregateTurnover || 'N/A',
+        aadhaarValidation: vendor.aadhaarValidation || 'No',
+        dateOfRegistration: vendor.dateOfRegistration || '',
+        age: vendor.age || 0
+      });
+    }
+  };
+
+  const handleModalVendorUpdate = (updatedItem) => {
+    if (!updatedItem) return;
+    setMappedVendors(prev => prev.map(v => {
+      if ((v.vendorGstin || v.gstin) === updatedItem.gstin) {
+        return {
+          ...v,
+          ...updatedItem,
+          vendorName: updatedItem.legalName || updatedItem.tradeName || v.vendorName,
+          legalName: updatedItem.legalName || v.legalName,
+          tradeName: updatedItem.tradeName || v.tradeName,
+          coreActivity: updatedItem.coreActivity || v.coreActivity,
+          aggregateTurnover: updatedItem.aggregateTurnover || v.aggregateTurnover,
+          grcScore: updatedItem.grcScore !== undefined ? updatedItem.grcScore : v.grcScore
+        };
+      }
+      return v;
+    }));
+    if (selectedClient?.id) {
+      fetchMappedVendors(selectedClient.id);
     }
   };
 
@@ -3710,6 +3780,14 @@ export default function ClientVendorMapping({ currentUser }) {
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
                           {getScoreBadge(vendor.grcScore)}
+                          <button
+                            type="button"
+                            className="btn-table-action"
+                            onClick={() => handleEditVendorClick(vendor)}
+                            title="Edit Vendor Details"
+                          >
+                            <Edit2 size={14} />
+                          </button>
                           <a
                             href={vendor.reportUrl || `/vendor-report/${gstin}`}
                             target="_blank"
@@ -3723,7 +3801,7 @@ export default function ClientVendorMapping({ currentUser }) {
                             type="button"
                             className="btn-table-action btn-table-danger"
                             onClick={() => handleUnmapVendor(gstin)}
-                            title="Unmap Vendor from Client"
+                            title="Remove / Unmap Vendor from Client"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -4734,6 +4812,17 @@ export default function ClientVendorMapping({ currentUser }) {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedVendorForModal && (
+        <GstDetailsModal
+          gst={selectedVendorForModal}
+          onClose={() => setSelectedVendorForModal(null)}
+          onUpdate={handleModalVendorUpdate}
+          onDelete={handleUnmapVendor}
+          currentUser={currentUser}
+          thresholds={thresholds}
+        />
       )}
     </div>
   );
