@@ -225,24 +225,30 @@ export const exportReportToPdf = async ({
     pageDoc.setLineWidth(0.75);
     pageDoc.line(40, 62, pageWidth - 40, 62);
 
+    // Footer: Score category legend
+    pageDoc.setFont('helvetica', 'normal');
+    pageDoc.setFontSize(7.5);
+    pageDoc.setTextColor(71, 85, 105);
+    pageDoc.text('Score Categories:  GRC < 20 Good   |   20 < GRC < 30 Careful category   |   GRC > 30 Risky category', pageWidth / 2, pageHeight - 34, { align: 'center' });
+
     // Footer: Custom or default footer logo
     if (scrapLogoDataUrl) {
       try {
         let fmt = 'PNG';
         if (scrapLogoDataUrl.startsWith('data:image/jpeg') || scrapLogoDataUrl.startsWith('data:image/jpg')) fmt = 'JPEG';
         else if (scrapLogoDataUrl.startsWith('data:image/webp')) fmt = 'WEBP';
-        pageDoc.addImage(scrapLogoDataUrl, fmt, (pageWidth - 90) / 2, pageHeight - 48, 90, 26);
+        pageDoc.addImage(scrapLogoDataUrl, fmt, (pageWidth - 76) / 2, pageHeight - 22, 76, 18);
       } catch {
         pageDoc.setFont('helvetica', 'bold');
-        pageDoc.setFontSize(9);
+        pageDoc.setFontSize(8);
         pageDoc.setTextColor(2, 132, 199);
-        pageDoc.text(template.companyName || 'ScrapDMS', pageWidth / 2, pageHeight - 28, { align: 'center' });
+        pageDoc.text(template.companyName || 'ScrapDMS', pageWidth / 2, pageHeight - 12, { align: 'center' });
       }
     } else {
       pageDoc.setFont('helvetica', 'bold');
-      pageDoc.setFontSize(9);
+      pageDoc.setFontSize(8);
       pageDoc.setTextColor(2, 132, 199);
-      pageDoc.text(template.companyName || 'ScrapDMS', pageWidth / 2, pageHeight - 28, { align: 'center' });
+      pageDoc.text(template.companyName || 'ScrapDMS', pageWidth / 2, pageHeight - 12, { align: 'center' });
     }
   };
 
@@ -355,7 +361,7 @@ export const exportReportToPdf = async ({
     'Aadhaar Authenticated',
     'Core Activity',
     'Turn over',
-    'Score & Action'
+    'Score'
   ];
 
   const tableBody = vendors.map((v, idx) => {
@@ -437,7 +443,7 @@ export const exportReportToPdf = async ({
       9: { cellWidth: 50, halign: 'center' },  // Aadhaar Authenticated
       10: { cellWidth: 78, halign: 'center' }, // Core Activity
       11: { cellWidth: 60, halign: 'center' }, // Turn over
-      12: { cellWidth: 48, halign: 'center' }  // Score & Action
+      12: { cellWidth: 48, halign: 'center' }  // Score
     },
     didDrawPage: (data) => {
       drawPageHeaderAndFooter(doc, false);
@@ -590,9 +596,16 @@ export const exportReportToDocx = async ({
     ]
   });
 
-  // Footer Component for DOCX (ScrapDMS logo centered)
+  // Footer Component for DOCX (Score Categories & ScrapDMS logo)
   const docFooter = new Footer({
     children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 40, after: 60 },
+        children: [
+          new TextRun({ text: 'Score Categories:  GRC < 20 Good   |   20 < GRC < 30 Careful category   |   GRC > 30 Risky category', size: 15, color: '64748B' })
+        ]
+      }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
@@ -600,14 +613,14 @@ export const exportReportToDocx = async ({
             ? [
                 new ImageRun({
                   data: scrapLogoBytes,
-                  transformation: { width: 90, height: 26 }
+                  transformation: { width: 85, height: 24 }
                 })
               ]
             : [
                 new TextRun({
                   text: 'ScrapDMS',
                   bold: true,
-                  size: 18,
+                  size: 17,
                   color: '0284C7'
                 })
               ])
@@ -749,7 +762,7 @@ export const exportReportToDocx = async ({
     'Aadhaar Authenticated',
     'Core Activity',
     'Turn over',
-    'Score & Action'
+    'Score'
   ];
 
   const headerRow = new TableRow({
@@ -913,6 +926,17 @@ export const exportReportToDocx = async ({
     rows: [headerRow, ...dataRows]
   });
 
+  const scoreLegendDocxParagraph = new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 180, after: 120 },
+    children: [
+      new TextRun({ text: 'Score Categories:  ', bold: true, size: 17, color: '334155' }),
+      new TextRun({ text: 'GRC < 20: Good   |   ', bold: true, size: 17, color: '16A34A' }),
+      new TextRun({ text: '20 < GRC < 30: Careful category   |   ', bold: true, size: 17, color: 'D97706' }),
+      new TextRun({ text: 'GRC > 30: Risky category', bold: true, size: 17, color: 'DC2626' })
+    ]
+  });
+
   const doc = new Document({
     sections: [
       // Section 1: Page 1 Cover & Observations (Portrait or Landscape)
@@ -936,7 +960,7 @@ export const exportReportToDocx = async ({
         },
         headers: { default: docHeader },
         footers: { default: docFooter },
-        children: [warningParagraph, vendorTable]
+        children: [warningParagraph, vendorTable, scoreLegendDocxParagraph]
       }
     ]
   });

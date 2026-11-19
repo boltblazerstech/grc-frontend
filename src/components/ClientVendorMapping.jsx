@@ -3312,7 +3312,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   <th style={{ minWidth: '110px', textAlign: 'center' }}>Aadhaar Authenticated</th>
                   <th style={{ minWidth: '170px', textAlign: 'center' }}>Core Activity</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>Turn over</th>
-                  <th style={{ minWidth: '100px', textAlign: 'center' }}>Score & Action</th>
+                  <th style={{ minWidth: '90px', textAlign: 'center' }}>Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -3592,6 +3592,37 @@ export default function ClientVendorMapping({ currentUser }) {
                 })}
               </tbody>
             </table>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem 1.25rem',
+              borderTop: '1px solid #e2e8f0',
+              background: '#f8fafc',
+              fontSize: '0.8rem',
+              color: '#475569',
+              flexWrap: 'wrap',
+              gap: '0.75rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: '#1e293b' }}>Score Categories:</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#15803d', fontWeight: 600 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }}></span>
+                  GRC &lt; 20: Good
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#b45309', fontWeight: 600 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }}></span>
+                  20 &lt; GRC &lt; 30: Careful category
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#b91c1c', fontWeight: 600 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }}></span>
+                  GRC &gt; 30: Risky category
+                </span>
+              </div>
+              <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
+                Showing {filteredMappedVendors.length} of {mappedVendors.length} vendors
+              </div>
+            </div>
           </div>
         )}
       </div>
