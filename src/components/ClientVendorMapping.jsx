@@ -2329,12 +2329,31 @@ export default function ClientVendorMapping({ currentUser }) {
           border: 1px solid #e2e8f0;
           box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
 
         .table-responsive-wrapper {
           overflow-x: auto;
-          max-height: calc(100vh - 280px);
+          overflow-y: auto;
+          max-height: calc(100vh - 300px);
           position: relative;
+          flex: 1 1 auto;
+        }
+
+        .table-footer-fixed-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.75rem 1.25rem;
+          border-top: 1px solid #e2e8f0;
+          background: #f8fafc;
+          font-size: 0.8rem;
+          color: #475569;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          flex-shrink: 0;
+          z-index: 5;
         }
 
         .assessment-table {
@@ -3471,7 +3490,7 @@ export default function ClientVendorMapping({ currentUser }) {
             )}
           </div>
         ) : (
-          <div className="table-responsive-wrapper">
+          <>
             {reportTemplate?.tableWarning && reportTemplate.tableWarning.trim() && (
               <div style={{
                 padding: '0.6rem 1rem',
@@ -3479,12 +3498,14 @@ export default function ClientVendorMapping({ currentUser }) {
                 borderBottom: '1px solid #fee2e2',
                 color: '#dc2626',
                 fontWeight: 700,
-                fontSize: '0.82rem'
+                fontSize: '0.82rem',
+                flexShrink: 0
               }}>
                 {reportTemplate.tableWarning.trim()}
               </div>
             )}
-            <table className="assessment-table">
+            <div className="table-responsive-wrapper">
+              <table className="assessment-table">
               <thead>
                 <tr>
                   <th style={{ width: '45px', textAlign: 'center' }}>Sl. No.</th>
@@ -3812,39 +3833,31 @@ export default function ClientVendorMapping({ currentUser }) {
                 })}
               </tbody>
             </table>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0.75rem 1.25rem',
-              borderTop: '1px solid #e2e8f0',
-              background: '#f8fafc',
-              fontSize: '0.8rem',
-              color: '#475569',
-              flexWrap: 'wrap',
-              gap: '0.75rem'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, color: '#1e293b' }}>Score Categories:</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#15803d', fontWeight: 600 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }}></span>
-                  GRC &lt; 20: Good
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#b45309', fontWeight: 600 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }}></span>
-                  20 &lt; GRC &lt; 30: Careful category
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#b91c1c', fontWeight: 600 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }}></span>
-                  GRC &gt; 30: Risky category
-                </span>
-              </div>
-              <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                Showing {filteredMappedVendors.length} of {mappedVendors.length} vendors
-              </div>
+          </div>
+
+          {/* ── Fixed Bottom Footer Bar (Outside Table Scroll) ── */}
+          <div className="table-footer-fixed-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, color: '#1e293b' }}>Score Categories:</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#15803d', fontWeight: 600 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }}></span>
+                GRC &lt; 20: Good
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#b45309', fontWeight: 600 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }}></span>
+                20 &lt; GRC &lt; 30: Careful category
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#b91c1c', fontWeight: 600 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }}></span>
+                GRC &gt; 30: Risky category
+              </span>
+            </div>
+            <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 600 }}>
+              Showing {filteredMappedVendors.length} of {mappedVendors.length} vendors
             </div>
           </div>
-        )}
+        </>
+      )}
       </div>
 
       {/* ── Toast Notification ── */}
