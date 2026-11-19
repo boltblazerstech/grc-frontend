@@ -1234,9 +1234,10 @@ export default function ClientVendorMapping({ currentUser }) {
         const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
 
         // Excel Colored Dots & Rich Text formatting
-        const companyDotColorArgb = isEntireRowRed || gstr3bVal > 2 
+        const isScoreRisky = v.grcScore !== null && v.grcScore !== undefined && Number(v.grcScore) > 30;
+        const companyDotColorArgb = isEntireRowRed || gstr3bVal > 2 || isScoreRisky
           ? 'FFDC2626' 
-          : (gstr3bVal >= 1 || gstr1Val >= 1 ? 'FFF59E0B' : 'FF10B981');
+          : (gstr3bVal >= 1 || gstr1Val >= 1 || (v.grcScore !== null && Number(v.grcScore) >= 20) ? 'FFF59E0B' : 'FF10B981');
 
         const companyRichText = [];
         if (isRisky || showRedCross) {
@@ -1454,7 +1455,8 @@ export default function ClientVendorMapping({ currentUser }) {
       const isEntireRowRed = gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA;
 
       // Colored circular dot indicator colors matching website table
-      const companyDotColorHex = isEntireRowRed || gstr3bVal > 2 ? '#dc2626' : (gstr3bVal >= 1 || gstr1Val >= 1 ? '#f59e0b' : '#10b981');
+      const isScoreRisky = v.grcScore !== null && v.grcScore !== undefined && Number(v.grcScore) > 30;
+      const companyDotColorHex = isEntireRowRed || gstr3bVal > 2 || isScoreRisky ? '#dc2626' : (gstr3bVal >= 1 || gstr1Val >= 1 || (v.grcScore !== null && Number(v.grcScore) >= 20) ? '#f59e0b' : '#10b981');
       const gstr1DotColorHex = gstr1Val > 2 ? '#dc2626' : (gstr1Val >= 1 ? '#f59e0b' : '#10b981');
 
       return {
@@ -1616,7 +1618,54 @@ export default function ClientVendorMapping({ currentUser }) {
     } else if (statusFilter === 'active') {
       list = list.filter(v => (v.gstStatus || '').toLowerCase() === 'active');
     } else if (statusFilter === 'high-risk') {
-      list = list.filter(v => (v.grcScore !== null && v.grcScore < 40) || (inlineCompliance[v.vendorGstin]?.gstr3b ?? v.delayCountGstr3b ?? 0) >= 2);
+      const curYearStr = String(new Date().getFullYear());
+      const last3Lower = recent3CurrentMonths;
+
+      list = list.filter(v => {
+        const gstin = v.vendorGstin;
+        const gstr3bVal = inlineCompliance[gstin]?.gstr3b ?? v.delayCountGstr3b ?? 0;
+        const gstr3bMonths = (inlineCompliance[gstin]?.gstr3bMonths ?? v.delayedMonthsGstr3b ?? '').trim();
+
+        // 1. GRC Score > 30 is the Risky category
+        if (v.grcScore !== null && v.grcScore !== undefined && Number(v.grcScore) > 30) {
+          return true;
+        }
+
+        // 2. High GSTR-3B delay risk (> 2 delays)
+        if (gstr3bVal > 2) {
+          return true;
+        }
+
+        const isTrader = isPartyTrader(v.coreActivity);
+        const isPropOrPartner = isPropPartnerOrHuf(v.gstType);
+        const isIndividualFirmOrTrader = isTrader || isPropOrPartner;
+        const showRedCross = isIndividualFirmOrTrader && gstr3bVal > 2;
+
+        if (showRedCross) {
+          return true;
+        }
+
+        // 3. Scenario 8: Recent 3 months delay in current year
+        const gstr3bTokens = (gstr3bMonths || '').split(',').map(s => s.trim().replace(/-\d+$/, '')).filter(Boolean);
+        const hasLast3MonthsDelay = gstr3bTokens.length > 0 && gstr3bTokens.some(m => {
+          const token = m.trim().toLowerCase();
+          const yearMatch = token.match(/\b(20\d{2})\b/);
+          if (yearMatch && yearMatch[1] !== curYearStr) return false;
+          return last3Lower.some(l3 => token.startsWith(l3.slice(0, 3)));
+        });
+        if (showRedCross && hasLast3MonthsDelay) {
+          return true;
+        }
+
+        // 4. Scenario 9: Critical risk whole line red
+        const isAadhaarNo = (v.aadhaarValidation || '').trim().toLowerCase() === 'no';
+        const isGstr7NA = !v.gstdNo && (!v.gstr7Status || v.gstr7Status.toLowerCase() === 'n/a');
+        if (gstr3bVal > 2 && isTrader && isAadhaarNo && isGstr7NA) {
+          return true;
+        }
+
+        return false;
+      });
     }
 
     return list;
@@ -3387,7 +3436,8 @@ export default function ClientVendorMapping({ currentUser }) {
                   const gstr1DotColor = gstr1Val > 2 ? '#ef4444' : gstr1Val >= 1 ? '#f59e0b' : '#10b981';
 
                   // Circular dot color before company name
-                  const companyDotColor = isEntireRowRed || gstr3bVal > 2 ? '#ef4444' : (gstr3bVal >= 1 || gstr1Val >= 1 ? '#f59e0b' : '#10b981');
+                  const isScoreRisky = vendor.grcScore !== null && vendor.grcScore !== undefined && Number(vendor.grcScore) > 30;
+                  const companyDotColor = isEntireRowRed || gstr3bVal > 2 || isScoreRisky ? '#ef4444' : (gstr3bVal >= 1 || gstr1Val >= 1 || (vendor.grcScore !== null && Number(vendor.grcScore) >= 20) ? '#f59e0b' : '#10b981');
 
                   return (
                     <tr key={gstin} className={isEntireRowRed ? 'row-critical-risk' : ''}>
