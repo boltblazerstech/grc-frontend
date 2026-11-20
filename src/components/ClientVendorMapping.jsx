@@ -28,7 +28,6 @@ export default function ClientVendorMapping({ currentUser }) {
     const monthNames = ['Jan', 'Feb', 'March', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     const rawList = [];
-    const nameCounts = {};
 
     for (let i = 14; i >= 0; i--) {
       const d = new Date(curYear, curMonth - i, 1);
@@ -36,16 +35,17 @@ export default function ClientVendorMapping({ currentUser }) {
       const mIdx = d.getMonth();
       const name = monthNames[mIdx];
       rawList.push({ name, year: y, monthIndex: mIdx, date: d });
-      nameCounts[name] = (nameCounts[name] || 0) + 1;
     }
 
     return rawList.map(item => {
-      const repeats = nameCounts[item.name] > 1;
-      const label = repeats ? `${item.name} ${item.year}` : item.name;
+      // All previous year months get year suffix (e.g. "Sep 2025", "Dec 2025")
+      // Current year months stay as bare month names (e.g. "Jan", "Sep", "Oct", "Nov")
+      const isPreviousYear = item.year < curYear;
+      const label = isPreviousYear ? `${item.name} ${item.year}` : item.name;
       return {
         ...item,
         label,
-        repeats,
+        isPreviousYear,
         isCurrentYear: item.year === curYear
       };
     });
@@ -492,28 +492,58 @@ export default function ClientVendorMapping({ currentUser }) {
   // ── Month Picker Handlers (Dynamic Rolling 15 Months) ─────────────────────
   const isMonthSelected = (selectedList, monthItem) => {
     if (!Array.isArray(selectedList) || selectedList.length === 0) return false;
-    const targetLabel = (typeof monthItem === 'string' ? monthItem : monthItem.label).trim().toLowerCase();
-    const targetName = (typeof monthItem === 'string' ? monthItem.split(' ')[0] : monthItem.name).trim().toLowerCase();
-    const targetYear = typeof monthItem === 'object' ? String(monthItem.year) : (monthItem.split(' ')[1] || '');
+    
+    let targetName, targetYear, targetLabel;
+    if (typeof monthItem === 'object' && monthItem !== null) {
+      targetName = (monthItem.name || '').trim().toLowerCase();
+      targetYear = monthItem.year ? String(monthItem.year) : '';
+      targetLabel = (monthItem.label || targetName).trim().toLowerCase();
+    } else {
+      const str = String(monthItem || '').trim();
+      const parts = str.split(/\s+/);
+      targetName = (parts[0] || '').toLowerCase();
+      targetYear = parts[1] || '';
+      targetLabel = str.toLowerCase();
+    }
+
+    const curYearStr = String(new Date().getFullYear());
+    const prevYearStr = String(new Date().getFullYear() - 1);
+    const targetNameNorm = targetName.replace(/\bmarch\b/g, 'mar').slice(0, 3);
 
     return selectedList.some(m => {
-      const s = m.trim().toLowerCase();
-      // 1. Direct label match (e.g. 'Sep 2025' === 'sep 2025' or 'Apr' === 'apr')
+      const s = String(m || '').trim().toLowerCase();
+      if (!s) return false;
+
+      // 1. Exact match
       if (s === targetLabel) return true;
+
       // 2. Normalize "march" vs "mar"
       const sNorm = s.replace(/\bmarch\b/g, 'mar');
       const tNorm = targetLabel.replace(/\bmarch\b/g, 'mar');
       if (sNorm === tNorm) return true;
 
-      // 3. Match month name + year (e.g. 'September 2025' matches 'Sep 2025')
-      if (targetYear && s.includes(targetYear)) {
-        if (s.startsWith(targetName.slice(0, 3))) return true;
+      const yearMatch = s.match(/\b(20\d{2})\b/);
+      const sYear = yearMatch ? yearMatch[1] : '';
+      const sName = s.split(/\s+/)[0].replace(/\bmarch\b/g, 'mar').slice(0, 3);
+
+      if (sName !== targetNameNorm) return false;
+
+      // Both month names match
+      if (targetYear) {
+        if (sYear) {
+          return sYear === targetYear;
+        } else {
+          // Token in list has no year specified.
+          // If target is current year, bare month name matches current year.
+          if (targetYear === curYearStr) return true;
+          // If target is previous year, and the month only exists in previous year (e.g. Dec)
+          if (targetYear === prevYearStr && targetName === 'dec') return true;
+          return false;
+        }
+      } else {
+        // target has no year specified (current year)
+        return !sYear || sYear === curYearStr;
       }
-      // 4. Non-repeating month match (e.g. 'Apr' or 'April' without year)
-      if (!targetYear && !s.match(/\b(20\d{2})\b/)) {
-        if (s.startsWith(targetName.slice(0, 3))) return true;
-      }
-      return false;
     });
   };
 
@@ -558,7 +588,22 @@ export default function ClientVendorMapping({ currentUser }) {
   const handleApplyMonths = () => {
     const gstin = monthPicker.vendorGstin;
     const field = monthPicker.field;
-    const monthsStr = monthPicker.selectedMonths.join(', ');
+
+    // Sort selected months chronologically according to rolling15Months order
+    const labelOrder = rolling15Months.map(m => m.label);
+    const sorted = [...monthPicker.selectedMonths].sort((a, b) => {
+      const idxA = labelOrder.findIndex(lbl => isMonthSelected([a], lbl));
+      const idxB = labelOrder.findIndex(lbl => isMonthSelected([b], lbl));
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+    });
+
+    // Standardize selected tokens to match the current rolling15Months labels
+    const standardized = sorted.map(tok => {
+      const matched = rolling15Months.find(m => isMonthSelected([tok], m));
+      return matched ? matched.label : tok;
+    });
+
+    const monthsStr = standardized.join(', ');
 
     setInlineCompliance(prev => {
       const existing = prev[gstin] || { gstr1: 0, gstr3b: 0, gstr1Months: '', gstr3bMonths: '' };
@@ -4677,7 +4722,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       style={{
                         padding: '0.75rem 0.35rem',
                         fontFamily: 'inherit',
-                        fontSize: monthObj.repeats ? '0.82rem' : '0.90rem',
+                        fontSize: monthObj.isPreviousYear ? '0.84rem' : '0.90rem',
                         fontWeight: 700,
                         borderRadius: '10px',
                         border: isSelected ? '2px solid #dc2626' : '1.5px solid #e2e8f0',
