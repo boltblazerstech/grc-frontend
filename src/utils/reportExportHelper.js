@@ -188,9 +188,10 @@ export const exportReportToPdf = async ({
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const clientName = client?.clientName || 'Client';
+  const isAllVendorsReport = Boolean(client?.isAllVendors || client?.id === 'ALL');
+  const clientName = isAllVendorsReport ? 'ALL UPLOADED VENDORS' : (client?.clientName || 'Client');
   const reportMonth = template.reportMonth || 'Sep 26';
-  const reportHeaderRight = `Vendor Assessment Report -${reportMonth}`;
+  const reportHeaderRight = isAllVendorsReport ? `Consolidated Assessment -${reportMonth}` : `Vendor Assessment Report -${reportMonth}`;
 
   // Helper to draw Header & Footer on each page
   const drawPageHeaderAndFooter = (pageDoc, isFirstPage) => {
@@ -376,6 +377,9 @@ export const exportReportToPdf = async ({
     let compText = '';
     if (v.isRisky || showRedCross) compText += '[Risky] ';
     compText += v.companyName;
+    if (isAllVendorsReport && v.clientName) {
+      compText += `\n(Client: ${v.clientName})`;
+    }
     const companyDisplay = compText;
 
     // GSTR1 cell
@@ -567,9 +571,10 @@ export const exportReportToDocx = async ({
   const scrapLogoBytes = dataUrlToUint8Array(scrapLogoDataUrl);
   const clientLogoBytes = dataUrlToUint8Array(clientLogoDataUrl);
 
-  const clientName = client?.clientName || 'Client';
+  const isAllVendorsReport = Boolean(client?.isAllVendors || client?.id === 'ALL');
+  const clientName = isAllVendorsReport ? 'ALL UPLOADED VENDORS' : (client?.clientName || 'Client');
   const reportMonth = template.reportMonth || 'Sep 26';
-  const reportHeaderRight = `Vendor Assessment Report -${reportMonth}`;
+  const reportHeaderRight = isAllVendorsReport ? `Consolidated Assessment -${reportMonth}` : `Vendor Assessment Report -${reportMonth}`;
 
   // Header Component for DOCX (Client logo on left, Report Month on right)
   const docHeader = new Header({
@@ -829,6 +834,9 @@ export const exportReportToDocx = async ({
     const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
     compChildren.push(new TextRun({ text: `● `, bold: true, color: isRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
     compChildren.push(new TextRun({ text: v.companyName, bold: isRowRed, color: rowTextColor, size: 17 }));
+    if (isAllVendorsReport && v.clientName) {
+      compChildren.push(new TextRun({ text: ` (Client: ${v.clientName})`, italics: true, color: isRowRed ? 'FFFFFF' : '64748B', size: 15 }));
+    }
 
     // GSTR1 Cell formatted (Centered in cell)
     const gstr1DotColor = (v.gstr1DotColorHex || '10B981').replace('#', '');

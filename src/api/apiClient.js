@@ -797,6 +797,12 @@ export const apiClient = {
         return response.json();
     },
 
+    async getAllMappedVendors() {
+        const response = await fetch(`${API_CLIENTS_URL}/all-vendors`);
+        if (!response.ok) throw new Error('Failed to fetch all mapped vendors');
+        return response.json();
+    },
+
     async getAssignedVendors() {
         const response = await fetch(`${API_CLIENTS_URL}/assigned-vendors`);
         if (!response.ok) throw new Error('Failed to fetch assigned vendors list');

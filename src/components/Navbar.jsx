@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown, Users, Receipt } from 'lucide-react';
+import { User, ShieldAlert, Settings, FileText, Shield, ChevronDown, Users, Receipt, Layers } from 'lucide-react';
 import UserProfileModal from './UserProfileModal';
 import SettingsModal from './SettingsModal';
 
@@ -131,18 +131,27 @@ const Navbar = ({ onRecalculateAll, isRecalculating, currentUser, onLogout, show
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     {currentUser ? (
                         <>
-                            {/* Client-Vendor Mapping Navigation Button */}
+                            {/* All Vendors (One Report) Navigation Button */}
                             <button
-                                className={`navbar-btn ${onClientMappingPage ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                className={`navbar-btn ${onClientMappingPage && (!location.search || location.search.includes('tab=all-vendors')) ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
                                 onClick={() => {
                                     setShowSuperAdmin(false);
-                                    if (onClientMappingPage) {
-                                        navigate('/');
-                                    } else {
-                                        navigate('/admin/client-mapping');
-                                    }
+                                    navigate('/admin/client-mapping?tab=all-vendors');
                                 }}
-                                title="Client-Vendor Mapping"
+                                title="One Report for All Uploaded Vendors across all clients"
+                            >
+                                <Layers size={15} />
+                                <span className="btn-text">All Vendors Report</span>
+                            </button>
+
+                            {/* Client-Vendor Mapping Navigation Button */}
+                            <button
+                                className={`navbar-btn ${onClientMappingPage && location.search.includes('tab=by-client') ? 'navbar-btn-active' : 'navbar-btn-ghost'}`}
+                                onClick={() => {
+                                    setShowSuperAdmin(false);
+                                    navigate('/admin/client-mapping?tab=by-client');
+                                }}
+                                title="Client-Vendor Mapping (By Client)"
                             >
                                 <Users size={15} />
                                 <span className="btn-text">Client Mapping</span>

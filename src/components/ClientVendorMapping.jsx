@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Building2, Users, Plus, Search, Trash2, Edit2, Upload, 
   Check, X, ExternalLink, ShieldCheck, AlertCircle, Image as ImageIcon,
   ChevronRight, RefreshCw, CheckSquare, Square, FileSpreadsheet,
   UploadCloud, ChevronDown, ChevronUp, AlertTriangle, Download,
   Copy, CheckCircle2, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Save, Calendar,
-  FileText, Sliders, RotateCcw
+  FileText, Sliders, RotateCcw, Layers
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
@@ -66,9 +67,21 @@ export default function ClientVendorMapping({ currentUser }) {
     return list;
   }, []);
   // State for Clients
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(urlTab === 'by-client' ? 'by-client' : 'all-vendors');
+  const [allVendorsClientFilter, setAllVendorsClientFilter] = useState('ALL');
+
   const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(
+    urlTab === 'by-client' ? null : { id: 'ALL', clientName: 'All Clients', isAllVendors: true }
+  );
   const [clientsLoading, setClientsLoading] = useState(true);
+
+  // Total vendors count across all clients
+  const totalAllVendorsCount = useMemo(() => {
+    return clients.reduce((sum, c) => sum + (c.vendorCount ?? 0), 0);
+  }, [clients]);
 
   // State for Mapped Vendors
   const [mappedVendors, setMappedVendors] = useState([]);
@@ -230,14 +243,42 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   }, [mappedVendors]);
 
-  // Fetch Mapped Vendors when selectedClient changes
+  const handleSwitchTab = (tab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+    if (tab === 'all-vendors') {
+      setSelectedClient({ id: 'ALL', clientName: 'All Clients', isAllVendors: true });
+      fetchMappedVendors('ALL');
+    } else {
+      if (clients.length > 0) {
+        const target = (selectedClient?.id && selectedClient.id !== 'ALL') ? selectedClient : clients[0];
+        setSelectedClient(target);
+        if (target) fetchMappedVendors(target.id);
+      } else {
+        setSelectedClient(null);
+        setMappedVendors([]);
+      }
+    }
+  };
+
   useEffect(() => {
-    if (selectedClient?.id) {
+    if (urlTab === 'by-client' && activeTab !== 'by-client') {
+      handleSwitchTab('by-client');
+    } else if (urlTab === 'all-vendors' && activeTab !== 'all-vendors') {
+      handleSwitchTab('all-vendors');
+    }
+  }, [urlTab]);
+
+  // Fetch Mapped Vendors when selectedClient or activeTab changes
+  useEffect(() => {
+    if (activeTab === 'all-vendors') {
+      fetchMappedVendors('ALL');
+    } else if (selectedClient?.id && selectedClient.id !== 'ALL') {
       fetchMappedVendors(selectedClient.id);
     } else {
       setMappedVendors([]);
     }
-  }, [selectedClient?.id]);
+  }, [activeTab, selectedClient?.id]);
 
   const fetchClients = async (preferredClientId = null) => {
     setClientsLoading(true);
@@ -246,14 +287,22 @@ export default function ClientVendorMapping({ currentUser }) {
       const clientList = data || [];
       setClients(clientList);
 
-      if (preferredClientId) {
+      if (activeTab === 'all-vendors' || preferredClientId === 'ALL') {
+        setSelectedClient({ id: 'ALL', clientName: 'All Clients', isAllVendors: true });
+        await fetchMappedVendors('ALL');
+      } else if (preferredClientId) {
         const found = clientList.find(c => c.id === preferredClientId);
-        setSelectedClient(found || clientList[0] || null);
-      } else if (selectedClient) {
+        const sel = found || clientList[0] || null;
+        setSelectedClient(sel);
+        if (sel) await fetchMappedVendors(sel.id);
+      } else if (selectedClient && selectedClient.id !== 'ALL') {
         const updatedSelected = clientList.find(c => c.id === selectedClient.id);
-        setSelectedClient(updatedSelected || clientList[0] || null);
+        const sel = updatedSelected || clientList[0] || null;
+        setSelectedClient(sel);
+        if (sel) await fetchMappedVendors(sel.id);
       } else if (clientList.length > 0) {
         setSelectedClient(clientList[0]);
+        await fetchMappedVendors(clientList[0].id);
       }
     } catch (err) {
       showToast(err.message || 'Failed to load clients', 'error');
@@ -265,7 +314,10 @@ export default function ClientVendorMapping({ currentUser }) {
   const fetchMappedVendors = async (clientId) => {
     setVendorsLoading(true);
     try {
-      const data = await apiClient.getClientVendors(clientId);
+      const isAll = clientId === 'ALL' || (!clientId && activeTab === 'all-vendors');
+      const data = isAll
+        ? await apiClient.getAllMappedVendors()
+        : await apiClient.getClientVendors(clientId);
       const list = data || [];
 
       // Hydrate from localStorage store in case backend doesn't have the columns yet
@@ -1278,10 +1330,14 @@ export default function ClientVendorMapping({ currentUser }) {
         views: [{ showGridLines: true }]
       });
 
+      const isAllVendorsExport = activeTab === 'all-vendors' || selectedClient?.id === 'ALL';
+      const offset = isAllVendorsExport ? 1 : 0;
+
       // Set Column Definitions with clean widths
       worksheet.columns = [
         { key: 'slNo', width: 9 },
         { key: 'companyName', width: 38 },
+        ...(isAllVendorsExport ? [{ key: 'clientName', width: 26 }] : []),
         { key: 'gstn', width: 18 },
         { key: 'type', width: 22 },
         { key: 'age', width: 10 },
@@ -1299,6 +1355,7 @@ export default function ClientVendorMapping({ currentUser }) {
       const headerRow = worksheet.addRow([
         'Sl. No.',
         'Company Name',
+        ...(isAllVendorsExport ? ['Client'] : []),
         'GSTN',
         'Type',
         'Age',
@@ -1489,6 +1546,7 @@ export default function ClientVendorMapping({ currentUser }) {
         const rowValues = [
           idx + 1,
           '', // Populated with richText below
+          ...(isAllVendorsExport ? [v.clientName || 'Unassigned'] : []),
           v.vendorGstin,
           v.gstType || 'Partnership',
           ageDisplay,
@@ -1506,13 +1564,17 @@ export default function ClientVendorMapping({ currentUser }) {
         row.height = 22;
 
         // Apply Base Borders & Fonts to all cells in this row
+        const centerCols = [1, 5 + offset, 6 + offset, 10 + offset, 13 + offset];
+        const centerDelayCols = [7 + offset, 8 + offset];
+        if (isAllVendorsExport) centerCols.push(3); // Center Client column
+
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           cell.border = THIN_BORDER;
           cell.font = { name: 'Arial', size: 9.5, color: { argb: 'FF1E293B' } };
 
-          if ([1, 5, 6, 10, 13].includes(colNumber)) {
+          if (centerCols.includes(colNumber)) {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
-          } else if ([7, 8].includes(colNumber)) {
+          } else if (centerDelayCols.includes(colNumber)) {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
           } else {
             cell.alignment = { vertical: 'middle', horizontal: 'left' };
@@ -1528,39 +1590,39 @@ export default function ClientVendorMapping({ currentUser }) {
         } else {
           // Individual Scenario Highlights:
 
-          // Scenario 1: GSTR3B cell (Col 8)
+          // Scenario 1: GSTR3B cell
           if (gstr3bVal > 2) {
-            const c = row.getCell(8);
+            const c = row.getCell(8 + offset);
             c.fill = FILL_SOFT_RED;
           } else if (gstr3bVal >= 1) {
-            const c = row.getCell(8);
+            const c = row.getCell(8 + offset);
             c.fill = FILL_YELLOW;
           }
 
-          // Scenario 3: Aadhaar cell (Col 10)
+          // Scenario 3: Aadhaar cell
           if ((isTrader || isPropOrPartner) && isAadhaarNo) {
-            const c = row.getCell(10);
+            const c = row.getCell(10 + offset);
             c.fill = FILL_SOFT_RED;
             c.font = FONT_SOFT_RED;
           }
 
-          // Scenario 4: Turnover cell (Col 12)
+          // Scenario 4: Turnover cell
           if (isLowTurnover) {
-            const c = row.getCell(12);
+            const c = row.getCell(12 + offset);
             c.fill = FILL_YELLOW;
             c.font = FONT_YELLOW;
           }
 
-          // Scenario 5: Age cell (Col 5)
+          // Scenario 5: Age cell
           if (isYoungAge) {
-            const c = row.getCell(5);
+            const c = row.getCell(5 + offset);
             c.fill = FILL_YELLOW;
             c.font = FONT_YELLOW;
           }
 
-          // Scenario 7: GSTR7R cell (Col 9)
+          // Scenario 7: GSTR7R cell
           if (isTrader && isGstr7NA) {
-            const c = row.getCell(9);
+            const c = row.getCell(9 + offset);
             c.fill = FILL_SOFT_RED;
             c.font = FONT_SOFT_RED;
           }
@@ -1568,8 +1630,8 @@ export default function ClientVendorMapping({ currentUser }) {
 
         // Apply RichText values with colored dots and bold red delayed months
         row.getCell(2).value = { richText: companyRichText };
-        row.getCell(7).value = { richText: gstr1RichText };
-        row.getCell(8).value = { richText: gstr3bRichText };
+        row.getCell(7 + offset).value = { richText: gstr1RichText };
+        row.getCell(8 + offset).value = { richText: gstr3bRichText };
       });
 
       // Write to buffer and trigger browser download
@@ -1578,7 +1640,7 @@ export default function ClientVendorMapping({ currentUser }) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const safeClientName = (selectedClient?.clientName || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeClientName = isAllVendorsExport ? 'All_Uploaded_Vendors' : (selectedClient?.clientName || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_');
       a.download = `${safeClientName}_Vendor_Assessment.xlsx`;
       document.body.appendChild(a);
       a.click();
@@ -1593,6 +1655,9 @@ export default function ClientVendorMapping({ currentUser }) {
   // ── PDF & DOCX Assessment Report Generators ───────────────────────────────
 
   const getClientLogoBase64 = async () => {
+    if (activeTab === 'all-vendors' || selectedClient?.id === 'ALL') {
+      return null;
+    }
     if (selectedClient?.id) {
       const url = apiClient.getClientLogoUrl(selectedClient.id);
       const base64 = await loadImageAsBase64(url);
@@ -1654,6 +1719,8 @@ export default function ClientVendorMapping({ currentUser }) {
       return {
         gstin,
         companyName: getVendorDisplayName(v),
+        clientName: v.clientName || 'N/A',
+        clientId: v.clientId,
         companyDotSymbol: '●',
         companyDotColorHex,
         isRisky,
@@ -1688,8 +1755,11 @@ export default function ClientVendorMapping({ currentUser }) {
     try {
       const clientLogo = await getClientLogoBase64();
       const preparedVendors = getPreparedVendorsForExport();
+      const exportClientObj = (activeTab === 'all-vendors' || selectedClient?.id === 'ALL')
+        ? { id: 'ALL', clientName: 'All Clients', isAllVendors: true }
+        : selectedClient;
       await exportReportToPdf({
-        client: selectedClient,
+        client: exportClientObj,
         vendors: preparedVendors,
         template: reportTemplate,
         clientLogoDataUrl: clientLogo
@@ -1712,8 +1782,11 @@ export default function ClientVendorMapping({ currentUser }) {
     try {
       const clientLogo = await getClientLogoBase64();
       const preparedVendors = getPreparedVendorsForExport();
+      const exportClientObj = (activeTab === 'all-vendors' || selectedClient?.id === 'ALL')
+        ? { id: 'ALL', clientName: 'All Clients', isAllVendors: true }
+        : selectedClient;
       await exportReportToDocx({
-        client: selectedClient,
+        client: exportClientObj,
         vendors: preparedVendors,
         template: reportTemplate,
         clientLogoDataUrl: clientLogo
@@ -1820,12 +1893,18 @@ export default function ClientVendorMapping({ currentUser }) {
         const displayName = getVendorDisplayName(v).toLowerCase();
         return displayName.includes(q) ||
           (v.vendorGstin && v.vendorGstin.toLowerCase().includes(q)) ||
+          (v.clientName && v.clientName.toLowerCase().includes(q)) ||
           (v.tradeName && v.tradeName.toLowerCase().includes(q)) ||
           (v.legalName && v.legalName.toLowerCase().includes(q)) ||
           (v.gstType && v.gstType.toLowerCase().includes(q)) ||
           (v.coreActivity && v.coreActivity.toLowerCase().includes(q)) ||
           (v.aggregateTurnover && v.aggregateTurnover.toLowerCase().includes(q));
       });
+    }
+
+    if (activeTab === 'all-vendors' && allVendorsClientFilter !== 'ALL') {
+      const targetClientId = Number(allVendorsClientFilter);
+      list = list.filter(v => v.clientId === targetClientId);
     }
 
     if (statusFilter === 'delayed-gstr1') {
@@ -1945,6 +2024,195 @@ export default function ClientVendorMapping({ currentUser }) {
           margin: 0 auto;
           font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
           color: #1e293b;
+        }
+
+        /* ── Primary View Tabs: All Uploaded Vendors vs Client-Wise View ── */
+        .assessment-main-tabs {
+          display: flex;
+          gap: 0.85rem;
+          margin-bottom: 1.25rem;
+          background: #ffffff;
+          padding: 0.5rem;
+          border-radius: 14px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .assessment-main-tab {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 0.85rem;
+          padding: 0.75rem 1.15rem;
+          border-radius: 10px;
+          border: 1.5px solid transparent;
+          background: #f8fafc;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          text-align: left;
+          font-family: inherit;
+        }
+
+        .assessment-main-tab:hover {
+          background: #f1f5f9;
+          border-color: #cbd5e1;
+        }
+
+        .assessment-main-tab.active {
+          background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+          border-color: #a78bfa;
+          box-shadow: 0 4px 12px rgba(124, 58, 237, 0.12);
+        }
+
+        .tab-icon-box {
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #ffffff;
+          color: #64748b;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+          flex-shrink: 0;
+          transition: all 0.2s ease;
+        }
+
+        .assessment-main-tab.active .tab-icon-box {
+          background: linear-gradient(135deg, #7c3aed, #6366f1);
+          color: #ffffff;
+          border-color: transparent;
+          box-shadow: 0 4px 10px rgba(124, 58, 237, 0.25);
+        }
+
+        .tab-text-box {
+          display: flex;
+          flex-direction: column;
+          gap: 0.2rem;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .tab-title-row {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          flex-wrap: wrap;
+        }
+
+        .tab-title {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #334155;
+          letter-spacing: -0.2px;
+        }
+
+        .assessment-main-tab.active .tab-title {
+          color: #4c1d95;
+        }
+
+        .tab-pill-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.15rem 0.55rem;
+          border-radius: 9999px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          background: #e2e8f0;
+          color: #475569;
+        }
+
+        .assessment-main-tab.active .tab-pill-badge {
+          background: #7c3aed;
+          color: #ffffff;
+        }
+
+        .tab-subtext {
+          font-size: 0.74rem;
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .assessment-main-tab.active .tab-subtext {
+          color: #6d28d9;
+          font-weight: 600;
+        }
+
+        /* All Vendors Top Bar */
+        .all-vendors-bar {
+          background: linear-gradient(135deg, #ffffff 0%, #faf5ff 100%) !important;
+          border-left: 4px solid #7c3aed !important;
+        }
+
+        .all-vendors-badge-group {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .all-vendors-icon-avatar {
+          width: 36px;
+          height: 36px;
+          border-radius: 9px;
+          background: linear-gradient(135deg, #7c3aed, #4f46e5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 3px 8px rgba(124, 58, 237, 0.25);
+          flex-shrink: 0;
+        }
+
+        .all-vendors-title {
+          font-size: 1rem;
+          font-weight: 800;
+          color: #1e1b4b;
+          line-height: 1.2;
+        }
+
+        .all-vendors-subtitle {
+          font-size: 0.74rem;
+          color: #6d28d9;
+          font-weight: 600;
+        }
+
+        /* Vendor Client Tag */
+        .vendor-client-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          padding: 0.22rem 0.6rem;
+          background: #f5f3ff;
+          color: #5b21b6;
+          border: 1px solid #ddd6fe;
+          border-radius: 6px;
+          font-size: 0.78rem;
+          font-weight: 700;
+          white-space: nowrap;
+          transition: all 0.15s ease;
+        }
+
+        .vendor-client-badge:hover {
+          background: #ede9fe;
+          border-color: #c4b5fd;
+          transform: translateY(-1px);
+        }
+
+        .client-dropdown-select.compact {
+          padding: 0.45rem 2rem 0.45rem 0.75rem;
+          font-size: 0.82rem;
+          border-radius: 8px;
+        }
+
+        .client-filter-dropdown-wrapper {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          background: #ffffff;
+          padding: 0.2rem 0.5rem;
+          border-radius: 9px;
+          border: 1.5px solid #ddd6fe;
         }
 
         /* Top Bar & Client Selector */
@@ -3364,87 +3632,177 @@ export default function ClientVendorMapping({ currentUser }) {
         }
       `}</style>
 
-      {/* ── Top Bar with Client-Wise Filter Dropdown ── */}
-      <div className="client-top-bar">
-        <div className="client-selector-group">
-          <div className="client-label">
-            <Building2 size={18} color="#7c3aed" />
-            <span>Select Client:</span>
+      {/* ── Primary View Tabs: All Uploaded Vendors (One Report) vs Client-Wise View ── */}
+      <div className="assessment-main-tabs">
+        <button
+          type="button"
+          className={`assessment-main-tab ${activeTab === 'all-vendors' ? 'active' : ''}`}
+          onClick={() => handleSwitchTab('all-vendors')}
+        >
+          <div className="tab-icon-box">
+            <Layers size={18} />
           </div>
-
-          <div className="client-dropdown-wrapper">
-            <select
-              className="client-dropdown-select"
-              value={selectedClient?.id || ''}
-              onChange={(e) => {
-                const c = clients.find(item => item.id === Number(e.target.value));
-                setSelectedClient(c || null);
-              }}
-              disabled={clientsLoading || clients.length === 0}
-            >
-              {clients.length === 0 && (
-                <option value="">No clients found - import or add client</option>
-              )}
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.clientName} ({c.vendorCount ?? 0} vendors)
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="dropdown-chevron" />
-          </div>
-
-          {selectedClient && (
-            <div className="client-info-pill">
-              {selectedClient.hasLogo ? (
-                <img
-                  src={apiClient.getClientLogoUrl(selectedClient.id)}
-                  alt={selectedClient.clientName}
-                  className="client-logo-avatar"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              ) : (
-                <div style={{
-                  width: '32px', height: '32px', borderRadius: '6px',
-                  background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#7c3aed', fontWeight: 800, fontSize: '0.85rem'
-                }}>
-                  {selectedClient.clientName?.charAt(0)?.toUpperCase()}
-                </div>
-              )}
-              <div>
-                <div className="client-meta-gstin">{selectedClient.clientGstin}</div>
-              </div>
-              <span className="client-meta-count">{mappedVendors.length} Vendors</span>
+          <div className="tab-text-box">
+            <div className="tab-title-row">
+              <span className="tab-title">All Uploaded Vendors</span>
+              <span className="tab-pill-badge">{totalAllVendorsCount} Vendors</span>
             </div>
-          )}
-        </div>
+            <span className="tab-subtext">One Consolidated Assessment Report for All Clients</span>
+          </div>
+        </button>
 
-        <div className="top-action-buttons">
-          <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
-            <FileSpreadsheet size={16} /> Import from Sheet
-          </button>
-          <button className="btn-primary-gradient" onClick={openAddClientModal}>
-            <Plus size={16} /> Add Client
-          </button>
-          {selectedClient && (
-            <>
-              <button className="btn-secondary-sm" onClick={() => openMapModal(selectedClient)} title="Search and map existing GRC vendors to this client">
-                <Users size={15} /> Map More Vendors
-              </button>
-              <button className="btn-secondary-sm" onClick={(e) => openEditClientModal(selectedClient, e)} title="Edit Client details">
-                <Edit2 size={14} /> Edit
-              </button>
-              <button className="btn-secondary-sm" onClick={(e) => openLogoModal(selectedClient, e)} title="Change or upload Client Logo">
-                <Upload size={14} /> Logo
-              </button>
-              <button className="btn-danger-sm" onClick={(e) => handleDeleteClient(selectedClient.id, selectedClient.clientName, e)} title="Delete Client">
-                <Trash2 size={15} />
-              </button>
-            </>
-          )}
-        </div>
+        <button
+          type="button"
+          className={`assessment-main-tab ${activeTab === 'by-client' ? 'active' : ''}`}
+          onClick={() => handleSwitchTab('by-client')}
+        >
+          <div className="tab-icon-box">
+            <Building2 size={18} />
+          </div>
+          <div className="tab-text-box">
+            <div className="tab-title-row">
+              <span className="tab-title">Client-Wise Assessment</span>
+              <span className="tab-pill-badge">{clients.length} Clients</span>
+            </div>
+            <span className="tab-subtext">Manage Individual Client Portfolios</span>
+          </div>
+        </button>
       </div>
+
+      {/* ── Top Bar: All Vendors View vs Client-Wise View ── */}
+      {activeTab === 'all-vendors' ? (
+        <div className="client-top-bar all-vendors-bar">
+          <div className="client-selector-group">
+            <div className="all-vendors-badge-group">
+              <div className="all-vendors-icon-avatar">
+                <Layers size={18} color="#ffffff" />
+              </div>
+              <div>
+                <div className="all-vendors-title">All Uploaded Vendors Assessment</div>
+                <div className="all-vendors-subtitle">
+                  One report for all vendors across {clients.length} client portfolios ({filteredMappedVendors.length} of {totalAllVendorsCount} vendors)
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Client Filter within All Vendors */}
+            {clients.length > 0 && (
+              <div className="client-filter-dropdown-wrapper" title="Quickly filter all vendors by client">
+                <Building2 size={15} color="#7c3aed" />
+                <select
+                  className="client-dropdown-select compact"
+                  value={allVendorsClientFilter}
+                  onChange={(e) => setAllVendorsClientFilter(e.target.value)}
+                >
+                  <option value="ALL">All Clients ({clients.length} clients • {totalAllVendorsCount} vendors)</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.clientName} ({c.vendorCount ?? 0} vendors)
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="dropdown-chevron" />
+              </div>
+            )}
+          </div>
+
+          <div className="top-action-buttons">
+            <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
+              <FileSpreadsheet size={16} /> Import from Sheet
+            </button>
+            <button className="btn-primary-gradient" onClick={openAddClientModal} title="Add a new client">
+              <Plus size={16} /> Add Client
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="client-top-bar">
+          <div className="client-selector-group">
+            <div className="client-label">
+              <Building2 size={18} color="#7c3aed" />
+              <span>Select Client:</span>
+            </div>
+
+            <div className="client-dropdown-wrapper">
+              <select
+                className="client-dropdown-select"
+                value={selectedClient?.id || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'ALL') {
+                    handleSwitchTab('all-vendors');
+                    return;
+                  }
+                  const c = clients.find(item => item.id === Number(val));
+                  setSelectedClient(c || null);
+                }}
+                disabled={clientsLoading || clients.length === 0}
+              >
+                {clients.length === 0 && (
+                  <option value="">No clients found - import or add client</option>
+                )}
+                <option value="ALL">★ Switch to All Uploaded Vendors (Combined Report)</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.clientName} ({c.vendorCount ?? 0} vendors)
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="dropdown-chevron" />
+            </div>
+
+            {selectedClient && selectedClient.id !== 'ALL' && (
+              <div className="client-info-pill">
+                {selectedClient.hasLogo ? (
+                  <img
+                    src={apiClient.getClientLogoUrl(selectedClient.id)}
+                    alt={selectedClient.clientName}
+                    className="client-logo-avatar"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '6px',
+                    background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#7c3aed', fontWeight: 800, fontSize: '0.85rem'
+                  }}>
+                    {selectedClient.clientName?.charAt(0)?.toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <div className="client-meta-gstin">{selectedClient.clientGstin}</div>
+                </div>
+                <span className="client-meta-count">{mappedVendors.length} Vendors</span>
+              </div>
+            )}
+          </div>
+
+          <div className="top-action-buttons">
+            <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
+              <FileSpreadsheet size={16} /> Import from Sheet
+            </button>
+            <button className="btn-primary-gradient" onClick={openAddClientModal}>
+              <Plus size={16} /> Add Client
+            </button>
+            {selectedClient && selectedClient.id !== 'ALL' && (
+              <>
+                <button className="btn-secondary-sm" onClick={() => openMapModal(selectedClient)} title="Search and map existing GRC vendors to this client">
+                  <Users size={15} /> Map More Vendors
+                </button>
+                <button className="btn-secondary-sm" onClick={(e) => openEditClientModal(selectedClient, e)} title="Edit Client details">
+                  <Edit2 size={14} /> Edit
+                </button>
+                <button className="btn-secondary-sm" onClick={(e) => openLogoModal(selectedClient, e)} title="Change or upload Client Logo">
+                  <Upload size={14} /> Logo
+                </button>
+                <button className="btn-danger-sm" onClick={(e) => handleDeleteClient(selectedClient.id, selectedClient.clientName, e)} title="Delete Client">
+                  <Trash2 size={15} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Table Toolbar (Search, Filter, Export) ── */}
       <div className="table-toolbar-card">
@@ -3698,6 +4056,9 @@ export default function ClientVendorMapping({ currentUser }) {
                       </span>
                     </div>
                   </th>
+                  {activeTab === 'all-vendors' && (
+                    <th style={{ minWidth: '150px', textAlign: 'center' }}>Client</th>
+                  )}
                   <th style={{ minWidth: '150px', textAlign: 'center' }}>GSTN</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>Type</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
@@ -3794,6 +4155,29 @@ export default function ClientVendorMapping({ currentUser }) {
                           </span>
                         </div>
                       </td>
+
+                      {/* Associated Client (shown in All Vendors mode) */}
+                      {activeTab === 'all-vendors' && (
+                        <td style={{ textAlign: 'center' }}>
+                          <span
+                            className="vendor-client-badge"
+                            title={vendor.clientName ? `Client: ${vendor.clientName}. Click to switch to this client.` : 'Unassigned'}
+                            onClick={() => {
+                              if (vendor.clientId) {
+                                const c = clients.find(item => item.id === vendor.clientId);
+                                if (c) {
+                                  setSelectedClient(c);
+                                  handleSwitchTab('by-client');
+                                }
+                              }
+                            }}
+                            style={{ cursor: vendor.clientId ? 'pointer' : 'default' }}
+                          >
+                            <Building2 size={12} />
+                            <span>{vendor.clientName || 'Unassigned'}</span>
+                          </span>
+                        </td>
+                      )}
 
                       {/* GSTN */}
                       <td style={{ textAlign: 'center' }}>
