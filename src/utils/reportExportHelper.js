@@ -332,7 +332,146 @@ export const exportReportToPdf = async ({
   doc.setTextColor(71, 85, 105);
   doc.text(template.managerTitle, 40, curY);
 
-  // ── PAGE 2+: Vendors Table ────────────────────────────────────────────────
+  // ── PAGE 2: Executive Summary (GSTR-3B Risky Vendors & Recommended Actions) ──
+  doc.addPage('a4', 'landscape');
+  drawPageHeaderAndFooter(doc, false);
+
+  let execY = 82;
+
+  // Title: Executive Summary:
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(59, 24, 95); // Deep purple
+  doc.text('Executive Summary:', 40, execY);
+  execY += 16;
+
+  // Description text
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(51, 65, 85);
+  const execIntro = "During the compliance review, it was observed that some vendors have regularly delayed their GSTR-3B returns within the prescribed timelines. Therefore, caution should be exercised while releasing payments or placing new purchase orders with such vendors.";
+  const wrappedExecIntro = doc.splitTextToSize(execIntro, pageWidth - 80);
+  doc.text(wrappedExecIntro, 40, execY);
+  execY += wrappedExecIntro.length * 12 + 10;
+
+  // Section: Summary :
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Summary :', 40, execY);
+  execY += 10;
+
+  // Filter risky vendors with GSTR-3B delay > 2
+  const gstr3bRiskyVendors = vendors.filter(v => {
+    const n = typeof v.gstr3bVal === 'number' ? v.gstr3bVal : parseInt(v.gstr3bVal, 10);
+    return !isNaN(n) && n > 2;
+  });
+
+  const summaryHeaders = ['S.No', 'Name of Vendor', 'GSTR 3 B filing Delay', 'Month delay'];
+  const summaryRows = gstr3bRiskyVendors.length > 0
+    ? gstr3bRiskyVendors.map((v, idx) => {
+        let vendorNameText = v.companyName;
+        if (isAllVendorsReport && v.clientName) {
+          vendorNameText += ` (Client: ${v.clientName})`;
+        }
+        return [
+          idx + 1,
+          vendorNameText,
+          `${v.gstr3bVal}`,
+          v.gstr3bMonths || '—'
+        ];
+      })
+    : [
+        ['—', 'No vendors identified with GSTR-3B delay greater than 2', '—', '—']
+      ];
+
+  autoTable(doc, {
+    head: [summaryHeaders],
+    body: summaryRows,
+    startY: execY,
+    margin: { top: 66, bottom: 48, left: 40, right: 40 },
+    theme: 'grid',
+    styles: {
+      font: 'helvetica',
+      fontSize: 8,
+      cellPadding: 3.2,
+      valign: 'middle',
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.5,
+      overflow: 'linebreak'
+    },
+    headStyles: {
+      fillColor: [59, 24, 95], // Deep purple header
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+      valign: 'middle'
+    },
+    columnStyles: {
+      0: { cellWidth: 42, halign: 'center' }, // S.No
+      1: { cellWidth: 320, halign: 'left', fontStyle: 'bold' }, // Name of Vendor
+      2: { cellWidth: 150, halign: 'center', textColor: [220, 38, 38], fontStyle: 'bold' }, // GSTR 3 B filing Delay
+      3: { cellWidth: 250, halign: 'center', textColor: [220, 38, 38] } // Month delay
+    },
+    didDrawPage: () => {
+      drawPageHeaderAndFooter(doc, false);
+    }
+  });
+
+  let afterTableY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 16 : execY + 40;
+
+  // Check if there is enough space on this page for the Recommended Actions section (~140pt)
+  if (afterTableY > pageHeight - 160) {
+    doc.addPage('a4', 'landscape');
+    drawPageHeaderAndFooter(doc, false);
+    afterTableY = 82;
+  }
+
+  // Section: Recommended Actions:
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Recommended Actions:', 40, afterTableY);
+  afterTableY += 14;
+
+  // Subsection: Vendors with a one-time delay in GSTR-3B filing
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Vendors with a one-time delay in GSTR-3B filing', 45, afterTableY);
+  afterTableY += 12;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text('o  Review the vendor\'s compliance history.', 55, afterTableY); afterTableY += 11;
+  doc.text('o  Seek a written justification for the delayed filing.', 55, afterTableY); afterTableY += 11;
+  doc.text('o  Continue monitoring their compliance status in subsequent months.', 55, afterTableY); afterTableY += 16;
+
+  // Subsection: Vendors with repeated delays (more than one occurrence)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Vendors with repeated delays (more than one occurrence)', 45, afterTableY);
+  afterTableY += 12;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text('o  Conduct a detailed discussion with the vendor to understand the reasons for recurring non-compliance.', 55, afterTableY); afterTableY += 11;
+  doc.text('o  Assess the potential GST and compliance risks associated with continued business transactions.', 55, afterTableY); afterTableY += 11;
+  doc.text('o  Consider obtaining a corrective action plan and management commitment for timely future filings.', 55, afterTableY); afterTableY += 11;
+  doc.text('o  Exercise additional caution before releasing payments or issuing new purchase orders until satisfactory clarification is received.', 55, afterTableY); afterTableY += 16;
+
+  // Final Note
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Regular monitoring of vendor GST compliance is recommended to mitigate input tax credit (ITC) and regulatory risks.', 40, afterTableY);
+
+  // ── PAGE 3+: Vendors Table ────────────────────────────────────────────────
   doc.addPage('a4', 'landscape');
 
   // Warning statement strictly above table start on Page 2 (never in table header)
@@ -752,6 +891,302 @@ export const exportReportToDocx = async ({
     })
   ];
 
+  // ── Section 2: Executive Summary (GSTR-3B Risky Vendors & Recommended Actions) ──
+  const gstr3bRiskyVendors = vendors.filter(v => {
+    const n = typeof v.gstr3bVal === 'number' ? v.gstr3bVal : parseInt(v.gstr3bVal, 10);
+    return !isNaN(n) && n > 2;
+  });
+
+  const execSummaryHeaders = ['S.No', 'Name of Vendor', 'GSTR 3 B filing Delay', 'Month delay'];
+  const execSummaryHeaderRow = new TableRow({
+    tableHeader: true,
+    children: execSummaryHeaders.map((title, i) =>
+      new TableCell({
+        width: i === 0 ? { size: 8, type: WidthType.PERCENTAGE }
+             : i === 1 ? { size: 44, type: WidthType.PERCENTAGE }
+             : i === 2 ? { size: 24, type: WidthType.PERCENTAGE }
+             : { size: 24, type: WidthType.PERCENTAGE },
+        shading: { fill: '3B185F', type: ShadingType.CLEAR },
+        verticalAlign: VerticalAlign.CENTER,
+        margins: { top: 100, bottom: 100, left: 70, right: 70 },
+        children: [
+          new Paragraph({
+            alignment: i === 1 ? AlignmentType.LEFT : AlignmentType.CENTER,
+            children: [
+              new TextRun({
+                text: title,
+                bold: true,
+                size: 18,
+                color: 'FFFFFF'
+              })
+            ]
+          })
+        ]
+      })
+    )
+  });
+
+  const execSummaryDataRows = gstr3bRiskyVendors.length > 0
+    ? gstr3bRiskyVendors.map((v, idx) => {
+        let vendorNameText = v.companyName;
+        if (isAllVendorsReport && v.clientName) {
+          vendorNameText += ` (Client: ${v.clientName})`;
+        }
+        return new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 8, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: `${idx + 1}`, size: 17, color: '1E293B' })]
+                })
+              ]
+            }),
+            new TableCell({
+              width: { size: 44, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.LEFT,
+                  children: [new TextRun({ text: vendorNameText, bold: true, size: 17, color: '0F172A' })]
+                })
+              ]
+            }),
+            new TableCell({
+              width: { size: 24, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: `${v.gstr3bVal}`, bold: true, size: 17, color: 'DC2626' })]
+                })
+              ]
+            }),
+            new TableCell({
+              width: { size: 24, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: v.gstr3bMonths || '—', size: 17, color: 'DC2626' })]
+                })
+              ]
+            })
+          ]
+        });
+      })
+    : [
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 8, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: '—', size: 17, color: '64748B' })]
+                })
+              ]
+            }),
+            new TableCell({
+              width: { size: 44, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.LEFT,
+                  children: [new TextRun({ text: 'No vendors identified with GSTR-3B delay greater than 2', italics: true, size: 17, color: '64748B' })]
+                })
+              ]
+            }),
+            new TableCell({
+              width: { size: 24, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: '—', size: 17, color: '64748B' })]
+                })
+              ]
+            }),
+            new TableCell({
+              width: { size: 24, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 80, bottom: 80, left: 60, right: 60 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: '—', size: 17, color: '64748B' })]
+                })
+              ]
+            })
+          ]
+        })
+      ];
+
+  const execSummaryTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [execSummaryHeaderRow, ...execSummaryDataRows]
+  });
+
+  const execSummaryDocxChildren = [
+    new Paragraph({
+      spacing: { before: 180, after: 120 },
+      children: [
+        new TextRun({
+          text: 'Executive Summary:',
+          bold: true,
+          size: 26,
+          color: '3B185F'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 160 },
+      children: [
+        new TextRun({
+          text: 'During the compliance review, it was observed that some vendors have regularly delayed their GSTR-3B returns within the prescribed timelines. Therefore, caution should be exercised while releasing payments or placing new purchase orders with such vendors.',
+          size: 20,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { before: 100, after: 120 },
+      children: [
+        new TextRun({
+          text: 'Summary :',
+          bold: true,
+          size: 22,
+          color: '1E293B'
+        })
+      ]
+    }),
+    execSummaryTable,
+    new Paragraph({
+      spacing: { before: 240, after: 100 },
+      children: [
+        new TextRun({
+          text: 'Recommended Actions:',
+          bold: true,
+          size: 22,
+          color: '1E293B'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { before: 80, after: 50 },
+      children: [
+        new TextRun({
+          text: 'Vendors with a one-time delay in GSTR-3B filing',
+          bold: true,
+          size: 20,
+          color: '0F172A'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 40 },
+      children: [
+        new TextRun({
+          text: 'o  Review the vendor\'s compliance history.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 40 },
+      children: [
+        new TextRun({
+          text: 'o  Seek a written justification for the delayed filing.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 120 },
+      children: [
+        new TextRun({
+          text: 'o  Continue monitoring their compliance status in subsequent months.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { before: 80, after: 50 },
+      children: [
+        new TextRun({
+          text: 'Vendors with repeated delays (more than one occurrence)',
+          bold: true,
+          size: 20,
+          color: '0F172A'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 40 },
+      children: [
+        new TextRun({
+          text: 'o  Conduct a detailed discussion with the vendor to understand the reasons for recurring non-compliance.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 40 },
+      children: [
+        new TextRun({
+          text: 'o  Assess the potential GST and compliance risks associated with continued business transactions.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 40 },
+      children: [
+        new TextRun({
+          text: 'o  Consider obtaining a corrective action plan and management commitment for timely future filings.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { after: 140 },
+      children: [
+        new TextRun({
+          text: 'o  Exercise additional caution before releasing payments or issuing new purchase orders until satisfactory clarification is received.',
+          size: 19,
+          color: '334155'
+        })
+      ]
+    }),
+    new Paragraph({
+      spacing: { before: 100, after: 80 },
+      children: [
+        new TextRun({
+          text: 'Regular monitoring of vendor GST compliance is recommended to mitigate input tax credit (ITC) and regulatory risks.',
+          italics: true,
+          size: 19,
+          color: '64748B'
+        })
+      ]
+    })
+  ];
+
   // Callout warning right before table
   const warningParagraph = new Paragraph({
     spacing: { before: 200, after: 140 },
@@ -960,10 +1395,11 @@ export const exportReportToDocx = async ({
 
   const doc = new Document({
     sections: [
-      // Section 1: Page 1 Cover & Observations (Portrait or Landscape)
+      // Section 1: Page 1 Cover & Observations
       {
         properties: {
           page: {
+            size: { orientation: 'landscape' },
             margin: { top: 720, bottom: 720, left: 720, right: 720 }
           }
         },
@@ -971,7 +1407,19 @@ export const exportReportToDocx = async ({
         footers: { default: docFooter },
         children: page1Children
       },
-      // Section 2: Table Section (Landscape for optimal table readability)
+      // Section 2: Executive Summary (GSTR-3B Risky Vendors & Recommended Actions)
+      {
+        properties: {
+          page: {
+            size: { orientation: 'landscape' },
+            margin: { top: 720, bottom: 720, left: 720, right: 720 }
+          }
+        },
+        headers: { default: docHeader },
+        footers: { default: docFooter },
+        children: execSummaryDocxChildren
+      },
+      // Section 3: Table Section (Landscape for optimal table readability)
       {
         properties: {
           page: {
