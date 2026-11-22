@@ -144,6 +144,72 @@ export default function ClientVendorMapping({ currentUser }) {
   // Report-Level Excluded Vendors (hides/removes from report and downloads; DOES NOT delete from DB)
   const [excludedGstins, setExcludedGstins] = useState(new Set());
 
+  // ── Recent Client IDs (For Horizontal 6 Client List, Most Recent First) ──
+  const [recentClientIds, setRecentClientIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('grc_recent_client_ids') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  const markClientRecent = (clientId) => {
+    if (!clientId || clientId === 'ALL') return;
+    setRecentClientIds(prev => {
+      const filtered = prev.filter(id => id !== clientId);
+      const next = [clientId, ...filtered].slice(0, 50);
+      try {
+        localStorage.setItem('grc_recent_client_ids', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Sorted clients for horizontal strip (recently added or accessed clients first)
+  const sortedClients = useMemo(() => {
+    if (!clients || clients.length === 0) return [];
+    const idOrder = new Map(recentClientIds.map((id, idx) => [id, idx]));
+    return [...clients].sort((a, b) => {
+      const idxA = idOrder.has(a.id) ? idOrder.get(a.id) : 9999 + (b.id - a.id);
+      const idxB = idOrder.has(b.id) ? idOrder.get(b.id) : 9999 + (a.id - b.id);
+      return idxA - idxB;
+    });
+  }, [clients, recentClientIds]);
+
+  const visibleClients = useMemo(() => sortedClients.slice(0, 6), [sortedClients]);
+  const overflowClients = useMemo(() => sortedClients.slice(6), [sortedClients]);
+
+  // ── Client Search Autocomplete State ──
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [isSearchingClients, setIsSearchingClients] = useState(false);
+  const [showClientSearchDropdown, setShowClientSearchDropdown] = useState(false);
+  const clientSearchContainerRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
+
+  // ── Overflow Clients Dropdown State ──
+  const [showOverflowDropdown, setShowOverflowDropdown] = useState(false);
+  const overflowDropdownRef = useRef(null);
+
+  // ── Unified Client Setup & Vendor Mapping Modal State ──
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupClient, setSetupClient] = useState({
+    clientGstin: '',
+    clientName: '',
+    isExistingClient: false,
+    clientId: null,
+    hasLogo: false,
+    logoPreview: null,
+    logoFile: null,
+    vendorMode: 'sheet', // 'sheet' | 'registry'
+    sheetVendors: [], // [{ name, gstin }]
+    sheetFileName: '',
+    sheetParsing: false,
+    selectedRegistryGstins: new Set(),
+    registrySearch: ''
+  });
+  const [setupSubmitting, setSetupSubmitting] = useState(false);
+
   // Alphabetical Sorting for Company Name: null (default/original) | 'asc' (A to Z) | 'desc' (Z to A)
   const [nameSortOrder, setNameSortOrder] = useState(null);
 
@@ -200,6 +266,12 @@ export default function ClientVendorMapping({ currentUser }) {
     const handleClickOutside = (e) => {
       if (downloadDropdownRef.current && !downloadDropdownRef.current.contains(e.target)) {
         setShowDownloadMenu(false);
+      }
+      if (clientSearchContainerRef.current && !clientSearchContainerRef.current.contains(e.target)) {
+        setShowClientSearchDropdown(false);
+      }
+      if (overflowDropdownRef.current && !overflowDropdownRef.current.contains(e.target)) {
+        setShowOverflowDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -757,6 +829,313 @@ export default function ClientVendorMapping({ currentUser }) {
     setTimeout(() => setCopiedGstin(null), 1500);
   };
 
+  // ── CLIENT SEARCH & AUTOCOMPLETE HANDLERS ─────────────────────────────────
+
+  const handleClientSearchChange = (query) => {
+    setClientSearchQuery(query);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    if (!query || query.trim().length < 2) {
+      setClientSearchResults([]);
+      setShowClientSearchDropdown(false);
+      return;
+    }
+
+    setShowClientSearchDropdown(true);
+    setIsSearchingClients(true);
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const cleanQuery = query.trim().toLowerCase();
+
+        // 1. Search existing clients
+        const matchedExisting = clients.filter(c => {
+          const gstinMatch = c.clientGstin && c.clientGstin.toLowerCase().includes(cleanQuery);
+          const nameMatch = c.clientName && c.clientName.toLowerCase().includes(cleanQuery);
+          return gstinMatch || nameMatch;
+        }).map(c => ({
+          gstin: c.clientGstin || '',
+          name: c.clientName,
+          tradeName: c.clientName,
+          legalName: c.clientName,
+          isExistingClient: true,
+          clientId: c.id,
+          hasLogo: c.hasLogo,
+          vendorCount: c.vendorCount ?? 0,
+          source: 'Client'
+        }));
+
+        // 2. Search Database Registry via backend searchCompanies
+        let dbResults = [];
+        try {
+          dbResults = await apiClient.searchCompanies(query.trim());
+        } catch (err) {
+          console.warn('searchCompanies error:', err);
+          dbResults = [];
+        }
+
+        // 3. Deduplicate
+        const existingGstins = new Set(matchedExisting.map(c => (c.gstin || '').toUpperCase()));
+        const uniqueDbResults = (dbResults || [])
+          .filter(d => d.gstin && !existingGstins.has(d.gstin.toUpperCase()))
+          .map(d => ({
+            ...d,
+            isExistingClient: false
+          }));
+
+        // 4. If query is a valid 15-char GSTIN and not in results, offer to add it directly
+        const cleanUpper = query.trim().toUpperCase();
+        const isValid15Gstin = /^[0-9A-Z]{15}$/.test(cleanUpper);
+        const hasExactMatch = [...matchedExisting, ...uniqueDbResults].some(r => r.gstin?.toUpperCase() === cleanUpper);
+
+        const customOption = (isValid15Gstin && !hasExactMatch) ? [{
+          gstin: cleanUpper,
+          name: cleanUpper,
+          tradeName: cleanUpper,
+          legalName: cleanUpper,
+          isExistingClient: false,
+          isCustomNew: true,
+          source: 'New GSTIN'
+        }] : [];
+
+        setClientSearchResults([...customOption, ...matchedExisting, ...uniqueDbResults]);
+      } catch (err) {
+        console.error('Client search failed:', err);
+      } finally {
+        setIsSearchingClients(false);
+      }
+    }, 180);
+  };
+
+  const handleSelectSearchResult = async (comp) => {
+    setShowClientSearchDropdown(false);
+    setClientSearchQuery('');
+
+    // Check if this matches an existing client
+    const existing = clients.find(c =>
+      (comp.clientId && c.id === comp.clientId) ||
+      (comp.gstin && c.clientGstin && c.clientGstin.toUpperCase() === comp.gstin.toUpperCase())
+    );
+
+    const gstin = comp.gstin || existing?.clientGstin || '';
+    const name = comp.name || comp.tradeName || comp.legalName || existing?.clientName || gstin;
+    const clientId = existing?.id || comp.clientId || null;
+    const hasLogo = existing?.hasLogo || comp.hasLogo || false;
+    const logoUrl = gstin
+      ? apiClient.getClientLogoByGstinUrl(gstin)
+      : (hasLogo && clientId ? apiClient.getClientLogoUrl(clientId) : null);
+
+    setSetupClient({
+      clientGstin: gstin,
+      clientName: name,
+      isExistingClient: Boolean(existing || comp.isExistingClient),
+      clientId: clientId,
+      hasLogo: hasLogo,
+      logoPreview: hasLogo ? logoUrl : null,
+      logoFile: null,
+      vendorMode: 'sheet',
+      sheetVendors: [],
+      sheetFileName: '',
+      sheetParsing: false,
+      selectedRegistryGstins: new Set(),
+      registrySearch: ''
+    });
+
+    // Preload available vendors for registry mode in case user toggles to registry
+    if (allAvailableVendors.length === 0) {
+      apiClient.getDetails().then(v => setAllAvailableVendors(v || [])).catch(() => {});
+    }
+
+    setShowSetupModal(true);
+  };
+
+  const openSetupModalForClient = (client, e) => {
+    e?.stopPropagation();
+    const gstin = client.clientGstin || '';
+    const name = client.clientName || gstin;
+    const hasLogo = client.hasLogo || false;
+    const logoUrl = gstin
+      ? apiClient.getClientLogoByGstinUrl(gstin)
+      : (hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+
+    setSetupClient({
+      clientGstin: gstin,
+      clientName: name,
+      isExistingClient: true,
+      clientId: client.id,
+      hasLogo: hasLogo,
+      logoPreview: hasLogo ? logoUrl : null,
+      logoFile: null,
+      vendorMode: 'sheet',
+      sheetVendors: [],
+      sheetFileName: '',
+      sheetParsing: false,
+      selectedRegistryGstins: new Set(),
+      registrySearch: ''
+    });
+
+    if (allAvailableVendors.length === 0) {
+      apiClient.getDetails().then(v => setAllAvailableVendors(v || [])).catch(() => {});
+    }
+
+    setShowSetupModal(true);
+  };
+
+  const handleSetupSheetFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSetupClient(prev => ({ ...prev, sheetParsing: true, sheetFileName: file.name }));
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('No sheets found in file');
+      }
+
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      if (!rows || rows.length < 2) {
+        throw new Error('Sheet is empty or missing data rows');
+      }
+
+      let headerRowIdx = -1;
+      let vendorCol = -1;
+      let gstnCol = -1;
+
+      for (let r = 0; r < Math.min(rows.length, 5); r++) {
+        const row = rows[r];
+        if (!row || !row.length) continue;
+        for (let c = 0; c < row.length; c++) {
+          const h = String(row[c] || '').trim().toLowerCase();
+          if (h === 'vendor' || h === 'vendor name' || h.includes('vendor') || h.includes('supplier') || h.includes('party')) {
+            vendorCol = c;
+          }
+          if (h === 'gstn' || h === 'gstin' || h === 'vendor gstn' || h.includes('gst')) {
+            gstnCol = c;
+          }
+        }
+        if (vendorCol !== -1 && gstnCol !== -1) {
+          headerRowIdx = r;
+          break;
+        }
+      }
+
+      if (vendorCol === -1 || gstnCol === -1) {
+        vendorCol = 0;
+        gstnCol = 1;
+        headerRowIdx = 0;
+      }
+
+      const validVendors = [];
+      const seen = new Set();
+      for (let r = headerRowIdx + 1; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row) continue;
+        const vName = String(row[vendorCol] || '').trim();
+        const vGstn = String(row[gstnCol] || '').trim().toUpperCase();
+        if (vGstn && vGstn.length === 15 && /^[0-9A-Z]{15}$/.test(vGstn) && !seen.has(vGstn)) {
+          seen.add(vGstn);
+          validVendors.push({ name: vName || vGstn, gstin: vGstn });
+        }
+      }
+
+      if (validVendors.length === 0) {
+        throw new Error('No valid 15-character GSTIN vendor rows found in sheet');
+      }
+
+      setSetupClient(prev => ({
+        ...prev,
+        sheetVendors: validVendors,
+        sheetParsing: false
+      }));
+      showToast(`Detected ${validVendors.length} valid vendors in sheet.`);
+    } catch (err) {
+      alert('Failed to parse sheet: ' + err.message);
+      setSetupClient(prev => ({ ...prev, sheetParsing: false, sheetFileName: '' }));
+    }
+  };
+
+  const handleToggleRegistryGstin = (gstin) => {
+    setSetupClient(prev => {
+      const next = new Set(prev.selectedRegistryGstins);
+      if (next.has(gstin)) next.delete(gstin);
+      else next.add(gstin);
+      return { ...prev, selectedRegistryGstins: next };
+    });
+  };
+
+  const handleSaveSetupModal = async () => {
+    const gstin = setupClient.clientGstin.trim().toUpperCase();
+    const name = setupClient.clientName.trim();
+
+    if (!gstin || !name) {
+      alert('Client Legal / Trade Name and GSTIN are required.');
+      return;
+    }
+    if (gstin.length !== 15 || !/^[0-9A-Z]{15}$/.test(gstin)) {
+      alert('Client GSTIN must be exactly 15 alphanumeric characters.');
+      return;
+    }
+
+    setSetupSubmitting(true);
+    try {
+      let targetClientId = setupClient.clientId;
+
+      // 1. Resolve or Create Client
+      if (targetClientId) {
+        await apiClient.updateClient(targetClientId, { clientGstin: gstin, clientName: name });
+      } else {
+        const existing = clients.find(c => c.clientGstin && c.clientGstin.toUpperCase() === gstin);
+        if (existing) {
+          targetClientId = existing.id;
+          await apiClient.updateClient(targetClientId, { clientGstin: gstin, clientName: name });
+        } else {
+          const created = await apiClient.createClient({ clientGstin: gstin, clientName: name });
+          targetClientId = created?.id;
+        }
+      }
+
+      // 2. Upload Persistent Logo if selected
+      if (setupClient.logoFile && targetClientId) {
+        try {
+          await apiClient.uploadClientLogo(targetClientId, setupClient.logoFile);
+          await apiClient.uploadClientLogoByGstin(gstin, setupClient.logoFile, name);
+        } catch (logoErr) {
+          console.warn('Persistent logo upload notice:', logoErr);
+        }
+      }
+
+      // 3. Map Vendors
+      let mappedCount = 0;
+      if (setupClient.vendorMode === 'sheet' && setupClient.sheetVendors.length > 0) {
+        const vendorGstins = setupClient.sheetVendors.map(v => v.gstin);
+        await apiClient.replaceClientVendors(targetClientId, vendorGstins);
+        mappedCount = vendorGstins.length;
+      } else if (setupClient.vendorMode === 'registry' && setupClient.selectedRegistryGstins.size > 0) {
+        const vendorGstins = Array.from(setupClient.selectedRegistryGstins);
+        await apiClient.replaceClientVendors(targetClientId, vendorGstins);
+        mappedCount = vendorGstins.length;
+      }
+
+      // 4. Mark Client as recent so it appears first in the 6 horizontal clients
+      markClientRecent(targetClientId);
+
+      // 5. Close Setup Modal
+      setShowSetupModal(false);
+      showToast(`Client "${name}" saved! ${mappedCount > 0 ? mappedCount + ' vendors mapped.' : ''}`);
+
+      // 6. Refresh clients and select this client so vendors populate in table
+      await fetchClients(targetClientId);
+    } catch (err) {
+      alert(err.message || 'Failed to save client and map vendors');
+    } finally {
+      setSetupSubmitting(false);
+    }
+  };
+
   // ── Client CRUD Handlers ──────────────────────────────────────────────────
 
   const openAddClientModal = () => {
@@ -800,6 +1179,11 @@ export default function ClientVendorMapping({ currentUser }) {
     try {
       await apiClient.deleteClient(clientId);
       showToast(`Client "${clientName}" deleted successfully`);
+      setRecentClientIds(prev => {
+        const next = prev.filter(id => id !== clientId);
+        try { localStorage.setItem('grc_recent_client_ids', JSON.stringify(next)); } catch {}
+        return next;
+      });
       if (selectedClient?.id === clientId) {
         setSelectedClient(null);
         setMappedVendors([]);
@@ -2325,6 +2709,447 @@ export default function ClientVendorMapping({ currentUser }) {
           color: #6d28d9;
         }
 
+        /* ── Client Search Bar & Dropdown ── */
+        .client-search-wrapper {
+          position: relative;
+          min-width: 320px;
+          flex: 1;
+          max-width: 520px;
+        }
+
+        .client-search-input-box {
+          position: relative;
+          display: flex;
+          align-items: center;
+          width: 100%;
+        }
+
+        .client-search-icon {
+          position: absolute;
+          left: 0.85rem;
+          color: #7c3aed;
+          pointer-events: none;
+        }
+
+        .client-search-input {
+          width: 100%;
+          padding: 0.65rem 2.2rem 0.65rem 2.6rem;
+          font-family: inherit;
+          font-size: 0.92rem;
+          font-weight: 600;
+          color: #0f172a;
+          background: #f8fafc;
+          border: 1.5px solid #ddd6fe;
+          border-radius: 10px;
+          outline: none;
+          transition: all 0.2s ease;
+        }
+
+        .client-search-input:focus {
+          background: #ffffff;
+          border-color: #7c3aed;
+          box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+        }
+
+        .btn-clear-search {
+          position: absolute;
+          right: 0.75rem;
+          background: none;
+          border: none;
+          color: #94a3b8;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          padding: 2px;
+        }
+        .btn-clear-search:hover {
+          color: #64748b;
+        }
+
+        .client-search-spinner {
+          position: absolute;
+          right: 2rem;
+          color: #7c3aed;
+        }
+
+        .client-search-dropdown-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          right: 0;
+          max-height: 380px;
+          overflow-y: auto;
+          background: #ffffff;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+          z-index: 1000;
+        }
+
+        .client-search-result-row {
+          display: flex;
+          align-items: center;
+          gap: 0.85rem;
+          padding: 0.75rem 1rem;
+          border-bottom: 1px solid #f1f5f9;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .client-search-result-row:last-child {
+          border-bottom: none;
+        }
+
+        .client-search-result-row:hover {
+          background: #f5f3ff;
+        }
+
+        .result-avatar {
+          flex-shrink: 0;
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #ede9fe;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .result-logo-img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+        }
+
+        .result-initial-avatar {
+          font-weight: 800;
+          color: #7c3aed;
+          font-size: 0.95rem;
+        }
+
+        .result-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .result-name-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 2px;
+        }
+
+        .result-comp-name {
+          font-weight: 700;
+          font-size: 0.9rem;
+          color: #0f172a;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .badge-existing-client {
+          background: #ede9fe;
+          color: #6d28d9;
+          font-size: 0.72rem;
+          font-weight: 700;
+          padding: 1px 7px;
+          border-radius: 999px;
+          white-space: nowrap;
+        }
+
+        .badge-db-record {
+          background: #e2e8f0;
+          color: #475569;
+          font-size: 0.72rem;
+          font-weight: 600;
+          padding: 1px 7px;
+          border-radius: 999px;
+          white-space: nowrap;
+        }
+
+        .result-meta-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.78rem;
+          color: #64748b;
+          font-family: monospace;
+        }
+
+        .result-gstin {
+          color: #7c3aed;
+          font-weight: 600;
+        }
+
+        .search-empty-state {
+          padding: 1.25rem 1rem;
+          text-align: center;
+          color: #64748b;
+          font-size: 0.85rem;
+        }
+
+        /* ── Horizontal 6 Clients Strip ── */
+        .horizontal-clients-strip {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.7rem 1.1rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          margin-bottom: 1.25rem;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+          flex-wrap: wrap;
+        }
+
+        .horizontal-clients-label {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          font-size: 0.85rem;
+          font-weight: 800;
+          color: #0f172a;
+          flex-shrink: 0;
+        }
+
+        .horizontal-clients-list {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+          flex-wrap: wrap;
+          flex: 1;
+        }
+
+        .client-chip-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.42rem 0.85rem;
+          border-radius: 999px;
+          border: 1.5px solid #e2e8f0;
+          background: #ffffff;
+          color: #334155;
+          font-size: 0.84rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .client-chip-pill:hover {
+          border-color: #cbd5e1;
+          background: #f8fafc;
+        }
+
+        .client-chip-pill.active {
+          background: #ede9fe;
+          border-color: #7c3aed;
+          color: #5b21b6;
+          font-weight: 700;
+          box-shadow: 0 2px 10px rgba(124, 58, 237, 0.18);
+        }
+
+        .chip-avatar {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #ddd6fe;
+          color: #5b21b6;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.68rem;
+          font-weight: 800;
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+
+        .chip-logo-img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+        }
+
+        .chip-name {
+          max-width: 140px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .chip-count {
+          font-size: 0.75rem;
+          color: #64748b;
+          font-weight: 700;
+        }
+
+        .client-chip-pill.active .chip-count {
+          color: #7c3aed;
+        }
+
+        .client-overflow-wrapper {
+          position: relative;
+        }
+
+        .client-overflow-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          padding: 0.42rem 0.85rem;
+          border-radius: 999px;
+          border: 1.5px dashed #7c3aed;
+          background: #ffffff;
+          color: #7c3aed;
+          font-size: 0.82rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .client-overflow-btn:hover, .client-overflow-btn.open {
+          background: #f5f3ff;
+          border-style: solid;
+        }
+
+        .client-overflow-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          min-width: 240px;
+          max-height: 280px;
+          overflow-y: auto;
+          background: #ffffff;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+          z-index: 1000;
+        }
+
+        .overflow-menu-header {
+          padding: 0.5rem 0.85rem;
+          font-size: 0.72rem;
+          font-weight: 800;
+          color: #94a3b8;
+          text-transform: uppercase;
+          border-bottom: 1px solid #f1f5f9;
+        }
+
+        .overflow-client-item {
+          padding: 0.6rem 0.85rem;
+          border-bottom: 1px solid #f8fafc;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .overflow-client-item:hover {
+          background: #f5f3ff;
+        }
+
+        .overflow-client-item.active {
+          background: #ede9fe;
+        }
+
+        .overflow-item-name {
+          font-weight: 700;
+          font-size: 0.86rem;
+          color: #0f172a;
+        }
+
+        .overflow-item-gstin {
+          font-size: 0.75rem;
+          color: #64748b;
+          font-family: monospace;
+        }
+
+        .overflow-item-count {
+          font-size: 0.72rem;
+          color: #7c3aed;
+          font-weight: 600;
+        }
+
+        /* ── Setup Client & Map Vendors Modal ── */
+        .modal-card-setup {
+          max-width: 960px;
+          width: 95%;
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .setup-modal-grid {
+          display: grid;
+          grid-template-columns: 1fr 1.35fr;
+          gap: 1.5rem;
+          align-items: start;
+        }
+
+        @media (max-width: 768px) {
+          .setup-modal-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .setup-section-card {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 1.1rem;
+        }
+
+        .setup-section-title {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin-bottom: 0.85rem;
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+        }
+
+        .setup-logo-box {
+          border: 2px dashed #cbd5e1;
+          border-radius: 10px;
+          padding: 1.25rem;
+          background: #ffffff;
+          text-align: center;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .setup-logo-box:hover {
+          border-color: #7c3aed;
+          background: #fcfaff;
+        }
+
+        .setup-vendor-mode-tabs {
+          display: flex;
+          background: #e2e8f0;
+          border-radius: 8px;
+          padding: 3px;
+          margin-bottom: 0.85rem;
+          gap: 3px;
+        }
+
+        .setup-vendor-mode-tab {
+          flex: 1;
+          padding: 0.45rem;
+          font-size: 0.82rem;
+          font-weight: 700;
+          border: none;
+          background: transparent;
+          color: #475569;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .setup-vendor-mode-tab.active {
+          background: #ffffff;
+          color: #7c3aed;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        }
+
         .top-action-buttons {
           display: flex;
           align-items: center;
@@ -3716,43 +4541,107 @@ export default function ClientVendorMapping({ currentUser }) {
           </div>
         </div>
       ) : (
-        <div className="client-top-bar">
-          <div className="client-selector-group">
-            <div className="client-label">
-              <Building2 size={18} color="#7c3aed" />
-              <span>Select Client:</span>
-            </div>
-
-            <div className="client-dropdown-wrapper">
-              <select
-                className="client-dropdown-select"
-                value={selectedClient?.id || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'ALL') {
-                    handleSwitchTab('all-vendors');
-                    return;
-                  }
-                  const c = clients.find(item => item.id === Number(val));
-                  setSelectedClient(c || null);
-                }}
-                disabled={clientsLoading || clients.length === 0}
-              >
-                {clients.length === 0 && (
-                  <option value="">No clients found - import or add client</option>
+        <>
+          <div className="client-top-bar">
+            {/* Client Search Bar with Live Suggestions Dropdown */}
+            <div className="client-search-wrapper" ref={clientSearchContainerRef}>
+              <div className="client-search-input-box">
+                <Search size={17} className="client-search-icon" />
+                <input
+                  type="text"
+                  className="client-search-input"
+                  placeholder="Search client by GSTIN or Name to add/map..."
+                  value={clientSearchQuery}
+                  onChange={(e) => handleClientSearchChange(e.target.value)}
+                  onFocus={() => {
+                    if (clientSearchResults.length > 0 || clientSearchQuery.trim().length >= 2) {
+                      setShowClientSearchDropdown(true);
+                    }
+                  }}
+                />
+                {clientSearchQuery && (
+                  <button
+                    type="button"
+                    className="btn-clear-search"
+                    onClick={() => {
+                      setClientSearchQuery('');
+                      setClientSearchResults([]);
+                      setShowClientSearchDropdown(false);
+                    }}
+                    title="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
                 )}
-                <option value="ALL">★ Switch to All Uploaded Vendors (Combined Report)</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.clientName} ({c.vendorCount ?? 0} vendors)
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="dropdown-chevron" />
+                {isSearchingClients && (
+                  <Loader2 size={16} className="spin-icon client-search-spinner" />
+                )}
+              </div>
+
+              {/* Dropdown Results List */}
+              {showClientSearchDropdown && (
+                <div className="client-search-dropdown-menu">
+                  {clientSearchResults.length > 0 ? (
+                    clientSearchResults.map((comp) => {
+                      const compLogo = comp.logoUrl || (comp.gstin ? apiClient.getClientLogoByGstinUrl(comp.gstin) : null);
+                      return (
+                        <div
+                          key={comp.gstin}
+                          className="client-search-result-row"
+                          onClick={() => handleSelectSearchResult(comp)}
+                        >
+                          <div className="result-avatar">
+                            {comp.hasLogo && compLogo ? (
+                              <img
+                                src={compLogo}
+                                alt={comp.name}
+                                className="result-logo-img"
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="result-initial-avatar">
+                                {(comp.name || comp.gstin || 'C').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="result-info">
+                            <div className="result-name-row">
+                              <span className="result-comp-name">{comp.name || comp.tradeName || comp.legalName}</span>
+                              {comp.isExistingClient && (
+                                <span className="badge-existing-client">Client ({comp.vendorCount ?? 0} vendors)</span>
+                              )}
+                              {!comp.isExistingClient && !comp.isCustomNew && (
+                                <span className="badge-db-record">GST Database Record</span>
+                              )}
+                              {comp.isCustomNew && (
+                                <span className="badge-existing-client" style={{ background: '#dbeafe', color: '#1d4ed8' }}>+ Add New Client</span>
+                              )}
+                            </div>
+                            <div className="result-meta-row">
+                              <span className="result-gstin">{comp.gstin}</span>
+                              {comp.address && <span className="result-address">• {comp.address.slice(0, 42)}...</span>}
+                            </div>
+                          </div>
+                          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.75rem', color: '#7c3aed', fontWeight: 700 }}>Setup & Map &rarr;</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="search-empty-state">
+                      {clientSearchQuery.trim().length < 2
+                        ? 'Type at least 2 characters to search clients by GSTIN or Name...'
+                        : `No clients or database records found matching "${clientSearchQuery}"`}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
+            {/* Active Client Badge (if selected) */}
             {selectedClient && selectedClient.id !== 'ALL' && (
-              <div className="client-info-pill">
+              <div className="client-info-pill" style={{ margin: '0 0.5rem' }}>
                 {selectedClient.hasLogo ? (
                   <img
                     src={apiClient.getClientLogoUrl(selectedClient.id)}
@@ -3770,38 +4659,124 @@ export default function ClientVendorMapping({ currentUser }) {
                   </div>
                 )}
                 <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#0f172a' }}>{selectedClient.clientName}</div>
                   <div className="client-meta-gstin">{selectedClient.clientGstin}</div>
                 </div>
                 <span className="client-meta-count">{mappedVendors.length} Vendors</span>
               </div>
             )}
+
+            {/* Top Actions: Import from Sheet & Active Client Actions */}
+            <div className="top-action-buttons">
+              <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
+                <FileSpreadsheet size={16} /> Import from Sheet
+              </button>
+              {selectedClient && selectedClient.id !== 'ALL' && (
+                <>
+                  <button
+                    className="btn-secondary-sm"
+                    onClick={() => openSetupModalForClient(selectedClient)}
+                    title="Map vendors or change logo for this client"
+                  >
+                    <Users size={15} /> Map / Setup
+                  </button>
+                  <button className="btn-secondary-sm" onClick={(e) => openLogoModal(selectedClient, e)} title="Change or upload Client Logo">
+                    <Upload size={14} /> Logo
+                  </button>
+                  <button className="btn-danger-sm" onClick={(e) => handleDeleteClient(selectedClient.id, selectedClient.clientName, e)} title="Delete Client">
+                    <Trash2 size={15} />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="top-action-buttons">
-            <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
-              <FileSpreadsheet size={16} /> Import from Sheet
-            </button>
-            <button className="btn-primary-gradient" onClick={openAddClientModal}>
-              <Plus size={16} /> Add Client
-            </button>
-            {selectedClient && selectedClient.id !== 'ALL' && (
-              <>
-                <button className="btn-secondary-sm" onClick={() => openMapModal(selectedClient)} title="Search and map existing GRC vendors to this client">
-                  <Users size={15} /> Map More Vendors
-                </button>
-                <button className="btn-secondary-sm" onClick={(e) => openEditClientModal(selectedClient, e)} title="Edit Client details">
-                  <Edit2 size={14} /> Edit
-                </button>
-                <button className="btn-secondary-sm" onClick={(e) => openLogoModal(selectedClient, e)} title="Change or upload Client Logo">
-                  <Upload size={14} /> Logo
-                </button>
-                <button className="btn-danger-sm" onClick={(e) => handleDeleteClient(selectedClient.id, selectedClient.clientName, e)} title="Delete Client">
-                  <Trash2 size={15} />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+          {/* ── Horizontal List of Maximum 6 Clients (with + More Dropdown) ── */}
+          {clients.length > 0 && (
+            <div className="horizontal-clients-strip">
+              <div className="horizontal-clients-label">
+                <Building2 size={16} color="#7c3aed" />
+                <span>Clients:</span>
+              </div>
+
+              <div className="horizontal-clients-list">
+                {visibleClients.map((client) => {
+                  const isSelected = selectedClient?.id === client.id;
+                  const logoUrl = client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null;
+                  return (
+                    <button
+                      key={client.id}
+                      type="button"
+                      className={`client-chip-pill ${isSelected ? 'active' : ''}`}
+                      onClick={() => {
+                        markClientRecent(client.id);
+                        setSelectedClient(client);
+                        fetchMappedVendors(client.id);
+                      }}
+                      title={`${client.clientName} (${client.clientGstin}) • ${client.vendorCount ?? 0} vendors`}
+                    >
+                      <div className="chip-avatar">
+                        {logoUrl ? (
+                          <img
+                            src={logoUrl}
+                            alt={client.clientName}
+                            className="chip-logo-img"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <span className="chip-letter">
+                            {client.clientName?.charAt(0)?.toUpperCase() || 'C'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="chip-name">{client.clientName}</span>
+                      <span className="chip-count">({client.vendorCount ?? 0})</span>
+                    </button>
+                  );
+                })}
+
+                {overflowClients.length > 0 && (
+                  <div className="client-overflow-wrapper" ref={overflowDropdownRef}>
+                    <button
+                      type="button"
+                      className={`client-overflow-btn ${showOverflowDropdown ? 'open' : ''}`}
+                      onClick={() => setShowOverflowDropdown(prev => !prev)}
+                      title="Show remaining clients"
+                    >
+                      <span>+{overflowClients.length} More</span>
+                      <ChevronDown size={14} />
+                    </button>
+
+                    {showOverflowDropdown && (
+                      <div className="client-overflow-menu">
+                        <div className="overflow-menu-header">More Clients ({overflowClients.length})</div>
+                        {overflowClients.map((c) => {
+                          const isSel = selectedClient?.id === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              className={`overflow-client-item ${isSel ? 'active' : ''}`}
+                              onClick={() => {
+                                markClientRecent(c.id);
+                                setSelectedClient(c);
+                                fetchMappedVendors(c.id);
+                                setShowOverflowDropdown(false);
+                              }}
+                            >
+                              <div className="overflow-item-name">{c.clientName}</div>
+                              <div className="overflow-item-gstin">{c.clientGstin}</div>
+                              <span className="overflow-item-count">{c.vendorCount ?? 0} vendors</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Table Toolbar (Search, Filter, Export) ── */}
@@ -4454,6 +5429,340 @@ export default function ClientVendorMapping({ currentUser }) {
         <div className={`toast-notification ${notification.type === 'error' ? 'toast-error' : 'toast-success'}`}>
           {notification.type === 'error' ? <AlertCircle size={18} color="#ef4444" /> : <Check size={18} color="#10b981" />}
           <span>{notification.message}</span>
+        </div>
+      )}
+
+      {/* ── CLIENT SETUP & VENDOR MAPPING MODAL (SEARCH RESULT / POPUP) ── */}
+      {showSetupModal && (
+        <div className="modal-overlay" onClick={() => !setupSubmitting && setShowSetupModal(false)}>
+          <div className="modal-card modal-card-setup" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '8px',
+                  background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#7c3aed'
+                }}>
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: '1.15rem' }}>
+                    {setupClient.isExistingClient ? 'Client Setup & Vendor Mapping' : 'Add Client & Map Vendors'}
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>{setupClient.clientName || 'Unnamed Client'}</span>
+                    <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontWeight: 700 }}>• {setupClient.clientGstin}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSetupModal(false)}
+                className="btn-ghost-sm"
+                disabled={setupSubmitting}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ overflowY: 'auto', maxHeight: '72vh', padding: '1.25rem' }}>
+              <div className="setup-modal-grid">
+                
+                {/* ── LEFT COLUMN: Client Details & Persistent Logo ── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="setup-section-card">
+                    <div className="setup-section-title">
+                      <ShieldCheck size={16} color="#7c3aed" />
+                      <span>Client Information</span>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: '0.85rem' }}>
+                      <label className="form-label">Client / Legal Name *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. RAPID FORGE AND FITTINGS"
+                        value={setupClient.clientName}
+                        onChange={(e) => setSetupClient(prev => ({ ...prev, clientName: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Client GSTIN *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="15-digit GSTIN (e.g. 24AUFPJ6677D1ZL)"
+                        value={setupClient.clientGstin}
+                        maxLength={15}
+                        onChange={(e) => setSetupClient(prev => ({ ...prev, clientGstin: e.target.value.toUpperCase() }))}
+                        style={{ fontFamily: 'monospace', letterSpacing: '0.04em' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Persistent Client Logo Section ── */}
+                  <div className="setup-section-card">
+                    <div className="setup-section-title">
+                      <ImageIcon size={16} color="#7c3aed" />
+                      <span>Client Logo (Persistent)</span>
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '-0.35rem 0 0.85rem 0' }}>
+                      This logo is stored permanently in the database for this GSTIN and will appear on all PDF & DOCX reports.
+                    </p>
+
+                    <div
+                      className="setup-logo-box"
+                      onClick={() => document.getElementById('setup-modal-logo-file')?.click()}
+                    >
+                      <input
+                        id="setup-modal-logo-file"
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              alert('Logo image must be smaller than 2MB.');
+                              return;
+                            }
+                            setSetupClient(prev => ({
+                              ...prev,
+                              logoFile: file,
+                              logoPreview: URL.createObjectURL(file)
+                            }));
+                          }
+                        }}
+                      />
+                      {setupClient.logoPreview ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                          <img
+                            src={setupClient.logoPreview}
+                            alt="Logo Preview"
+                            style={{ maxHeight: '90px', maxWidth: '100%', objectFit: 'contain' }}
+                          />
+                          <span style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 700 }}>
+                            Click to change logo
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', color: '#64748b' }}>
+                          <UploadCloud size={30} color="#7c3aed" />
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Upload Client Logo</span>
+                          <span style={{ fontSize: '0.72rem' }}>PNG, JPEG, SVG up to 2MB</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {setupClient.logoPreview && (
+                      <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="btn-ghost-sm"
+                          style={{ color: '#ef4444', fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSetupClient(prev => ({ ...prev, logoFile: null, logoPreview: null }));
+                          }}
+                        >
+                          <Trash2 size={13} /> Remove Logo
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── RIGHT COLUMN: Map Client's Vendors ── */}
+                <div className="setup-section-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div className="setup-section-title">
+                    <Users size={16} color="#7c3aed" />
+                    <span>Map Vendors to this Client</span>
+                  </div>
+
+                  <div className="setup-vendor-mode-tabs">
+                    <button
+                      type="button"
+                      className={`setup-vendor-mode-tab ${setupClient.vendorMode === 'sheet' ? 'active' : ''}`}
+                      onClick={() => setSetupClient(prev => ({ ...prev, vendorMode: 'sheet' }))}
+                    >
+                      <FileSpreadsheet size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                      Upload Vendor Sheet
+                    </button>
+                    <button
+                      type="button"
+                      className={`setup-vendor-mode-tab ${setupClient.vendorMode === 'registry' ? 'active' : ''}`}
+                      onClick={() => setSetupClient(prev => ({ ...prev, vendorMode: 'registry' }))}
+                    >
+                      <Users size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                      Pick from Registry ({allAvailableVendors.length})
+                    </button>
+                  </div>
+
+                  {setupClient.vendorMode === 'sheet' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div
+                        className="setup-logo-box"
+                        onClick={() => document.getElementById('setup-vendor-sheet-file')?.click()}
+                        style={{ padding: '1.5rem 1rem' }}
+                      >
+                        <input
+                          id="setup-vendor-sheet-file"
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          style={{ display: 'none' }}
+                          onChange={handleSetupSheetFileChange}
+                        />
+                        <FileSpreadsheet size={32} color="#16a34a" style={{ margin: '0 auto 0.4rem auto' }} />
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                          {setupClient.sheetFileName ? setupClient.sheetFileName : 'Select or drop Vendor Excel / CSV Sheet'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                          Extracts Vendor Name and 15-digit GSTN automatically
+                        </div>
+                      </div>
+
+                      {setupClient.sheetParsing && (
+                        <div style={{ textAlign: 'center', padding: '0.75rem', color: '#7c3aed', fontSize: '0.85rem' }}>
+                          <Loader2 size={18} className="spin-icon" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
+                          Parsing vendors from sheet...
+                        </div>
+                      )}
+
+                      {setupClient.sheetVendors.length > 0 && (
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#ffffff', overflow: 'hidden' }}>
+                          <div style={{
+                            padding: '0.5rem 0.85rem', background: '#f0fdf4', borderBottom: '1px solid #bbf7d0',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                          }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534' }}>
+                              ✓ {setupClient.sheetVendors.length} Vendors Ready to Map
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: '#15803d' }}>
+                              Previewing first 5
+                            </span>
+                          </div>
+                          <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '0.35rem 0.65rem' }}>
+                            {setupClient.sheetVendors.slice(0, 5).map((v, i) => (
+                              <div
+                                key={v.gstin + i}
+                                style={{
+                                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                  padding: '0.35rem 0.4rem', borderBottom: i < 4 ? '1px solid #f1f5f9' : 'none',
+                                  fontSize: '0.78rem'
+                                }}
+                              >
+                                <span style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                                  {i + 1}. {v.name}
+                                </span>
+                                <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontWeight: 600 }}>
+                                  {v.gstin}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1 }}>
+                      <div style={{ position: 'relative' }}>
+                        <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Search database vendors..."
+                          value={setupClient.registrySearch}
+                          onChange={(e) => setSetupClient(prev => ({ ...prev, registrySearch: e.target.value }))}
+                          style={{ paddingLeft: '2.2rem', fontSize: '0.82rem', paddingBlock: '0.45rem' }}
+                        />
+                      </div>
+
+                      <div style={{
+                        maxHeight: '230px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px',
+                        background: '#ffffff', display: 'flex', flexDirection: 'column'
+                      }}>
+                        {allAvailableVendors
+                          .filter(v => {
+                            if (!setupClient.registrySearch) return true;
+                            const q = setupClient.registrySearch.toLowerCase();
+                            const gstin = (v.gstin || '').toLowerCase();
+                            const name = (getVendorDisplayName(v) || '').toLowerCase();
+                            return gstin.includes(q) || name.includes(q);
+                          })
+                          .slice(0, 100)
+                          .map(v => {
+                            const isChecked = setupClient.selectedRegistryGstins.has(v.gstin);
+                            return (
+                              <div
+                                key={v.gstin}
+                                onClick={() => handleToggleRegistryGstin(v.gstin)}
+                                style={{
+                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                  padding: '0.45rem 0.75rem', borderBottom: '1px solid #f1f5f9', cursor: 'pointer',
+                                  background: isChecked ? '#f5f3ff' : '#ffffff'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                                  {isChecked ? <CheckSquare size={16} color="#7c3aed" /> : <Square size={16} color="#94a3b8" />}
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {getVendorDisplayName(v)}
+                                  </span>
+                                </div>
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b', marginLeft: '0.5rem' }}>
+                                  {v.gstin}
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 700 }}>
+                        {setupClient.selectedRegistryGstins.size} vendors selected
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.25rem' }}>
+              <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                {setupClient.vendorMode === 'sheet' && setupClient.sheetVendors.length > 0 && (
+                  <span>Will map <strong>{setupClient.sheetVendors.length} vendors</strong> to this client</span>
+                )}
+                {setupClient.vendorMode === 'registry' && setupClient.selectedRegistryGstins.size > 0 && (
+                  <span>Will map <strong>{setupClient.selectedRegistryGstins.size} vendors</strong> to this client</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '0.65rem' }}>
+                <button
+                  type="button"
+                  className="btn-ghost-sm"
+                  onClick={() => setShowSetupModal(false)}
+                  disabled={setupSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary-gradient"
+                  onClick={handleSaveSetupModal}
+                  disabled={setupSubmitting}
+                  style={{ minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  {setupSubmitting ? (
+                    <>
+                      <Loader2 size={16} className="spin-icon" /> Saving Client...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} /> Save & Map Vendors
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
