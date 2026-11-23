@@ -925,6 +925,23 @@ export default function ClientVendorMapping({ currentUser }) {
       ? apiClient.getClientLogoByGstinUrl(gstin)
       : (hasLogo && clientId ? apiClient.getClientLogoUrl(clientId) : null);
 
+    let currentMappedGstins = new Set();
+    let existingMappedCount = 0;
+    if (clientId) {
+      try {
+        const existingVendors = await apiClient.getClientVendors(clientId);
+        if (Array.isArray(existingVendors)) {
+          existingMappedCount = existingVendors.length;
+          existingVendors.forEach(v => {
+            const g = (v.vendorGstin || v.gstin || '').toUpperCase();
+            if (g) currentMappedGstins.add(g);
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to pre-fetch client vendors:', err);
+      }
+    }
+
     setSetupClient({
       clientGstin: gstin,
       clientName: name,
@@ -933,15 +950,17 @@ export default function ClientVendorMapping({ currentUser }) {
       hasLogo: hasLogo,
       logoPreview: hasLogo ? logoUrl : null,
       logoFile: null,
-      vendorMode: 'sheet',
+      logoRemoved: false,
+      vendorMode: existingMappedCount > 0 ? 'registry' : 'sheet',
       sheetVendors: [],
       sheetFileName: '',
       sheetParsing: false,
-      selectedRegistryGstins: new Set(),
+      selectedRegistryGstins: currentMappedGstins,
+      existingMappedCount: existingMappedCount,
+      vendorsModified: false,
       registrySearch: ''
     });
 
-    // Preload available vendors for registry mode in case user toggles to registry
     if (allAvailableVendors.length === 0) {
       apiClient.getDetails().then(v => setAllAvailableVendors(v || [])).catch(() => {});
     }
@@ -949,7 +968,7 @@ export default function ClientVendorMapping({ currentUser }) {
     setShowSetupModal(true);
   };
 
-  const openSetupModalForClient = (client, e) => {
+  const openSetupModalForClient = async (client, e) => {
     e?.stopPropagation();
     const gstin = client.clientGstin || '';
     const name = client.clientName || gstin;
@@ -957,6 +976,21 @@ export default function ClientVendorMapping({ currentUser }) {
     const logoUrl = gstin
       ? apiClient.getClientLogoByGstinUrl(gstin)
       : (hasLogo ? apiClient.getClientLogoUrl(client.id) : null);
+
+    let currentMappedGstins = new Set();
+    let existingMappedCount = 0;
+    try {
+      const existingVendors = await apiClient.getClientVendors(client.id);
+      if (Array.isArray(existingVendors)) {
+        existingMappedCount = existingVendors.length;
+        existingVendors.forEach(v => {
+          const g = (v.vendorGstin || v.gstin || '').toUpperCase();
+          if (g) currentMappedGstins.add(g);
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to pre-fetch client vendors:', err);
+    }
 
     setSetupClient({
       clientGstin: gstin,
@@ -966,11 +1000,14 @@ export default function ClientVendorMapping({ currentUser }) {
       hasLogo: hasLogo,
       logoPreview: hasLogo ? logoUrl : null,
       logoFile: null,
-      vendorMode: 'sheet',
+      logoRemoved: false,
+      vendorMode: existingMappedCount > 0 ? 'registry' : 'sheet',
       sheetVendors: [],
       sheetFileName: '',
       sheetParsing: false,
-      selectedRegistryGstins: new Set(),
+      selectedRegistryGstins: currentMappedGstins,
+      existingMappedCount: existingMappedCount,
+      vendorsModified: false,
       registrySearch: ''
     });
 
@@ -1049,7 +1086,8 @@ export default function ClientVendorMapping({ currentUser }) {
       setSetupClient(prev => ({
         ...prev,
         sheetVendors: validVendors,
-        sheetParsing: false
+        sheetParsing: false,
+        vendorsModified: true
       }));
       showToast(`Detected ${validVendors.length} valid vendors in sheet.`);
     } catch (err) {
@@ -1063,8 +1101,25 @@ export default function ClientVendorMapping({ currentUser }) {
       const next = new Set(prev.selectedRegistryGstins);
       if (next.has(gstin)) next.delete(gstin);
       else next.add(gstin);
-      return { ...prev, selectedRegistryGstins: next };
+      return { ...prev, selectedRegistryGstins: next, vendorsModified: true };
     });
+  };
+
+  const handleSelectAllRegistryVendors = () => {
+    setSetupClient(prev => {
+      const q = (prev.registrySearch || '').toLowerCase();
+      const filtered = allAvailableVendors.filter(v => {
+        if (!q) return true;
+        return (v.gstin || '').toLowerCase().includes(q) || (getVendorDisplayName(v) || '').toLowerCase().includes(q);
+      });
+      const next = new Set(prev.selectedRegistryGstins);
+      filtered.forEach(v => { if (v.gstin) next.add(v.gstin.toUpperCase()); });
+      return { ...prev, selectedRegistryGstins: next, vendorsModified: true };
+    });
+  };
+
+  const handleDeselectAllRegistryVendors = () => {
+    setSetupClient(prev => ({ ...prev, selectedRegistryGstins: new Set(), vendorsModified: true }));
   };
 
   const handleSaveSetupModal = async () => {
@@ -1098,8 +1153,14 @@ export default function ClientVendorMapping({ currentUser }) {
         }
       }
 
-      // 2. Upload Persistent Logo if selected
-      if (setupClient.logoFile && targetClientId) {
+      // 2. Handle Persistent Logo
+      if (setupClient.logoRemoved && targetClientId) {
+        try {
+          await apiClient.deleteClientLogo(targetClientId, gstin);
+        } catch (logoErr) {
+          console.warn('Logo delete notice:', logoErr);
+        }
+      } else if (setupClient.logoFile && targetClientId) {
         try {
           await apiClient.uploadClientLogo(targetClientId, setupClient.logoFile);
           await apiClient.uploadClientLogoByGstin(gstin, setupClient.logoFile, name);
@@ -1114,7 +1175,7 @@ export default function ClientVendorMapping({ currentUser }) {
         const vendorGstins = setupClient.sheetVendors.map(v => v.gstin);
         await apiClient.replaceClientVendors(targetClientId, vendorGstins);
         mappedCount = vendorGstins.length;
-      } else if (setupClient.vendorMode === 'registry' && setupClient.selectedRegistryGstins.size > 0) {
+      } else if (setupClient.vendorMode === 'registry' && setupClient.vendorsModified) {
         const vendorGstins = Array.from(setupClient.selectedRegistryGstins);
         await apiClient.replaceClientVendors(targetClientId, vendorGstins);
         mappedCount = vendorGstins.length;
@@ -1125,7 +1186,10 @@ export default function ClientVendorMapping({ currentUser }) {
 
       // 5. Close Setup Modal
       setShowSetupModal(false);
-      showToast(`Client "${name}" saved! ${mappedCount > 0 ? mappedCount + ' vendors mapped.' : ''}`);
+      showToast(setupClient.isExistingClient
+        ? `Client "${name}" updated successfully!`
+        : `Client "${name}" saved! ${mappedCount > 0 ? mappedCount + ' vendors mapped.' : ''}`
+      );
 
       // 6. Refresh clients and select this client so vendors populate in table
       await fetchClients(targetClientId);
@@ -3069,23 +3133,30 @@ export default function ClientVendorMapping({ currentUser }) {
         }
 
         /* ── Setup Client & Map Vendors Modal ── */
-        .modal-card-setup {
-          max-width: 960px;
-          width: 95%;
-          max-height: 90vh;
+        .modal-card.modal-card-setup {
+          max-width: 1240px !important;
+          width: 95vw !important;
+          max-height: 92vh;
           display: flex;
           flex-direction: column;
+          border-radius: 18px;
         }
 
-        .setup-modal-grid {
+        .setup-modal-grid-3col {
           display: grid;
-          grid-template-columns: 1fr 1.35fr;
-          gap: 1.5rem;
-          align-items: start;
+          grid-template-columns: 1fr 1fr 1.35fr;
+          gap: 1.25rem;
+          align-items: stretch;
+        }
+
+        @media (max-width: 1100px) {
+          .setup-modal-grid-3col {
+            grid-template-columns: 1fr 1fr;
+          }
         }
 
         @media (max-width: 768px) {
-          .setup-modal-grid {
+          .setup-modal-grid-3col {
             grid-template-columns: 1fr;
           }
         }
@@ -3093,8 +3164,10 @@ export default function ClientVendorMapping({ currentUser }) {
         .setup-section-card {
           background: #f8fafc;
           border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 1.1rem;
+          border-radius: 14px;
+          padding: 1.25rem;
+          display: flex;
+          flex-direction: column;
         }
 
         .setup-section-title {
@@ -3104,17 +3177,21 @@ export default function ClientVendorMapping({ currentUser }) {
           margin-bottom: 0.85rem;
           display: flex;
           align-items: center;
-          gap: 0.45rem;
+          gap: 0.5rem;
         }
 
         .setup-logo-box {
           border: 2px dashed #cbd5e1;
-          border-radius: 10px;
+          border-radius: 12px;
           padding: 1.25rem;
           background: #ffffff;
           text-align: center;
           cursor: pointer;
           transition: all 0.2s ease;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
         }
 
         .setup-logo-box:hover {
@@ -3148,6 +3225,68 @@ export default function ClientVendorMapping({ currentUser }) {
           background: #ffffff;
           color: #7c3aed;
           box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        }
+
+        .chip-edit-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          border: none;
+          background: #f1f5f9;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          margin-left: 2px;
+        }
+
+        .chip-edit-btn:hover {
+          background: #7c3aed;
+          color: #ffffff;
+        }
+
+        .client-chip-pill.active .chip-edit-btn {
+          background: #ddd6fe;
+          color: #5b21b6;
+        }
+
+        .client-chip-pill.active .chip-edit-btn:hover {
+          background: #7c3aed;
+          color: #ffffff;
+        }
+
+        .overflow-client-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+          padding: 0.6rem 0.85rem;
+          border-bottom: 1px solid #f8fafc;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .overflow-edit-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 26px;
+          border-radius: 6px;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+        }
+
+        .overflow-edit-btn:hover {
+          background: #7c3aed;
+          color: #ffffff;
+          border-color: #7c3aed;
         }
 
         .top-action-buttons {
@@ -4675,10 +4814,11 @@ export default function ClientVendorMapping({ currentUser }) {
                 <>
                   <button
                     className="btn-secondary-sm"
-                    onClick={() => openSetupModalForClient(selectedClient)}
-                    title="Map vendors or change logo for this client"
+                    onClick={(e) => openSetupModalForClient(selectedClient, e)}
+                    title="Edit client details, persistent logo, and mapped vendors"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                   >
-                    <Users size={15} /> Map / Setup
+                    <Edit2 size={14} /> Edit Client
                   </button>
                   <button className="btn-secondary-sm" onClick={(e) => openLogoModal(selectedClient, e)} title="Change or upload Client Logo">
                     <Upload size={14} /> Logo
@@ -4704,9 +4844,8 @@ export default function ClientVendorMapping({ currentUser }) {
                   const isSelected = selectedClient?.id === client.id;
                   const logoUrl = client.hasLogo ? apiClient.getClientLogoUrl(client.id) : null;
                   return (
-                    <button
+                    <div
                       key={client.id}
-                      type="button"
                       className={`client-chip-pill ${isSelected ? 'active' : ''}`}
                       onClick={() => {
                         markClientRecent(client.id);
@@ -4731,7 +4870,18 @@ export default function ClientVendorMapping({ currentUser }) {
                       </div>
                       <span className="chip-name">{client.clientName}</span>
                       <span className="chip-count">({client.vendorCount ?? 0})</span>
-                    </button>
+                      <button
+                        type="button"
+                        className="chip-edit-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openSetupModalForClient(client, e);
+                        }}
+                        title={`Edit ${client.clientName}`}
+                      >
+                        <Edit2 size={11} />
+                      </button>
+                    </div>
                   );
                 })}
 
@@ -4763,9 +4913,23 @@ export default function ClientVendorMapping({ currentUser }) {
                                 setShowOverflowDropdown(false);
                               }}
                             >
-                              <div className="overflow-item-name">{c.clientName}</div>
-                              <div className="overflow-item-gstin">{c.clientGstin}</div>
-                              <span className="overflow-item-count">{c.vendorCount ?? 0} vendors</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div className="overflow-item-name">{c.clientName}</div>
+                                <div className="overflow-item-gstin">{c.clientGstin}</div>
+                                <span className="overflow-item-count">{c.vendorCount ?? 0} vendors</span>
+                              </div>
+                              <button
+                                type="button"
+                                className="overflow-edit-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openSetupModalForClient(c, e);
+                                  setShowOverflowDropdown(false);
+                                }}
+                                title={`Edit ${c.clientName}`}
+                              >
+                                <Edit2 size={13} />
+                              </button>
                             </div>
                           );
                         })}
@@ -5432,26 +5596,34 @@ export default function ClientVendorMapping({ currentUser }) {
         </div>
       )}
 
-      {/* ── CLIENT SETUP & VENDOR MAPPING MODAL (SEARCH RESULT / POPUP) ── */}
+      {/* ── CLIENT SETUP & VENDOR MAPPING MODAL (SEARCH RESULT / POPUP / EDIT) ── */}
       {showSetupModal && (
         <div className="modal-overlay" onClick={() => !setupSubmitting && setShowSetupModal(false)}>
           <div className="modal-card modal-card-setup" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{
-                  width: '36px', height: '36px', borderRadius: '8px',
+                  width: '38px', height: '38px', borderRadius: '10px',
                   background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#7c3aed'
                 }}>
-                  <Building2 size={20} />
+                  <Building2 size={22} />
                 </div>
                 <div>
-                  <h3 className="modal-title" style={{ fontSize: '1.15rem' }}>
-                    {setupClient.isExistingClient ? 'Client Setup & Vendor Mapping' : 'Add Client & Map Vendors'}
+                  <h3 className="modal-title" style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    {setupClient.isExistingClient ? 'Edit Client & Vendor Mapping' : 'Add Client & Map Vendors'}
+                    {setupClient.isExistingClient && (
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '999px' }}>
+                        Editing Client
+                      </span>
+                    )}
                   </h3>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{setupClient.clientName || 'Unnamed Client'}</span>
+                  <div style={{ fontSize: '0.82rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '2px' }}>
+                    <span style={{ fontWeight: 600 }}>{setupClient.clientName || 'Unnamed Client'}</span>
                     <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontWeight: 700 }}>• {setupClient.clientGstin}</span>
+                    {setupClient.existingMappedCount > 0 && (
+                      <span style={{ color: '#16a34a', fontWeight: 600 }}>• {setupClient.existingMappedCount} vendors currently mapped</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5464,119 +5636,139 @@ export default function ClientVendorMapping({ currentUser }) {
               </button>
             </div>
 
-            <div className="modal-body" style={{ overflowY: 'auto', maxHeight: '72vh', padding: '1.25rem' }}>
-              <div className="setup-modal-grid">
+            <div className="modal-body" style={{ overflowY: 'auto', maxHeight: '76vh', padding: '1.4rem' }}>
+              <div className="setup-modal-grid-3col">
                 
-                {/* ── LEFT COLUMN: Client Details & Persistent Logo ── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div className="setup-section-card">
-                    <div className="setup-section-title">
-                      <ShieldCheck size={16} color="#7c3aed" />
-                      <span>Client Information</span>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: '0.85rem' }}>
-                      <label className="form-label">Client / Legal Name *</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. RAPID FORGE AND FITTINGS"
-                        value={setupClient.clientName}
-                        onChange={(e) => setSetupClient(prev => ({ ...prev, clientName: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Client GSTIN *</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="15-digit GSTIN (e.g. 24AUFPJ6677D1ZL)"
-                        value={setupClient.clientGstin}
-                        maxLength={15}
-                        onChange={(e) => setSetupClient(prev => ({ ...prev, clientGstin: e.target.value.toUpperCase() }))}
-                        style={{ fontFamily: 'monospace', letterSpacing: '0.04em' }}
-                      />
-                    </div>
+                {/* ── SECTION 1: Client Information ── */}
+                <div className="setup-section-card">
+                  <div className="setup-section-title">
+                    <ShieldCheck size={17} color="#7c3aed" />
+                    <span>1. Client Information</span>
                   </div>
 
-                  {/* ── Persistent Client Logo Section ── */}
-                  <div className="setup-section-card">
-                    <div className="setup-section-title">
-                      <ImageIcon size={16} color="#7c3aed" />
-                      <span>Client Logo (Persistent)</span>
-                    </div>
-                    <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '-0.35rem 0 0.85rem 0' }}>
-                      This logo is stored permanently in the database for this GSTIN and will appear on all PDF & DOCX reports.
-                    </p>
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '0.35rem', display: 'block' }}>
+                      Client / Legal Name *
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. RAPID FORGE AND FITTINGS"
+                      value={setupClient.clientName}
+                      onChange={(e) => setSetupClient(prev => ({ ...prev, clientName: e.target.value }))}
+                      style={{ fontSize: '0.88rem' }}
+                    />
+                  </div>
 
-                    <div
-                      className="setup-logo-box"
-                      onClick={() => document.getElementById('setup-modal-logo-file')?.click()}
-                    >
-                      <input
-                        id="setup-modal-logo-file"
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/svg+xml"
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 2 * 1024 * 1024) {
-                              alert('Logo image must be smaller than 2MB.');
-                              return;
-                            }
-                            setSetupClient(prev => ({
-                              ...prev,
-                              logoFile: file,
-                              logoPreview: URL.createObjectURL(file)
-                            }));
-                          }
-                        }}
-                      />
-                      {setupClient.logoPreview ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                          <img
-                            src={setupClient.logoPreview}
-                            alt="Logo Preview"
-                            style={{ maxHeight: '90px', maxWidth: '100%', objectFit: 'contain' }}
-                          />
-                          <span style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 700 }}>
-                            Click to change logo
-                          </span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', color: '#64748b' }}>
-                          <UploadCloud size={30} color="#7c3aed" />
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Upload Client Logo</span>
-                          <span style={{ fontSize: '0.72rem' }}>PNG, JPEG, SVG up to 2MB</span>
-                        </div>
-                      )}
-                    </div>
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '0.35rem', display: 'block' }}>
+                      Client GSTIN *
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="15-digit GSTIN (e.g. 24AUFPJ6677D1ZL)"
+                      value={setupClient.clientGstin}
+                      maxLength={15}
+                      onChange={(e) => setSetupClient(prev => ({ ...prev, clientGstin: e.target.value.toUpperCase() }))}
+                      style={{ fontFamily: 'monospace', letterSpacing: '0.04em', fontSize: '0.88rem', fontWeight: 700, color: '#7c3aed' }}
+                    />
+                  </div>
 
-                    {setupClient.logoPreview && (
-                      <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn-ghost-sm"
-                          style={{ color: '#ef4444', fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSetupClient(prev => ({ ...prev, logoFile: null, logoPreview: null }));
-                          }}
-                        >
-                          <Trash2 size={13} /> Remove Logo
-                        </button>
+                  <div style={{ marginTop: 'auto', padding: '0.75rem', background: '#f1f5f9', borderRadius: '8px', fontSize: '0.76rem', color: '#64748b' }}>
+                    {setupClient.isExistingClient ? (
+                      <div>
+                        <strong style={{ color: '#0f172a' }}>Status:</strong> Registered Client<br />
+                        Changes will be saved to database.
+                      </div>
+                    ) : (
+                      <div>
+                        <strong style={{ color: '#0f172a' }}>New Client:</strong> Will be registered and mapped to vendors upon save.
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* ── RIGHT COLUMN: Map Client's Vendors ── */}
-                <div className="setup-section-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {/* ── SECTION 2: Client Logo (Persistent) ── */}
+                <div className="setup-section-card">
                   <div className="setup-section-title">
-                    <Users size={16} color="#7c3aed" />
-                    <span>Map Vendors to this Client</span>
+                    <ImageIcon size={17} color="#7c3aed" />
+                    <span>2. Client Logo (Persistent)</span>
+                  </div>
+                  <p style={{ fontSize: '0.76rem', color: '#64748b', margin: '-0.25rem 0 0.85rem 0', lineHeight: 1.4 }}>
+                    Permanently saved for this GSTIN. Applied to all PDF & Word DOCX reports.
+                  </p>
+
+                  <div
+                    className="setup-logo-box"
+                    onClick={() => document.getElementById('setup-modal-logo-file')?.click()}
+                    style={{ flex: 1, minHeight: '170px' }}
+                  >
+                    <input
+                      id="setup-modal-logo-file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert('Logo image must be smaller than 2MB.');
+                            return;
+                          }
+                          setSetupClient(prev => ({
+                            ...prev,
+                            logoFile: file,
+                            logoPreview: URL.createObjectURL(file),
+                            logoRemoved: false
+                          }));
+                        }
+                      }}
+                    />
+                    {setupClient.logoPreview ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.65rem', width: '100%' }}>
+                        <img
+                          src={setupClient.logoPreview}
+                          alt="Logo Preview"
+                          style={{ maxHeight: '110px', maxWidth: '100%', objectFit: 'contain' }}
+                        />
+                        <span style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 700 }}>
+                          Click to choose a different logo
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', color: '#64748b' }}>
+                        <UploadCloud size={36} color="#7c3aed" />
+                        <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b' }}>Upload Client Logo</span>
+                        <span style={{ fontSize: '0.75rem' }}>PNG, JPEG, SVG (Max 2MB)</span>
+                        <span style={{ fontSize: '0.72rem', color: '#7c3aed', fontWeight: 600, marginTop: '4px' }}>Click to Browse</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {setupClient.logoPreview && (
+                    <div style={{ marginTop: '0.65rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600 }}>✓ Logo Attached</span>
+                      <button
+                        type="button"
+                        className="btn-ghost-sm"
+                        style={{ color: '#ef4444', fontSize: '0.75rem', padding: '0.2rem 0.6rem', border: '1px solid #fecaca', borderRadius: '6px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSetupClient(prev => ({ ...prev, logoFile: null, logoPreview: null, logoRemoved: true }));
+                        }}
+                      >
+                        <Trash2 size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} /> Remove Logo
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── SECTION 3: Map Vendors to this Client ── */}
+                <div className="setup-section-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div className="setup-section-title">
+                    <Users size={17} color="#7c3aed" />
+                    <span>3. Map Vendors</span>
                   </div>
 
                   <div className="setup-vendor-mode-tabs">
@@ -5586,7 +5778,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       onClick={() => setSetupClient(prev => ({ ...prev, vendorMode: 'sheet' }))}
                     >
                       <FileSpreadsheet size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                      Upload Vendor Sheet
+                      Upload Excel / CSV
                     </button>
                     <button
                       type="button"
@@ -5599,11 +5791,11 @@ export default function ClientVendorMapping({ currentUser }) {
                   </div>
 
                   {setupClient.vendorMode === 'sheet' ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
                       <div
                         className="setup-logo-box"
                         onClick={() => document.getElementById('setup-vendor-sheet-file')?.click()}
-                        style={{ padding: '1.5rem 1rem' }}
+                        style={{ padding: '1.25rem 1rem', minHeight: '130px' }}
                       >
                         <input
                           id="setup-vendor-sheet-file"
@@ -5612,11 +5804,11 @@ export default function ClientVendorMapping({ currentUser }) {
                           style={{ display: 'none' }}
                           onChange={handleSetupSheetFileChange}
                         />
-                        <FileSpreadsheet size={32} color="#16a34a" style={{ margin: '0 auto 0.4rem auto' }} />
+                        <FileSpreadsheet size={34} color="#16a34a" style={{ margin: '0 auto 0.4rem auto' }} />
                         <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
                           {setupClient.sheetFileName ? setupClient.sheetFileName : 'Select or drop Vendor Excel / CSV Sheet'}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
                           Extracts Vendor Name and 15-digit GSTN automatically
                         </div>
                       </div>
@@ -5629,19 +5821,19 @@ export default function ClientVendorMapping({ currentUser }) {
                       )}
 
                       {setupClient.sheetVendors.length > 0 && (
-                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#ffffff', overflow: 'hidden' }}>
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#ffffff', overflow: 'hidden', flex: 1 }}>
                           <div style={{
-                            padding: '0.5rem 0.85rem', background: '#f0fdf4', borderBottom: '1px solid #bbf7d0',
+                            padding: '0.45rem 0.75rem', background: '#f0fdf4', borderBottom: '1px solid #bbf7d0',
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                           }}>
                             <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534' }}>
                               ✓ {setupClient.sheetVendors.length} Vendors Ready to Map
                             </span>
-                            <span style={{ fontSize: '0.75rem', color: '#15803d' }}>
+                            <span style={{ fontSize: '0.74rem', color: '#15803d' }}>
                               Previewing first 5
                             </span>
                           </div>
-                          <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '0.35rem 0.65rem' }}>
+                          <div style={{ maxHeight: '160px', overflowY: 'auto', padding: '0.35rem 0.65rem' }}>
                             {setupClient.sheetVendors.slice(0, 5).map((v, i) => (
                               <div
                                 key={v.gstin + i}
@@ -5651,7 +5843,7 @@ export default function ClientVendorMapping({ currentUser }) {
                                   fontSize: '0.78rem'
                                 }}
                               >
-                                <span style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                                <span style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '210px' }}>
                                   {i + 1}. {v.name}
                                 </span>
                                 <span style={{ fontFamily: 'monospace', color: '#7c3aed', fontWeight: 600 }}>
@@ -5664,7 +5856,7 @@ export default function ClientVendorMapping({ currentUser }) {
                       )}
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', flex: 1 }}>
                       <div style={{ position: 'relative' }}>
                         <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input
@@ -5673,12 +5865,35 @@ export default function ClientVendorMapping({ currentUser }) {
                           placeholder="Search database vendors..."
                           value={setupClient.registrySearch}
                           onChange={(e) => setSetupClient(prev => ({ ...prev, registrySearch: e.target.value }))}
-                          style={{ paddingLeft: '2.2rem', fontSize: '0.82rem', paddingBlock: '0.45rem' }}
+                          style={{ paddingLeft: '2.2rem', fontSize: '0.82rem', paddingBlock: '0.42rem' }}
                         />
                       </div>
 
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                        <span style={{ color: '#7c3aed', fontWeight: 700 }}>
+                          {setupClient.selectedRegistryGstins.size} vendors selected
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={handleSelectAllRegistryVendors}
+                            style={{ background: 'none', border: 'none', color: '#7c3aed', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                          >
+                            Select All
+                          </button>
+                          <span style={{ color: '#cbd5e1' }}>|</span>
+                          <button
+                            type="button"
+                            onClick={handleDeselectAllRegistryVendors}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+
                       <div style={{
-                        maxHeight: '230px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px',
+                        maxHeight: '190px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px',
                         background: '#ffffff', display: 'flex', flexDirection: 'column'
                       }}>
                         {allAvailableVendors
@@ -5715,9 +5930,6 @@ export default function ClientVendorMapping({ currentUser }) {
                             );
                           })}
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 700 }}>
-                        {setupClient.selectedRegistryGstins.size} vendors selected
-                      </div>
                     </div>
                   )}
 
@@ -5725,16 +5937,19 @@ export default function ClientVendorMapping({ currentUser }) {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.25rem' }}>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.4rem' }}>
               <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
                 {setupClient.vendorMode === 'sheet' && setupClient.sheetVendors.length > 0 && (
-                  <span>Will map <strong>{setupClient.sheetVendors.length} vendors</strong> to this client</span>
+                  <span>Will map <strong>{setupClient.sheetVendors.length} vendors</strong> from sheet</span>
                 )}
                 {setupClient.vendorMode === 'registry' && setupClient.selectedRegistryGstins.size > 0 && (
                   <span>Will map <strong>{setupClient.selectedRegistryGstins.size} vendors</strong> to this client</span>
                 )}
+                {setupClient.vendorMode === 'registry' && setupClient.selectedRegistryGstins.size === 0 && (
+                  <span>No vendors selected</span>
+                )}
               </div>
-              <div style={{ display: 'flex', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
                   type="button"
                   className="btn-ghost-sm"
@@ -5748,15 +5963,15 @@ export default function ClientVendorMapping({ currentUser }) {
                   className="btn-primary-gradient"
                   onClick={handleSaveSetupModal}
                   disabled={setupSubmitting}
-                  style={{ minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  style={{ minWidth: '160px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 >
                   {setupSubmitting ? (
                     <>
-                      <Loader2 size={16} className="spin-icon" /> Saving Client...
+                      <Loader2 size={16} className="spin-icon" /> Saving...
                     </>
                   ) : (
                     <>
-                      <Save size={16} /> Save & Map Vendors
+                      <Save size={16} /> {setupClient.isExistingClient ? 'Save Changes' : 'Save & Map Vendors'}
                     </>
                   )}
                 </button>
