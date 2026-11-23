@@ -490,13 +490,13 @@ export const exportReportToPdf = async ({
   // Prepare table columns & data matching website exact styling
   const tableHeaders = [
     'Sl. No.',
-    'Company Name',
+    'Supplier Name',
     'GSTN',
     'Type',
     'Age',
     'GST Status',
     'GSTR1',
-    'GSTR3B (Delayed)',
+    'Number of times GSTR-3B filing delay',
     'GSTR7R',
     'Aadhaar Authenticated',
     'Core Activity',
@@ -1203,13 +1203,13 @@ export const exportReportToDocx = async ({
   // Table Headers
   const tableHeaders = [
     'Sl. No.',
-    'Company Name',
+    'Supplier Name',
     'GSTN',
     'Type',
     'Age',
     'GST Status',
     'GSTR1',
-    'GSTR3B (Delayed)',
+    'Number of times GSTR-3B filing delay',
     'GSTR7R',
     'Aadhaar Authenticated',
     'Core Activity',

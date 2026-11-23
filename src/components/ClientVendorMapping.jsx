@@ -1802,14 +1802,14 @@ export default function ClientVendorMapping({ currentUser }) {
       // Header Row (matching dark purple template)
       const headerRow = worksheet.addRow([
         'Sl. No.',
-        'Company Name',
+        'Supplier Name',
         ...(isAllVendorsExport ? ['Client'] : []),
         'GSTN',
         'Type',
         'Age',
         'GST Status',
         'GSTR1',
-        'GSTR3B (Delayed)',
+        'Number of times GSTR-3B filing delay',
         'GSTR7R',
         'Aadhaar Authenticated',
         'Core Activity',
@@ -5166,7 +5166,7 @@ export default function ClientVendorMapping({ currentUser }) {
                     }
                   >
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                      <span>Company Name</span>
+                      <span>Supplier Name</span>
                       <span
                         style={{
                           display: 'inline-flex',
@@ -5205,8 +5205,8 @@ export default function ClientVendorMapping({ currentUser }) {
                   <th style={{ minWidth: '110px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
                     GSTR1 ✎
                   </th>
-                  <th style={{ minWidth: '150px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
-                    GSTR3B (Delayed) ✎
+                  <th style={{ minWidth: '220px', textAlign: 'center' }} title="Editable field — edit and click 'Save Changes' above">
+                    Number of times GSTR-3B filing delay ✎
                   </th>
                   <th style={{ minWidth: '160px', textAlign: 'center' }}>GSTR7R</th>
                   <th style={{ minWidth: '110px', textAlign: 'center' }}>Aadhaar Authenticated</th>
