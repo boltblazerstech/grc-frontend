@@ -1821,8 +1821,8 @@ export default function ClientVendorMapping({ currentUser }) {
       // Set Column Definitions with clean widths
       worksheet.columns = [
         { key: 'slNo', width: 9 },
+        ...(isAllVendorsExport ? [{ key: 'clientName', width: 28 }] : []),
         { key: 'companyName', width: 38 },
-        ...(isAllVendorsExport ? [{ key: 'clientName', width: 26 }] : []),
         { key: 'gstn', width: 18 },
         { key: 'type', width: 22 },
         { key: 'age', width: 10 },
@@ -1839,8 +1839,8 @@ export default function ClientVendorMapping({ currentUser }) {
       // Header Row (matching dark purple template)
       const headerRow = worksheet.addRow([
         'Sl. No.',
+        ...(isAllVendorsExport ? ['Client Name'] : []),
         'Supplier Name',
-        ...(isAllVendorsExport ? ['Client'] : []),
         'GSTN',
         'Type',
         'Age',
@@ -2030,8 +2030,8 @@ export default function ClientVendorMapping({ currentUser }) {
 
         const rowValues = [
           idx + 1,
-          '', // Populated with richText below
           ...(isAllVendorsExport ? [v.clientName || 'Unassigned'] : []),
+          '', // Populated with richText below (Supplier Name)
           v.vendorGstin,
           v.gstType || 'Partnership',
           ageDisplay,
@@ -2051,7 +2051,7 @@ export default function ClientVendorMapping({ currentUser }) {
         // Apply Base Borders & Fonts to all cells in this row
         const centerCols = [1, 5 + offset, 6 + offset, 10 + offset, 13 + offset];
         const centerDelayCols = [7 + offset, 8 + offset];
-        if (isAllVendorsExport) centerCols.push(3); // Center Client column
+        if (isAllVendorsExport) centerCols.push(2); // Center Client column
 
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           cell.border = THIN_BORDER;
@@ -2114,7 +2114,7 @@ export default function ClientVendorMapping({ currentUser }) {
         }
 
         // Apply RichText values with colored dots and bold red delayed months
-        row.getCell(2).value = { richText: companyRichText };
+        row.getCell(isAllVendorsExport ? 3 : 2).value = { richText: companyRichText };
         row.getCell(7 + offset).value = { richText: gstr1RichText };
         row.getCell(8 + offset).value = { richText: gstr3bRichText };
       });
@@ -5190,6 +5190,9 @@ export default function ClientVendorMapping({ currentUser }) {
               <thead>
                 <tr>
                   <th style={{ width: '45px', textAlign: 'center' }}>Sl. No.</th>
+                  {activeTab === 'all-vendors' && (
+                    <th style={{ minWidth: '160px', textAlign: 'left' }}>Client Name</th>
+                  )}
                   <th
                     className="th-company th-sortable"
                     style={{ minWidth: '230px', textAlign: 'left' }}
@@ -5232,9 +5235,6 @@ export default function ClientVendorMapping({ currentUser }) {
                       </span>
                     </div>
                   </th>
-                  {activeTab === 'all-vendors' && (
-                    <th style={{ minWidth: '150px', textAlign: 'center' }}>Client</th>
-                  )}
                   <th style={{ minWidth: '150px', textAlign: 'center' }}>GSTN</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>Type</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Age</th>
@@ -5317,7 +5317,36 @@ export default function ClientVendorMapping({ currentUser }) {
                         {index + 1}
                       </td>
 
-                      {/* Company Name */}
+                      {/* Associated Client Name (shown in All Vendors mode - placed just before Supplier Name) */}
+                      {activeTab === 'all-vendors' && (
+                        <td style={{ textAlign: 'left' }}>
+                          <span
+                            className={`vendor-client-badge ${!vendor.clientName || vendor.clientName === 'Unassigned' ? 'is-unassigned' : ''}`}
+                            title={vendor.clientName && vendor.clientName !== 'Unassigned' ? `Client: ${vendor.clientName}. Click to switch to this client.` : 'This vendor is not yet mapped to any client'}
+                            onClick={() => {
+                              if (vendor.clientId) {
+                                const c = clients.find(item => item.id === vendor.clientId);
+                                if (c) {
+                                  setSelectedClient(c);
+                                  handleSwitchTab('by-client');
+                                }
+                              }
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              cursor: vendor.clientId ? 'pointer' : 'default',
+                              fontWeight: 600
+                            }}
+                          >
+                            <Building2 size={12} style={{ opacity: 0.7 }} />
+                            <span>{vendor.clientName || 'Unassigned'}</span>
+                          </span>
+                        </td>
+                      )}
+
+                      {/* Supplier Name */}
                       <td>
                         <div className="company-cell">
                           {(isRisky || showRedCross) && <span className="badge-risky">Risky</span>}
@@ -5331,29 +5360,6 @@ export default function ClientVendorMapping({ currentUser }) {
                           </span>
                         </div>
                       </td>
-
-                      {/* Associated Client (shown in All Vendors mode) */}
-                      {activeTab === 'all-vendors' && (
-                        <td style={{ textAlign: 'center' }}>
-                          <span
-                            className="vendor-client-badge"
-                            title={vendor.clientName ? `Client: ${vendor.clientName}. Click to switch to this client.` : 'Unassigned'}
-                            onClick={() => {
-                              if (vendor.clientId) {
-                                const c = clients.find(item => item.id === vendor.clientId);
-                                if (c) {
-                                  setSelectedClient(c);
-                                  handleSwitchTab('by-client');
-                                }
-                              }
-                            }}
-                            style={{ cursor: vendor.clientId ? 'pointer' : 'default' }}
-                          >
-                            <Building2 size={12} />
-                            <span>{vendor.clientName || 'Unassigned'}</span>
-                          </span>
-                        </td>
-                      )}
 
                       {/* GSTN */}
                       <td style={{ textAlign: 'center' }}>

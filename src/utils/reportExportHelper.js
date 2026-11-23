@@ -372,7 +372,7 @@ export const exportReportToPdf = async ({
     ? gstr3bRiskyVendors.map((v, idx) => {
         let vendorNameText = v.companyName;
         if (isAllVendorsReport && v.clientName) {
-          vendorNameText += ` (Client: ${v.clientName})`;
+          vendorNameText = `[${v.clientName}] ${v.companyName}`;
         }
         return [
           idx + 1,
@@ -514,11 +514,11 @@ export const exportReportToPdf = async ({
 
     // Clean text prefixes: avoid unicode emojis/bullets that cause %Ï garbling in PDF
     let compText = '';
+    if (isAllVendorsReport && v.clientName) {
+      compText += `[${v.clientName}] `;
+    }
     if (v.isRisky || showRedCross) compText += '[Risky] ';
     compText += v.companyName;
-    if (isAllVendorsReport && v.clientName) {
-      compText += `\n(Client: ${v.clientName})`;
-    }
     const companyDisplay = compText;
 
     // GSTR1 cell
@@ -930,7 +930,7 @@ export const exportReportToDocx = async ({
     ? gstr3bRiskyVendors.map((v, idx) => {
         let vendorNameText = v.companyName;
         if (isAllVendorsReport && v.clientName) {
-          vendorNameText += ` (Client: ${v.clientName})`;
+          vendorNameText = `[${v.clientName}] ${v.companyName}`;
         }
         return new TableRow({
           children: [
@@ -1263,15 +1263,15 @@ export const exportReportToDocx = async ({
 
     // Company Name formatted (Left-aligned for readability, vertically centered)
     const compChildren = [];
+    if (isAllVendorsReport && v.clientName) {
+      compChildren.push(new TextRun({ text: `[${v.clientName}] `, bold: true, color: isRowRed ? 'FFFFFF' : '4F46E5', size: 16 }));
+    }
     if (v.isRisky || showRedCross) {
       compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: isRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
     }
     const compDotColor = (v.companyDotColorHex || '10B981').replace('#', '');
     compChildren.push(new TextRun({ text: `● `, bold: true, color: isRowRed ? 'FFFFFF' : compDotColor, size: 22 }));
     compChildren.push(new TextRun({ text: v.companyName, bold: isRowRed, color: rowTextColor, size: 17 }));
-    if (isAllVendorsReport && v.clientName) {
-      compChildren.push(new TextRun({ text: ` (Client: ${v.clientName})`, italics: true, color: isRowRed ? 'FFFFFF' : '64748B', size: 15 }));
-    }
 
     // GSTR1 Cell formatted (Centered in cell)
     const gstr1DotColor = (v.gstr1DotColorHex || '10B981').replace('#', '');
