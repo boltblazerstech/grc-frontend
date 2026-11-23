@@ -1342,42 +1342,79 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  // ── Report-Level Removal Handler (Hides/removes from report and downloads; DOES NOT delete from DB) ──
-  const handleRemoveVendorFromReport = (vendorGstin) => {
+  // ── Vendor Unmapping & Editing Handlers (Persistent Client-Wise Removal) ──
+
+  const handleUnmapVendor = async (vendorOrGstin) => {
+    if (!vendorOrGstin) return;
+    const isObj = typeof vendorOrGstin === 'object' && vendorOrGstin !== null;
+    const vendorGstin = isObj ? (vendorOrGstin.vendorGstin || vendorOrGstin.gstin) : vendorOrGstin;
     if (!vendorGstin) return;
-    if (!window.confirm(`Remove vendor "${vendorGstin}" from this assessment report?\n\n(Note: This removes the vendor from this downloaded report and view, but does NOT delete it from the database.)`)) {
+
+    // Determine target client ID and name (handles both client-wise view and all-vendors view)
+    let targetClientId = null;
+    let targetClientName = 'this client';
+
+    if (isObj && vendorOrGstin.clientId) {
+      targetClientId = vendorOrGstin.clientId;
+      targetClientName = vendorOrGstin.clientName || 'this client';
+    } else if (selectedClient && selectedClient.id && selectedClient.id !== 'ALL') {
+      targetClientId = selectedClient.id;
+      targetClientName = selectedClient.clientName || 'this client';
+    } else if (activeTab === 'all-vendors' && isObj) {
+      targetClientId = vendorOrGstin.clientId;
+      targetClientName = vendorOrGstin.clientName || 'this client';
+    }
+
+    if (!targetClientId) {
+      showToast('Cannot determine target client for vendor removal', 'error');
       return;
     }
-    setExcludedGstins(prev => {
-      const next = new Set(prev);
-      next.add(vendorGstin);
-      return next;
-    });
-    showToast(`Vendor ${vendorGstin} removed from report (database preserved)`, 'info');
-  };
 
-  // ── Vendor Unmapping & Editing Handlers ─────────────────────────────────────
+    const vendorDisplayName = (isObj && (vendorOrGstin.companyName || vendorOrGstin.legalName || vendorOrGstin.tradeName))
+      ? (vendorOrGstin.companyName || vendorOrGstin.legalName || vendorOrGstin.tradeName)
+      : vendorGstin;
 
-  const handleUnmapVendor = async (vendorGstin) => {
-    if (!selectedClient) return;
-    if (!window.confirm(`Are you sure you want to remove/unmap vendor "${vendorGstin}" from "${selectedClient.clientName}"?`)) {
+    if (!window.confirm(`Are you sure you want to remove vendor "${vendorDisplayName}" (${vendorGstin}) from "${targetClientName}"?\n\n(Note: This persistently unmaps the vendor for this client and will not reappear on refresh. The vendor remains safe in the master database and other clients are not affected.)`)) {
       return;
     }
+
     try {
       if (apiClient.unmapVendorFromClient) {
-        await apiClient.unmapVendorFromClient(selectedClient.id, vendorGstin);
+        await apiClient.unmapVendorFromClient(targetClientId, vendorGstin);
       } else {
-        await apiClient.unmapVendor(selectedClient.id, vendorGstin);
+        await apiClient.unmapVendor(targetClientId, vendorGstin);
       }
-      showToast(`Vendor ${vendorGstin} removed successfully`);
-      setMappedVendors(prev => prev.filter(v => (v.vendorGstin || v.gstin) !== vendorGstin));
+      showToast(`Vendor "${vendorDisplayName}" removed from "${targetClientName}"`, 'success');
+      
+      // Update local mappedVendors state immediately
+      setMappedVendors(prev => prev.filter(v => {
+        const vGstin = v.vendorGstin || v.gstin;
+        if (vGstin !== vendorGstin) return true;
+        if (activeTab === 'all-vendors' && targetClientId) {
+          return (v.clientId || v.client_id) !== targetClientId;
+        }
+        return false;
+      }));
+
+      // If excludedGstins had it, remove it
+      setExcludedGstins(prev => {
+        if (!prev.has(vendorGstin)) return prev;
+        const next = new Set(prev);
+        next.delete(vendorGstin);
+        return next;
+      });
+
       if (selectedVendorForModal && (selectedVendorForModal.vendorGstin || selectedVendorForModal.gstin) === vendorGstin) {
         setSelectedVendorForModal(null);
       }
-      if (selectedClient?.id) {
+
+      // Re-fetch to keep counts and server state in perfect sync
+      if (activeTab === 'all-vendors') {
+        fetchMappedVendors('ALL');
+      } else if (selectedClient?.id) {
         fetchMappedVendors(selectedClient.id);
-        fetchClients(selectedClient.id);
       }
+      fetchClients(selectedClient?.id);
     } catch (err) {
       showToast(err.message || 'Failed to remove vendor', 'error');
     }
@@ -5525,8 +5562,8 @@ export default function ClientVendorMapping({ currentUser }) {
                           <button
                             type="button"
                             className="btn-table-action btn-table-danger"
-                            onClick={() => handleRemoveVendorFromReport(gstin)}
-                            title="Remove vendor from this report (does not delete from database)"
+                            onClick={() => handleUnmapVendor(vendor)}
+                            title="Remove vendor for this client (persistent; does not delete from master database)"
                           >
                             <Trash2 size={14} />
                           </button>
