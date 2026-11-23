@@ -367,7 +367,7 @@ export const exportReportToPdf = async ({
     return !isNaN(n) && n > 2;
   });
 
-  const summaryHeaders = ['S.No', 'Name of Vendor', 'GSTR 3 B filing Delay', 'Month delay'];
+  const summaryHeaders = ['S.No', 'Supplier Name', 'Number of times GSTR-3B filing delay', 'Month'];
   const summaryRows = gstr3bRiskyVendors.length > 0
     ? gstr3bRiskyVendors.map((v, idx) => {
         let vendorNameText = v.companyName;
@@ -411,9 +411,9 @@ export const exportReportToPdf = async ({
     },
     columnStyles: {
       0: { cellWidth: 42, halign: 'center' }, // S.No
-      1: { cellWidth: 320, halign: 'left', fontStyle: 'bold' }, // Name of Vendor
-      2: { cellWidth: 150, halign: 'center', textColor: [220, 38, 38], fontStyle: 'bold' }, // GSTR 3 B filing Delay
-      3: { cellWidth: 250, halign: 'center', textColor: [220, 38, 38] } // Month delay
+      1: { cellWidth: 290, halign: 'left', fontStyle: 'bold' }, // Supplier Name
+      2: { cellWidth: 200, halign: 'center', textColor: [220, 38, 38], fontStyle: 'bold' }, // Number of times GSTR-3B filing delay
+      3: { cellWidth: 230, halign: 'center', textColor: [220, 38, 38] } // Month
     },
     didDrawPage: () => {
       drawPageHeaderAndFooter(doc, false);
@@ -897,14 +897,14 @@ export const exportReportToDocx = async ({
     return !isNaN(n) && n > 2;
   });
 
-  const execSummaryHeaders = ['S.No', 'Name of Vendor', 'GSTR 3 B filing Delay', 'Month delay'];
+  const execSummaryHeaders = ['S.No', 'Supplier Name', 'Number of times GSTR-3B filing delay', 'Month'];
   const execSummaryHeaderRow = new TableRow({
     tableHeader: true,
     children: execSummaryHeaders.map((title, i) =>
       new TableCell({
         width: i === 0 ? { size: 8, type: WidthType.PERCENTAGE }
-             : i === 1 ? { size: 44, type: WidthType.PERCENTAGE }
-             : i === 2 ? { size: 24, type: WidthType.PERCENTAGE }
+             : i === 1 ? { size: 40, type: WidthType.PERCENTAGE }
+             : i === 2 ? { size: 28, type: WidthType.PERCENTAGE }
              : { size: 24, type: WidthType.PERCENTAGE },
         shading: { fill: '3B185F', type: ShadingType.CLEAR },
         verticalAlign: VerticalAlign.CENTER,
@@ -946,7 +946,7 @@ export const exportReportToDocx = async ({
               ]
             }),
             new TableCell({
-              width: { size: 44, type: WidthType.PERCENTAGE },
+              width: { size: 40, type: WidthType.PERCENTAGE },
               verticalAlign: VerticalAlign.CENTER,
               margins: { top: 80, bottom: 80, left: 60, right: 60 },
               children: [
@@ -957,7 +957,7 @@ export const exportReportToDocx = async ({
               ]
             }),
             new TableCell({
-              width: { size: 24, type: WidthType.PERCENTAGE },
+              width: { size: 28, type: WidthType.PERCENTAGE },
               verticalAlign: VerticalAlign.CENTER,
               margins: { top: 80, bottom: 80, left: 60, right: 60 },
               children: [
@@ -996,7 +996,7 @@ export const exportReportToDocx = async ({
               ]
             }),
             new TableCell({
-              width: { size: 44, type: WidthType.PERCENTAGE },
+              width: { size: 40, type: WidthType.PERCENTAGE },
               verticalAlign: VerticalAlign.CENTER,
               margins: { top: 80, bottom: 80, left: 60, right: 60 },
               children: [
@@ -1007,7 +1007,7 @@ export const exportReportToDocx = async ({
               ]
             }),
             new TableCell({
-              width: { size: 24, type: WidthType.PERCENTAGE },
+              width: { size: 28, type: WidthType.PERCENTAGE },
               verticalAlign: VerticalAlign.CENTER,
               margins: { top: 80, bottom: 80, left: 60, right: 60 },
               children: [
