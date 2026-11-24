@@ -4671,52 +4671,7 @@ export default function ClientVendorMapping({ currentUser }) {
       </div>
 
       {/* ── Top Bar: All Vendors View vs Client-Wise View ── */}
-      {activeTab === 'all-vendors' ? (
-        <div className="client-top-bar all-vendors-bar">
-          <div className="client-selector-group">
-            <div className="all-vendors-badge-group">
-              <div className="all-vendors-icon-avatar">
-                <Layers size={18} color="#ffffff" />
-              </div>
-              <div>
-                <div className="all-vendors-title">All Uploaded Vendors Assessment</div>
-                <div className="all-vendors-subtitle">
-                  One report for all vendors across {clients.length} client portfolios ({filteredMappedVendors.length} of {totalAllVendorsCount} vendors)
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Client Filter within All Vendors */}
-            {clients.length > 0 && (
-              <div className="client-filter-dropdown-wrapper" title="Quickly filter all vendors by client">
-                <Building2 size={15} color="#7c3aed" />
-                <select
-                  className="client-dropdown-select compact"
-                  value={allVendorsClientFilter}
-                  onChange={(e) => setAllVendorsClientFilter(e.target.value)}
-                >
-                  <option value="ALL">All Clients ({clients.length} clients • {totalAllVendorsCount} vendors)</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.clientName} ({c.vendorCount ?? 0} vendors)
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="dropdown-chevron" />
-              </div>
-            )}
-          </div>
-
-          <div className="top-action-buttons">
-            <button className="btn-success-gradient" onClick={openImportModal} title="Upload client & vendor Excel sheet">
-              <FileSpreadsheet size={16} /> Import from Sheet
-            </button>
-            <button className="btn-primary-gradient" onClick={openAddClientModal} title="Add a new client">
-              <Plus size={16} /> Add Client
-            </button>
-          </div>
-        </div>
-      ) : (
+      {activeTab === 'all-vendors' ? null : (
         <>
           <div className="client-top-bar">
             {/* Client Search Bar with Live Suggestions Dropdown */}
