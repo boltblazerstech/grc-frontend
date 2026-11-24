@@ -1208,22 +1208,23 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
           </div>
         )}
 
+        {/* ── Search Bar & View Mode Toggle (Row 1 - Full Width) ── */}
         <div
           style={{
             display: "flex",
-            gap: "0.6rem",
+            gap: "0.75rem",
             alignItems: "center",
-            flexWrap: "wrap",
             width: "100%",
+            marginBottom: "0.6rem",
           }}
         >
-          <div className="search-bar" style={{ maxWidth: "320px", flexShrink: 0 }}>
-            <div style={{ position: "relative", width: "100% " }}>
+          <div className="search-bar" style={{ flex: 1, maxWidth: "100%" }}>
+            <div style={{ position: "relative", width: "100%" }}>
               <Search
                 size={18}
                 style={{
                   position: "absolute",
-                  left: "10px",
+                  left: "12px",
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: "var(--text-light)",
@@ -1252,12 +1253,12 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                     }
                   }
                 }}
-                style={{ paddingLeft: "2.5rem" }}
+                style={{ paddingLeft: "2.6rem", width: "100%", height: "42px", fontSize: "0.95rem" }}
               />
             </div>
           </div>
           {currentUser && (
-            <div className="view-toggle">
+            <div className="view-toggle" style={{ flexShrink: 0, height: "42px" }}>
               <button
                 className={`view-toggle-btn ${viewMode === "edit" ? "active" : ""}`}
                 onClick={() => setViewMode("edit")}
@@ -1284,109 +1285,120 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
               </button>
             </div>
           )}
+        </div>
 
-          {/* ── Last Six GST Number Searched History ── */}
-          {recentSearches && recentSearches.length > 0 && (
+        {/* ── Last Six GST Number Searched History (Row 2 - Just Below Search Bar) ── */}
+        {recentSearches && recentSearches.length > 0 && (
+          <div
+            className="recent-searches-row"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.55rem",
+              overflowX: "auto",
+              width: "100%",
+              padding: "0.1rem 0 0.4rem 0",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
             <div
-              className="recent-searches-row"
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "0.45rem",
-                overflowX: "auto",
-                flex: "1 1 auto",
-                minWidth: 0,
-                padding: "2px 0",
-                scrollbarWidth: "none",
-                msOverflowStyle: "none",
+                gap: "4px",
+                fontSize: "0.70rem",
+                fontWeight: 800,
+                color: "#64748b",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                marginRight: "2px",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  fontSize: "0.68rem",
-                  fontWeight: 800,
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                  marginRight: "2px",
-                }}
-              >
-                <History size={13} color="#7c3aed" />
-                <span>Recent:</span>
-              </div>
+              <History size={14} color="#7c3aed" />
+              <span>Recent:</span>
+            </div>
 
-              {recentSearches.slice(0, 6).map((item) => {
-                const isSelected = searchTerm && searchTerm.trim().toUpperCase() === item.gstin;
-                return (
-                  <button
-                    key={item.gstin}
-                    type="button"
-                    onClick={() => {
-                      setSearchTerm(item.gstin);
-                      addRecentSearch(item.gstin, item.companyName);
-                    }}
-                    title={`Click to filter by ${item.gstin} (${item.companyName || "N/A"})`}
+            {recentSearches.slice(0, 6).map((item) => {
+              const isSelected = searchTerm && searchTerm.trim().toUpperCase() === item.gstin;
+              return (
+                <button
+                  key={item.gstin}
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm(item.gstin);
+                    addRecentSearch(item.gstin, item.companyName);
+                  }}
+                  title={`Click to filter by ${item.gstin} (${item.companyName || "N/A"})`}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    justifyContent: "center",
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "8px",
+                    border: isSelected ? "1.5px solid #7c3aed" : "1px solid #e2e8f0",
+                    background: isSelected ? "#f5f3ff" : "#ffffff",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    flexShrink: 0,
+                    minWidth: "150px",
+                    maxWidth: "205px",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                    transition: "all 0.15s ease",
+                    lineHeight: 1.15,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = "#c4b5fd";
+                      e.currentTarget.style.background = "#faf5ff";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = "#e2e8f0";
+                      e.currentTarget.style.background = "#ffffff";
+                    }
+                  }}
+                >
+                  {/* GST number in large text size font type */}
+                  <span
                     style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      justifyContent: "center",
-                      padding: "0.32rem 0.6rem",
-                      borderRadius: "8px",
-                      border: isSelected ? "1.5px solid #7c3aed" : "1px solid #e2e8f0",
-                      background: isSelected ? "#f5f3ff" : "#ffffff",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      flexShrink: 0,
-                      minWidth: "130px",
-                      maxWidth: "165px",
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
-                      transition: "all 0.15s ease",
-                      lineHeight: 1.15,
+                      fontSize: "0.84rem",
+                      fontWeight: 800,
+                      color: isSelected ? "#7c3aed" : "#0f172a",
+                      letterSpacing: "0.3px",
+                      fontFamily: "monospace, monospace",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      width: "100%",
                     }}
                   >
-                    {/* GST number in large text size font type */}
-                    <span
-                      style={{
-                        fontSize: "0.82rem",
-                        fontWeight: 800,
-                        color: isSelected ? "#7c3aed" : "#0f172a",
-                        letterSpacing: "0.3px",
-                        fontFamily: "monospace, monospace",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        width: "100%",
-                      }}
-                    >
-                      {item.gstin}
-                    </span>
-                    {/* Subtext: Company name */}
-                    <span
-                      style={{
-                        fontSize: "0.67rem",
-                        fontWeight: 600,
-                        color: "#64748b",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        width: "100%",
-                        marginTop: "1px",
-                      }}
-                    >
-                      {item.companyName || "N/A"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                    {item.gstin}
+                  </span>
+                  {/* Subtext: Company name */}
+                  <span
+                    style={{
+                      fontSize: "0.68rem",
+                      fontWeight: 600,
+                      color: "#64748b",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      width: "100%",
+                      marginTop: "1px",
+                    }}
+                  >
+                    {item.companyName || "N/A"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: "1rem" }}>
