@@ -144,6 +144,19 @@ export default function ClientVendorMapping({ currentUser }) {
   // Report-Level Excluded Vendors (hides/removes from report and downloads; DOES NOT delete from DB)
   const [excludedGstins, setExcludedGstins] = useState(new Set());
 
+  // Multi-client expanded rows for common suppliers
+  const [expandedClientsRows, setExpandedClientsRows] = useState(new Set());
+
+  const toggleExpandClientsRow = (vendorGstin) => {
+    if (!vendorGstin) return;
+    setExpandedClientsRows(prev => {
+      const next = new Set(prev);
+      if (next.has(vendorGstin)) next.delete(vendorGstin);
+      else next.add(vendorGstin);
+      return next;
+    });
+  };
+
   // ── Recent Client IDs (For Horizontal 6 Client List, Most Recent First) ──
   const [recentClientIds, setRecentClientIds] = useState(() => {
     try {
@@ -2030,7 +2043,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
         const rowValues = [
           idx + 1,
-          ...(isAllVendorsExport ? [v.clientName || 'Unassigned'] : []),
+          ...(isAllVendorsExport ? [v.linkedClients && v.linkedClients.length > 0 ? v.linkedClients.map(c => c.clientName).join(', ') : (v.clientName || 'Unassigned')] : []),
           '', // Populated with richText below (Supplier Name)
           v.vendorGstin,
           v.gstType || 'Partnership',
@@ -5265,7 +5278,17 @@ export default function ClientVendorMapping({ currentUser }) {
                   const isScoreRisky = vendor.grcScore !== null && vendor.grcScore !== undefined && Number(vendor.grcScore) > 30;
                   const companyDotColor = isEntireRowRed || (typeof gstr3bVal === 'number' && gstr3bVal > 2) || isScoreRisky ? '#ef4444' : ((typeof gstr3bVal === 'number' && gstr3bVal >= 1) || gstr1Val >= 1 || (vendor.grcScore !== null && Number(vendor.grcScore) >= 20) ? '#f59e0b' : '#10b981');
 
+                  const isExpandedClients = expandedClientsRows.has(gstin);
+                  const linkedClients = (vendor.linkedClients && vendor.linkedClients.length > 0)
+                    ? vendor.linkedClients
+                    : (vendor.clientName && vendor.clientName !== 'Unassigned'
+                        ? [{ clientId: vendor.clientId, clientName: vendor.clientName, clientGstin: vendor.clientGstin }]
+                        : []);
+                  const totalLinkedClients = linkedClients.length;
+                  const extraClientsCount = totalLinkedClients > 1 ? totalLinkedClients - 1 : 0;
+
                   return (
+                    <React.Fragment key={gstin || index}>
                     <tr key={gstin} className={isEntireRowRed ? 'row-critical-risk' : ''}>
                       {/* Sl. No. */}
                       <td style={{ textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
@@ -5275,29 +5298,62 @@ export default function ClientVendorMapping({ currentUser }) {
                       {/* Associated Client Name (shown in All Vendors mode - placed just before Supplier Name) */}
                       {activeTab === 'all-vendors' && (
                         <td style={{ textAlign: 'left' }}>
-                          <span
-                            className={`vendor-client-badge ${!vendor.clientName || vendor.clientName === 'Unassigned' ? 'is-unassigned' : ''}`}
-                            title={vendor.clientName && vendor.clientName !== 'Unassigned' ? `Client: ${vendor.clientName}. Click to switch to this client.` : 'This vendor is not yet mapped to any client'}
-                            onClick={() => {
-                              if (vendor.clientId) {
-                                const c = clients.find(item => item.id === vendor.clientId);
-                                if (c) {
-                                  setSelectedClient(c);
-                                  handleSwitchTab('by-client');
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                            <span
+                              className={`vendor-client-badge ${!vendor.clientName || vendor.clientName === 'Unassigned' ? 'is-unassigned' : ''}`}
+                              title={vendor.clientName && vendor.clientName !== 'Unassigned' ? `Client: ${vendor.clientName}. Click to switch to this client.` : 'This vendor is not yet mapped to any client'}
+                              onClick={() => {
+                                if (vendor.clientId) {
+                                  const c = clients.find(item => item.id === vendor.clientId);
+                                  if (c) {
+                                    setSelectedClient(c);
+                                    handleSwitchTab('by-client');
+                                  }
                                 }
-                              }
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              cursor: vendor.clientId ? 'pointer' : 'default',
-                              fontWeight: 600
-                            }}
-                          >
-                            <Building2 size={12} style={{ opacity: 0.7 }} />
-                            <span>{vendor.clientName || 'Unassigned'}</span>
-                          </span>
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                cursor: vendor.clientId ? 'pointer' : 'default',
+                                fontWeight: 600
+                              }}
+                            >
+                              <Building2 size={12} style={{ opacity: 0.7 }} />
+                              <span>{vendor.clientName || 'Unassigned'}</span>
+                            </span>
+
+                            {extraClientsCount > 0 && (
+                              <button
+                                type="button"
+                                className="multi-client-toggle-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleExpandClientsRow(gstin);
+                                }}
+                                title={`Linked to ${totalLinkedClients} clients: ${linkedClients.map(c => c.clientName).join(', ')}. Click to ${isExpandedClients ? 'collapse' : 'view all clients'}.`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  backgroundColor: isExpandedClients ? '#6d28d9' : '#ede9fe',
+                                  color: isExpandedClients ? '#ffffff' : '#6d28d9',
+                                  border: isExpandedClients ? '1px solid #5b21b6' : '1px solid #c4b5fd',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  boxShadow: isExpandedClients ? '0 1px 3px rgba(109,40,217,0.3)' : 'none',
+                                  transition: 'all 0.15s ease',
+                                  lineHeight: '1.2'
+                                }}
+                              >
+                                <span>+{extraClientsCount}</span>
+                                {isExpandedClients ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       )}
 
@@ -5531,6 +5587,68 @@ export default function ClientVendorMapping({ currentUser }) {
                         </div>
                       </td>
                     </tr>
+                    {isExpandedClients && (
+                      <tr className="vendor-clients-expanded-drawer" style={{ backgroundColor: '#faf5ff' }}>
+                        <td
+                          colSpan={activeTab === 'all-vendors' ? 14 : 13}
+                          style={{
+                            padding: '0.65rem 1.25rem',
+                            borderTop: '1px dashed #d8b4fe',
+                            borderBottom: '2px solid #c4b5fd',
+                            backgroundColor: '#faf5ff'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#6d28d9', fontSize: '0.78rem', fontWeight: 700 }}>
+                              <Building2 size={14} />
+                              <span>Connected Clients ({totalLinkedClients}):</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                              {linkedClients.map((clientItem, cIdx) => (
+                                <button
+                                  key={clientItem.clientId || cIdx}
+                                  type="button"
+                                  onClick={() => {
+                                    if (clientItem.clientId) {
+                                      const c = clients.find(item => item.id === clientItem.clientId);
+                                      if (c) {
+                                        setSelectedClient(c);
+                                        handleSwitchTab('by-client');
+                                      }
+                                    }
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '4px 9px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ffffff',
+                                    border: '1px solid #c4b5fd',
+                                    color: '#4c1d95',
+                                    fontSize: '0.76rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title={`Click to open ${clientItem.clientName} assessment view`}
+                                >
+                                  <Building2 size={12} color="#7c3aed" />
+                                  <span>{clientItem.clientName}</span>
+                                  {clientItem.clientGstin && (
+                                    <span style={{ fontSize: '0.68rem', color: '#7c3aed', fontFamily: 'monospace', opacity: 0.85 }}>
+                                      ({clientItem.clientGstin})
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

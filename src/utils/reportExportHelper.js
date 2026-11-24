@@ -371,8 +371,9 @@ export const exportReportToPdf = async ({
   const summaryRows = gstr3bRiskyVendors.length > 0
     ? gstr3bRiskyVendors.map((v, idx) => {
         let vendorNameText = v.companyName;
-        if (isAllVendorsReport && v.clientName) {
-          vendorNameText = `[${v.clientName}] ${v.companyName}`;
+        const clientTag = v.linkedClients && v.linkedClients.length > 0 ? v.linkedClients.map(c => c.clientName).join(', ') : v.clientName;
+        if (isAllVendorsReport && clientTag) {
+          vendorNameText = `[${clientTag}] ${v.companyName}`;
         }
         return [
           idx + 1,
@@ -514,8 +515,9 @@ export const exportReportToPdf = async ({
 
     // Clean text prefixes: avoid unicode emojis/bullets that cause %Ï garbling in PDF
     let compText = '';
-    if (isAllVendorsReport && v.clientName) {
-      compText += `[${v.clientName}] `;
+    const clientTag = v.linkedClients && v.linkedClients.length > 0 ? v.linkedClients.map(c => c.clientName).join(', ') : v.clientName;
+    if (isAllVendorsReport && clientTag) {
+      compText += `[${clientTag}] `;
     }
     if (v.isRisky || showRedCross) compText += '[Risky] ';
     compText += v.companyName;
@@ -929,8 +931,9 @@ export const exportReportToDocx = async ({
   const execSummaryDataRows = gstr3bRiskyVendors.length > 0
     ? gstr3bRiskyVendors.map((v, idx) => {
         let vendorNameText = v.companyName;
-        if (isAllVendorsReport && v.clientName) {
-          vendorNameText = `[${v.clientName}] ${v.companyName}`;
+        const clientTag = v.linkedClients && v.linkedClients.length > 0 ? v.linkedClients.map(c => c.clientName).join(', ') : v.clientName;
+        if (isAllVendorsReport && clientTag) {
+          vendorNameText = `[${clientTag}] ${v.companyName}`;
         }
         return new TableRow({
           children: [
@@ -1263,8 +1266,9 @@ export const exportReportToDocx = async ({
 
     // Company Name formatted (Left-aligned for readability, vertically centered)
     const compChildren = [];
-    if (isAllVendorsReport && v.clientName) {
-      compChildren.push(new TextRun({ text: `[${v.clientName}] `, bold: true, color: isRowRed ? 'FFFFFF' : '4F46E5', size: 16 }));
+    const clientTag = v.linkedClients && v.linkedClients.length > 0 ? v.linkedClients.map(c => c.clientName).join(', ') : v.clientName;
+    if (isAllVendorsReport && clientTag) {
+      compChildren.push(new TextRun({ text: `[${clientTag}] `, bold: true, color: isRowRed ? 'FFFFFF' : '4F46E5', size: 16 }));
     }
     if (v.isRisky || showRedCross) {
       compChildren.push(new TextRun({ text: '[Risky] ', bold: true, color: isRowRed ? 'FFFFFF' : 'DC2626', size: 17 }));
