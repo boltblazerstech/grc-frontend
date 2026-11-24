@@ -21,8 +21,8 @@ import {
 import GstDetailsModal from './GstDetailsModal';
 
 export default function ClientVendorMapping({ currentUser }) {
-  // Dynamic Rolling 15 Months relative to current calendar/filing period
-  const rolling15Months = useMemo(() => {
+  // Dynamic Rolling 18 Months relative to current calendar/filing period
+  const rolling18Months = useMemo(() => {
     const today = new Date();
     const curYear = today.getFullYear();
     const curMonth = today.getMonth(); // 0 to 11
@@ -30,7 +30,7 @@ export default function ClientVendorMapping({ currentUser }) {
 
     const rawList = [];
 
-    for (let i = 14; i >= 0; i--) {
+    for (let i = 17; i >= 0; i--) {
       const d = new Date(curYear, curMonth - i, 1);
       const y = d.getFullYear();
       const mIdx = d.getMonth();
@@ -52,7 +52,7 @@ export default function ClientVendorMapping({ currentUser }) {
     });
   }, []);
 
-  const allSelectableMonths = useMemo(() => rolling15Months.map(m => m.label), [rolling15Months]);
+  const allSelectableMonths = useMemo(() => rolling18Months.map(m => m.label), [rolling18Months]);
   const last12Months = allSelectableMonths;
 
   // Recent 3 active/rolling months of the current year for Scenario 8 "Risky" determination
@@ -613,7 +613,7 @@ export default function ClientVendorMapping({ currentUser }) {
     }
   };
 
-  // ── Month Picker Handlers (Dynamic Rolling 15 Months) ─────────────────────
+  // ── Month Picker Handlers (Dynamic Rolling 18 Months) ─────────────────────
   const isMonthSelected = (selectedList, monthItem) => {
     if (!Array.isArray(selectedList) || selectedList.length === 0) return false;
     
@@ -713,17 +713,17 @@ export default function ClientVendorMapping({ currentUser }) {
     const gstin = monthPicker.vendorGstin;
     const field = monthPicker.field;
 
-    // Sort selected months chronologically according to rolling15Months order
-    const labelOrder = rolling15Months.map(m => m.label);
+    // Sort selected months chronologically according to rolling18Months order
+    const labelOrder = rolling18Months.map(m => m.label);
     const sorted = [...monthPicker.selectedMonths].sort((a, b) => {
       const idxA = labelOrder.findIndex(lbl => isMonthSelected([a], lbl));
       const idxB = labelOrder.findIndex(lbl => isMonthSelected([b], lbl));
       return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
     });
 
-    // Standardize selected tokens to match the current rolling15Months labels
+    // Standardize selected tokens to match the current rolling18Months labels
     const standardized = sorted.map(tok => {
-      const matched = rolling15Months.find(m => isMonthSelected([tok], m));
+      const matched = rolling18Months.find(m => isMonthSelected([tok], m));
       return matched ? matched.label : tok;
     });
 
@@ -6646,13 +6646,13 @@ export default function ClientVendorMapping({ currentUser }) {
                 Vendor: <strong style={{ color: '#0f172a' }}>{monthPicker.vendorName}</strong>
               </div>
 
-              {/* Unified Last 15 Months Section */}
+              {/* Unified Last 18 Months Section */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                 <div style={{ fontSize: '0.76rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#475569' }}>
-                  Last 15 Months
+                  Last 18 Months
                 </div>
                 <span style={{ fontSize: '0.70rem', color: '#7c3aed', fontWeight: 700 }}>
-                  Rolling 15-month compliance window
+                  Rolling 18-month compliance window
                 </span>
               </div>
               <div
@@ -6663,7 +6663,7 @@ export default function ClientVendorMapping({ currentUser }) {
                   marginBottom: '1.25rem'
                 }}
               >
-                {rolling15Months.map(monthObj => {
+                {rolling18Months.map(monthObj => {
                   const isSelected = isMonthSelected(monthPicker.selectedMonths, monthObj);
                   return (
                     <button
