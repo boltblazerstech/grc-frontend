@@ -20,7 +20,8 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
-  Table2
+  Table2,
+  History
 } from "lucide-react";
 import { apiClient } from "../api/apiClient";
 import GstCard from "./GstCard";
@@ -517,6 +518,97 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [sourceFilter, setSourceFilter] = useState("all"); // 'all', 'api', 'manual', 'error'
   const [turnoverFilter, setTurnoverFilter] = useState("all"); // 'all', 'below3'
 
+  // ── Last 6 GST numbers searched history (persistent in localStorage) ──
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try {
+      const saved = localStorage.getItem('grc_landing_recent_gstins');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const addRecentSearch = useCallback((gstin, companyName) => {
+    if (!gstin || gstin.trim().length < 5) return;
+    const cleanGstin = gstin.trim().toUpperCase();
+    const cleanCompany = (companyName || '').trim();
+
+    setRecentSearches(prev => {
+      const existing = prev.find(item => item.gstin === cleanGstin);
+      const company = (cleanCompany && cleanCompany !== 'N/A') ? cleanCompany : (existing?.companyName || 'N/A');
+      const filtered = prev.filter(item => item.gstin !== cleanGstin);
+      const updated = [{ gstin: cleanGstin, companyName: company }, ...filtered].slice(0, 6);
+      try {
+        localStorage.setItem('grc_landing_recent_gstins', JSON.stringify(updated));
+      } catch (e) {
+        console.error("Could not save recent search history", e);
+      }
+      return updated;
+    });
+  }, []);
+
+  // Synchronize company names and seed initial recent searches if empty
+  useEffect(() => {
+    if (gstList && gstList.length > 0) {
+      setRecentSearches(prev => {
+        let changed = false;
+        const enriched = prev.map(item => {
+          if (!item.companyName || item.companyName === 'N/A' || item.companyName === 'Unknown Company') {
+            const found = gstList.find(g => g.gstin?.toUpperCase() === item.gstin?.toUpperCase());
+            if (found) {
+              const name = found.tradeName || found.legalName || '';
+              if (name) {
+                changed = true;
+                return { ...item, companyName: name };
+              }
+            }
+          }
+          return item;
+        });
+
+        if (enriched.length === 0 && gstList.length > 0) {
+          const initial = gstList.slice(0, 6).map(g => ({
+            gstin: g.gstin?.toUpperCase(),
+            companyName: g.tradeName || g.legalName || 'N/A'
+          }));
+          try {
+            localStorage.setItem('grc_landing_recent_gstins', JSON.stringify(initial));
+          } catch {}
+          return initial;
+        }
+
+        if (changed) {
+          try {
+            localStorage.setItem('grc_landing_recent_gstins', JSON.stringify(enriched));
+          } catch {}
+          return enriched;
+        }
+        return prev;
+      });
+    }
+  }, [gstList]);
+
+  // Capture search history as user searches
+  useEffect(() => {
+    if (!searchTerm || searchTerm.trim().length < 3) return;
+    const clean = searchTerm.trim().toUpperCase();
+    const timer = setTimeout(() => {
+      const matched = gstList.find(
+        (g) =>
+          g.gstin?.toUpperCase() === clean ||
+          g.gstin?.toUpperCase().includes(clean) ||
+          (g.tradeName && g.tradeName.toUpperCase().includes(clean)) ||
+          (g.legalName && g.legalName.toUpperCase().includes(clean))
+      );
+      if (matched) {
+        addRecentSearch(matched.gstin, matched.tradeName || matched.legalName);
+      } else if (clean.length === 15) {
+        addRecentSearch(clean, 'N/A');
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [searchTerm, gstList, addRecentSearch]);
+
   // New GST Feature
   const [showFetchModal, setShowFetchModal] = useState(false);
   const [copiedGstin, setCopiedGstin] = useState(null);
@@ -527,6 +619,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
 
   // Modal state
   const [selectedGst, setSelectedGst] = useState(null);
+
+  const handleOpenVendorModal = (gst) => {
+    if (gst) {
+      addRecentSearch(gst.gstin, gst.tradeName || gst.legalName);
+    }
+    setSelectedGst(gst);
+  };
 
   // Admin refresh state
   const [showRefreshPanel, setShowRefreshPanel] = useState(false);
@@ -1112,12 +1211,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
         <div
           style={{
             display: "flex",
-            gap: "0.5rem",
+            gap: "0.6rem",
             alignItems: "center",
             flexWrap: "wrap",
+            width: "100%",
           }}
         >
-          <div className="search-bar">
+          <div className="search-bar" style={{ maxWidth: "320px", flexShrink: 0 }}>
             <div style={{ position: "relative", width: "100% " }}>
               <Search
                 size={18}
@@ -1135,6 +1235,23 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                 placeholder="Filter by GSTIN or Name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && searchTerm.trim()) {
+                    const clean = searchTerm.trim().toUpperCase();
+                    const matched = gstList.find(
+                      (g) =>
+                        g.gstin?.toUpperCase() === clean ||
+                        g.gstin?.toUpperCase().includes(clean) ||
+                        (g.tradeName && g.tradeName.toUpperCase().includes(clean)) ||
+                        (g.legalName && g.legalName.toUpperCase().includes(clean))
+                    );
+                    if (matched) {
+                      addRecentSearch(matched.gstin, matched.tradeName || matched.legalName);
+                    } else if (clean.length === 15) {
+                      addRecentSearch(clean, "N/A");
+                    }
+                  }
+                }}
                 style={{ paddingLeft: "2.5rem" }}
               />
             </div>
@@ -1165,6 +1282,108 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
               >
                 <LayoutGrid size={18} />
               </button>
+            </div>
+          )}
+
+          {/* ── Last Six GST Number Searched History ── */}
+          {recentSearches && recentSearches.length > 0 && (
+            <div
+              className="recent-searches-row"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                overflowX: "auto",
+                flex: "1 1 auto",
+                minWidth: 0,
+                padding: "2px 0",
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  color: "#64748b",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  marginRight: "2px",
+                }}
+              >
+                <History size={13} color="#7c3aed" />
+                <span>Recent:</span>
+              </div>
+
+              {recentSearches.slice(0, 6).map((item) => {
+                const isSelected = searchTerm && searchTerm.trim().toUpperCase() === item.gstin;
+                return (
+                  <button
+                    key={item.gstin}
+                    type="button"
+                    onClick={() => {
+                      setSearchTerm(item.gstin);
+                      addRecentSearch(item.gstin, item.companyName);
+                    }}
+                    title={`Click to filter by ${item.gstin} (${item.companyName || "N/A"})`}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      justifyContent: "center",
+                      padding: "0.32rem 0.6rem",
+                      borderRadius: "8px",
+                      border: isSelected ? "1.5px solid #7c3aed" : "1px solid #e2e8f0",
+                      background: isSelected ? "#f5f3ff" : "#ffffff",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      flexShrink: 0,
+                      minWidth: "130px",
+                      maxWidth: "165px",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                      transition: "all 0.15s ease",
+                      lineHeight: 1.15,
+                    }}
+                  >
+                    {/* GST number in large text size font type */}
+                    <span
+                      style={{
+                        fontSize: "0.82rem",
+                        fontWeight: 800,
+                        color: isSelected ? "#7c3aed" : "#0f172a",
+                        letterSpacing: "0.3px",
+                        fontFamily: "monospace, monospace",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        width: "100%",
+                      }}
+                    >
+                      {item.gstin}
+                    </span>
+                    {/* Subtext: Company name */}
+                    <span
+                      style={{
+                        fontSize: "0.67rem",
+                        fontWeight: 600,
+                        color: "#64748b",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        width: "100%",
+                        marginTop: "1px",
+                      }}
+                    >
+                      {item.companyName || "N/A"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1774,7 +1993,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                         <td style={{ textAlign: "center" }}>
                           <button
                             className="btn btn-sm btn-secondary"
-                            onClick={() => setSelectedGst(gst)}
+                            onClick={() => handleOpenVendorModal(gst)}
                             title="View Details"
                             style={{ padding: "0.3rem" }}
                           >
@@ -2022,7 +2241,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                       </span>
                       <button
                         className="btn btn-sm"
-                        onClick={() => setSelectedGst(gst)}
+                        onClick={() => handleOpenVendorModal(gst)}
                         style={{
                           padding: "0.25rem 0.5rem",
                           background: "transparent",
@@ -2236,7 +2455,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                       <td style={{ textAlign: "center" }}>
                         <button
                           className="btn btn-sm btn-secondary"
-                          onClick={() => setSelectedGst(gst)}
+                          onClick={() => handleOpenVendorModal(gst)}
                           title="View Details"
                           style={{ padding: "0.3rem" }}
                         >
