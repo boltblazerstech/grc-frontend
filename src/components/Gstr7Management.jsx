@@ -662,6 +662,8 @@ const Gstr7Management = ({ isTab }) => {
     const [savingTdsStatus, setSavingTdsStatus] = useState(null);
     const [savingGstd, setSavingGstd] = useState(null);
     const [savingGstinRow, setSavingGstinRow] = useState(null);
+    const [syncingGstin, setSyncingGstin] = useState(null);
+    const [syncingPan, setSyncingPan] = useState(null);
     const [successMsg, setSuccessMsg] = useState('');
     const [sortEligibleFirst, setSortEligibleFirst] = useState(true);
     const [sortByNewest, setSortByNewest] = useState(false);
@@ -923,6 +925,41 @@ const Gstr7Management = ({ isTab }) => {
         finally { setSavingGstinRow(null); }
     };
 
+    const handleAutoFetchGstr7 = async (gstin) => {
+        try {
+            setSyncingGstin(gstin);
+            setError(null);
+            await apiClient.syncGstr7Filing(gstin);
+            showSuccess(`GSTR-7 filing auto-fetched & timestamp updated for ${gstin}`);
+            fetchAll(false);
+        } catch (err) {
+            setError('Failed to auto-fetch GSTR-7: ' + err.message);
+        } finally {
+            setSyncingGstin(null);
+        }
+    };
+
+    const handleAutoFetchPan = async (panObj) => {
+        const gstinsToSync = (panObj.gstins || []).map(g => g.gstin).filter(Boolean);
+        if (gstinsToSync.length === 0) {
+            setError(`No GSTIN found under PAN ${panObj.panNumber}`);
+            return;
+        }
+        try {
+            setSyncingPan(panObj.panNumber);
+            setError(null);
+            for (const gstin of gstinsToSync) {
+                await apiClient.syncGstr7Filing(gstin);
+            }
+            showSuccess(`GSTR-7 auto-fetched for PAN ${panObj.panNumber} (${gstinsToSync.length} GSTIN${gstinsToSync.length > 1 ? 's' : ''})`);
+            fetchAll(false);
+        } catch (err) {
+            setError('Failed to auto-fetch GSTR-7: ' + err.message);
+        } finally {
+            setSyncingPan(null);
+        }
+    };
+
 
     if (loading) {
         return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><div className="spinner"></div></div>;
@@ -1049,7 +1086,7 @@ const Gstr7Management = ({ isTab }) => {
                                     <th style={{ minWidth: '220px', textAlign: 'left' }}>GSTINs</th>
                                     <th style={{ width: '160px' }}>TDS Status</th>
                                     <th style={{ width: '180px' }}>TDS No.</th>
-                                    <th style={{ width: '140px' }}>Action</th>
+                                    <th style={{ minWidth: '240px' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1211,11 +1248,72 @@ const Gstr7Management = ({ isTab }) => {
                                                 </td>
                                                 <td>
                                                     {panObj.isApplicable ? (
-                                                        <button className="btn btn-secondary" onClick={() => handleExpand(panObj)} style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}>
-                                                            <FileText size={14} />
-                                                            {isExpanded ? 'Hide' : 'Manage GSTR-7'}
-                                                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                                        </button>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'nowrap' }}>
+                                                                <button
+                                                                    className="btn btn-secondary"
+                                                                    onClick={() => handleExpand(panObj)}
+                                                                    style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                                                                >
+                                                                    <FileText size={14} />
+                                                                    {isExpanded ? 'Hide' : 'Manage GSTR-7'}
+                                                                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                                </button>
+                                                                <button
+                                                                    title="Auto-fetch GSTR-7 filing history for this vendor"
+                                                                    onClick={() => handleAutoFetchPan(panObj)}
+                                                                    disabled={syncingPan === panObj.panNumber || (panObj.gstins || []).some(g => syncingGstin === g.gstin)}
+                                                                    style={{
+                                                                        padding: '0.35rem 0.65rem',
+                                                                        fontSize: '0.75rem',
+                                                                        borderRadius: '6px',
+                                                                        border: '1px solid #8b5cf6',
+                                                                        backgroundColor: '#f5f3ff',
+                                                                        color: '#6d28d9',
+                                                                        cursor: (syncingPan === panObj.panNumber || (panObj.gstins || []).some(g => syncingGstin === g.gstin)) ? 'not-allowed' : 'pointer',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        fontWeight: 600,
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}
+                                                                >
+                                                                    {(syncingPan === panObj.panNumber || (panObj.gstins || []).some(g => syncingGstin === g.gstin))
+                                                                        ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>Syncing...</>
+                                                                        : <><Sparkles size={13} /> Auto-Fetch</>}
+                                                                </button>
+                                                            </div>
+                                                            {(() => {
+                                                                const latestDate = (panObj.gstins || [])
+                                                                    .map(g => g.gstr7LastUpdated)
+                                                                    .filter(Boolean)
+                                                                    .sort()
+                                                                    .reverse()[0];
+                                                                return latestDate ? (
+                                                                    <span style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '3px',
+                                                                        fontSize: '0.70rem',
+                                                                        color: '#15803d',
+                                                                        fontWeight: 600
+                                                                    }}>
+                                                                        🕒 Last: {new Date(latestDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}, {new Date(latestDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '3px',
+                                                                        fontSize: '0.70rem',
+                                                                        color: '#b45309',
+                                                                        fontWeight: 500
+                                                                    }}>
+                                                                        ⚠️ Not Updated
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                        </div>
                                                     ) : (
                                                         <span style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontStyle: 'italic' }}>
                                                             GSTR-7 Not Required
@@ -1239,7 +1337,7 @@ const Gstr7Management = ({ isTab }) => {
                                                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                                 <thead>
                                                                     <tr style={{ backgroundColor: 'rgba(37,150,190,0.08)' }}>
-                                                                        {['GSTIN', 'TDS no', 'Filing Status', 'Delay Count', 'Missed Count', 'Last Updated', 'Action', 'History'].map((h, i) => (
+                                                                        {['GSTIN', 'TDS no', 'Filing Status', 'Delay Count', 'Missed Count', 'Last Updated', 'Save', 'Auto-Fetch', 'Import'].map((h, i) => (
                                                                             <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: i >= 6 ? 'right' : 'left', fontSize: '0.75rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{h}</th>
                                                                         ))}
                                                                     </tr>
@@ -1308,8 +1406,38 @@ const Gstr7Management = ({ isTab }) => {
                                                                                             <span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{g.gstr7MissedCount ?? '—'}</span>
                                                                                         )}
                                                                                     </td>
-                                                                                    <td style={{ padding: '0.75rem', fontSize: '0.75rem', color: 'var(--text-light)', whiteSpace: 'nowrap' }}>
-                                                                                        {g.gstr7LastUpdated ? new Date(g.gstr7LastUpdated).toLocaleString() : <span style={{ fontStyle: 'italic' }}>Never</span>}
+                                                                                    <td style={{ padding: '0.75rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                                                                        {g.gstr7LastUpdated ? (
+                                                                                            <span style={{
+                                                                                                background: '#f0fdf4',
+                                                                                                color: '#15803d',
+                                                                                                border: '1px solid #bbf7d0',
+                                                                                                padding: '0.25rem 0.55rem',
+                                                                                                borderRadius: '6px',
+                                                                                                fontWeight: 600,
+                                                                                                fontSize: '0.72rem',
+                                                                                                display: 'inline-flex',
+                                                                                                alignItems: 'center',
+                                                                                                gap: '4px'
+                                                                                            }}>
+                                                                                                🕒 Last updated: {new Date(g.gstr7LastUpdated).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span style={{
+                                                                                                background: '#fef9c3',
+                                                                                                color: '#854d0e',
+                                                                                                border: '1px solid #fde047',
+                                                                                                padding: '0.25rem 0.55rem',
+                                                                                                borderRadius: '6px',
+                                                                                                fontWeight: 700,
+                                                                                                fontSize: '0.72rem',
+                                                                                                display: 'inline-flex',
+                                                                                                alignItems: 'center',
+                                                                                                gap: '4px'
+                                                                                            }}>
+                                                                                                ⚠️ Not Updated
+                                                                                            </span>
+                                                                                        )}
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                                                                         <button
@@ -1321,7 +1449,33 @@ const Gstr7Management = ({ isTab }) => {
                                                                                         >
                                                                                             {savingGstinRow === g.gstin
                                                                                                 ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px', marginRight: '4px' }}></span>Saving...</>
-                                                                                                : <><Save size={13} style={{ marginRight: '4px' }} />Save Config</>}
+                                                                                                : <><Save size={13} style={{ marginRight: '4px' }} />Save</>}
+                                                                                        </button>
+                                                                                    </td>
+                                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                                                        <button
+                                                                                            title={!hasGstd ? 'Mark as TDS no first' : 'Auto-fetch GSTR-7 filing history'}
+                                                                                            onClick={() => hasGstd && handleAutoFetchGstr7(g.gstin)}
+                                                                                            disabled={!hasGstd || syncingGstin === g.gstin}
+                                                                                            style={{
+                                                                                                padding: '0.32rem 0.65rem',
+                                                                                                fontSize: '0.78rem',
+                                                                                                borderRadius: '6px',
+                                                                                                border: '1px solid #8b5cf6',
+                                                                                                backgroundColor: '#f5f3ff',
+                                                                                                color: '#6d28d9',
+                                                                                                cursor: hasGstd ? 'pointer' : 'not-allowed',
+                                                                                                opacity: hasGstd ? 1 : 0.4,
+                                                                                                display: 'inline-flex',
+                                                                                                alignItems: 'center',
+                                                                                                gap: '4px',
+                                                                                                fontWeight: 600,
+                                                                                                whiteSpace: 'nowrap'
+                                                                                            }}
+                                                                                        >
+                                                                                            {syncingGstin === g.gstin
+                                                                                                ? <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>Syncing...</>
+                                                                                                : <><Sparkles size={13} /> Auto-Fetch</>}
                                                                                         </button>
                                                                                     </td>
                                                                                     <td style={{ padding: '0.75rem', textAlign: 'right' }}>
@@ -1336,10 +1490,10 @@ const Gstr7Management = ({ isTab }) => {
                                                                                                 color: hasGstd ? 'var(--primary-color)' : 'var(--text-light)',
                                                                                                 cursor: hasGstd ? 'pointer' : 'not-allowed',
                                                                                                 opacity: hasGstd ? 1 : 0.4,
-                                                                                                display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+                                                                                                display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
                                                                                             }}
                                                                                         >
-                                                                                            <Plus size={13} /> Import
+                                                                                            <History size={13} /> Import
                                                                                         </button>
                                                                                     </td>
                                                                                 </tr>

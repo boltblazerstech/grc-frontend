@@ -338,6 +338,18 @@ export const apiClient = {
         return response.json();
     },
 
+    async syncGstr7Filing(gstin) {
+        const response = await fetch(`${API_BASE_URL}/admin/gstr7/sync/${gstin}`, {
+            method: 'POST',
+            headers: { 'Role': 'super_admin' }
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to auto-fetch GSTR-7');
+        }
+        return response.json();
+    },
+
     // HSN Categories
     async getHsnCategories() {
         const response = await fetch(`${API_BASE_URL}/admin/gstr7/hsn-categories`, {
