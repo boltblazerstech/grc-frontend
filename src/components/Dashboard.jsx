@@ -517,6 +517,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [scoreFilter, setScoreFilter] = useState("all"); // 'all', 'good', 'okay', 'watch'
   const [sourceFilter, setSourceFilter] = useState("all"); // 'all', 'api', 'manual', 'error'
   const [turnoverFilter, setTurnoverFilter] = useState("all"); // 'all', 'below3'
+  const [sortBy, setSortBy] = useState("latest"); // 'latest', 'oldest', 'score_desc', 'score_asc', 'name_asc'
 
   // ── Last 6 GST numbers searched history (persistent in localStorage) ──
   const [recentSearches, setRecentSearches] = useState(() => {
@@ -615,6 +616,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const [newGstInput, setNewGstInput] = useState("");
   const [isFetchingNew, setIsFetchingNew] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const [existingGstMatch, setExistingGstMatch] = useState(null);
   const [recentlyAdded, setRecentlyAdded] = useState(new Set());
 
   // Modal state
@@ -680,6 +682,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const handleFetchNewGst = async (e) => {
     e.preventDefault();
     setFetchError("");
+    setExistingGstMatch(null);
     if (!newGstInput.trim()) {
       setFetchError("Please enter at least one GSTIN.");
       return;
@@ -700,6 +703,25 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     if (invalidGstins.length > 0) {
       setFetchError(`Invalid GSTIN format: ${invalidGstins.join(", ")}`);
       return;
+    }
+
+    // Check if GSTIN already exists in system to prevent duplicate API hits
+    if (gstins.length === 1) {
+      const existing = gstList.find(
+        (g) => g.gstin && g.gstin.trim().toUpperCase() === gstins[0]
+      );
+      if (existing) {
+        setExistingGstMatch(existing);
+        return; // Halt: already exists in system
+      }
+    } else {
+      const match = gstList.find((g) =>
+        gstins.includes(g.gstin?.trim().toUpperCase())
+      );
+      if (match && gstins.length === 1) {
+        setExistingGstMatch(match);
+        return;
+      }
     }
 
     setIsFetchingNew(true);
@@ -951,6 +973,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       });
     }
 
+    const getLatestTimestamp = (g) => {
+      const raw = g.createdAt || g.lastApiSync || g.scoreCalculatedAt || g.gstr7LastUpdated;
+      if (!raw) return 0;
+      const t = new Date(raw).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+
     if (turnoverFilter === "below3") {
       list = list.filter((g) => {
         const val = parseTurnoverToCrore(g.aggregateTurnover);
@@ -969,12 +998,46 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     }
 
     return list.sort((a, b) => {
-      if (a.scoreCalculatedAt && b.scoreCalculatedAt) {
-        return new Date(b.scoreCalculatedAt) - new Date(a.scoreCalculatedAt);
+      if (sortBy === "oldest") {
+        const timeA = getLatestTimestamp(a);
+        const timeB = getLatestTimestamp(b);
+        if (timeA && timeB && timeA !== timeB) return timeA - timeB;
+        if (timeA && !timeB) return -1;
+        if (!timeA && timeB) return 1;
+        return a.gstin.localeCompare(b.gstin);
       }
+
+      if (sortBy === "score_desc") {
+        const sA = a.grcScore !== null && a.grcScore !== undefined ? a.grcScore : -1;
+        const sB = b.grcScore !== null && b.grcScore !== undefined ? b.grcScore : -1;
+        if (sA !== sB) return sB - sA;
+        return a.gstin.localeCompare(b.gstin);
+      }
+
+      if (sortBy === "score_asc") {
+        const sA = a.grcScore !== null && a.grcScore !== undefined ? a.grcScore : 999999;
+        const sB = b.grcScore !== null && b.grcScore !== undefined ? b.grcScore : 999999;
+        if (sA !== sB) return sA - sB;
+        return a.gstin.localeCompare(b.gstin);
+      }
+
+      if (sortBy === "name_asc") {
+        const nameA = (a.tradeName || a.legalName || a.gstin || "").toLowerCase();
+        const nameB = (b.tradeName || b.legalName || b.gstin || "").toLowerCase();
+        return nameA.localeCompare(nameB);
+      }
+
+      // Default: 'latest' (Newest Added / Synced First)
+      const timeA = getLatestTimestamp(a);
+      const timeB = getLatestTimestamp(b);
+      if (timeA && timeB && timeA !== timeB) {
+        return timeB - timeA;
+      }
+      if (timeA && !timeB) return -1;
+      if (!timeA && timeB) return 1;
       return a.gstin.localeCompare(b.gstin);
     });
-  }, [gstList, searchTerm, scoreFilter, sourceFilter, turnoverFilter, thresholds]);
+  }, [gstList, searchTerm, scoreFilter, sourceFilter, turnoverFilter, sortBy, thresholds]);
 
   const handleAdminRefresh = async () => {
     if (selectedGstins.size === 0) return;
@@ -1569,6 +1632,41 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
             {turnoverFilter === "below3" && (
               <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginLeft: '0.5rem' }}>
                 Showing <strong>{processedList.length}</strong> vendors with turnover ≤ 3 Cr (sorted ascending)
+              </span>
+            )}
+          </div>
+
+          {/* Sort By Row */}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-light)', minWidth: '70px' }}>
+              Sort By:
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="form-control"
+              style={{
+                width: 'auto',
+                minWidth: '220px',
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: '#ffffff',
+                color: 'var(--text-color)',
+              }}
+            >
+              <option value="latest">✨ Latest Added (Newest First)</option>
+              <option value="oldest">⏳ Oldest Added First</option>
+              <option value="score_desc">📈 GRC Score (High to Low)</option>
+              <option value="score_asc">📉 GRC Score (Low to High)</option>
+              <option value="name_asc">🔤 Company Name (A to Z)</option>
+            </select>
+            {sortBy === 'latest' && (
+              <span style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 600 }}>
+                • Showing newly added records first
               </span>
             )}
           </div>
@@ -2640,7 +2738,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       {showFetchModal && (
         <div
           className="modal-overlay"
-          onClick={() => !isFetchingNew && setShowFetchModal(false)}
+          onClick={() => {
+            if (!isFetchingNew) {
+              setShowFetchModal(false);
+              setFetchError("");
+              setExistingGstMatch(null);
+            }
+          }}
         >
           <div
             className="modal-content"
@@ -2651,12 +2755,84 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
               <h2>Fetch New GST Details</h2>
               <button
                 className="close-btn"
-                onClick={() => !isFetchingNew && setShowFetchModal(false)}
+                onClick={() => {
+                  if (!isFetchingNew) {
+                    setShowFetchModal(false);
+                    setFetchError("");
+                    setExistingGstMatch(null);
+                  }
+                }}
               >
                 <X size={24} />
               </button>
             </div>
             <div className="modal-body">
+              {existingGstMatch && (
+                <div
+                  style={{
+                    backgroundColor: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: "8px",
+                    padding: "1rem",
+                    marginBottom: "1.25rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      color: "#1e40af",
+                      fontWeight: 700,
+                      fontSize: "0.95rem",
+                      marginBottom: "0.4rem",
+                    }}
+                  >
+                    <AlertCircle size={20} color="#2563eb" style={{ flexShrink: 0 }} />
+                    GST details already exist in our system!
+                  </div>
+                  <div style={{ fontSize: "0.86rem", color: "#334155", marginBottom: "0.85rem", lineHeight: "1.4" }}>
+                    Company: <strong>{existingGstMatch.tradeName || existingGstMatch.legalName || "N/A"}</strong>
+                    <br />
+                    GSTIN: <strong>{existingGstMatch.gstin}</strong>
+                    {existingGstMatch.grcScore !== null && existingGstMatch.grcScore !== undefined && (
+                      <span> • GRC Score: <strong>{existingGstMatch.grcScore}</strong></span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{
+                        padding: "0.45rem 1rem",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                      }}
+                      onClick={() => {
+                        const target = existingGstMatch;
+                        setShowFetchModal(false);
+                        setExistingGstMatch(null);
+                        setNewGstInput("");
+                        handleOpenVendorModal(target);
+                      }}
+                    >
+                      <Eye size={16} /> Show Details
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: "0.45rem 0.8rem", fontSize: "0.85rem" }}
+                      onClick={() => setExistingGstMatch(null)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {fetchError && (
                 <div
                   style={{
@@ -2717,7 +2893,11 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => setShowFetchModal(false)}
+                    onClick={() => {
+                      setShowFetchModal(false);
+                      setFetchError("");
+                      setExistingGstMatch(null);
+                    }}
                     disabled={isFetchingNew}
                   >
                     Cancel
