@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Edit2, AlertCircle, ChevronDown, ChevronUp, Trash2, RefreshCw, Copy, Check } from 'lucide-react';
 import { apiClient } from '../api/apiClient';
-import ReturnComplianceGrid from './ReturnComplianceGrid';
 
 const getScoreColor = (score, thresholds) => {
     if (score === null || score === undefined) return '';
@@ -276,10 +275,6 @@ const GstDetailsModal = ({ gst, onClose, onUpdate, onDelete, currentUser, thresh
                                 </button>
                             </div>
                         )}
-                    </div>
-
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <ReturnComplianceGrid gst={formData} />
                     </div>
 
                     <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, Copy, Check, AlertCircle, History, Building2, Calendar, User, IndianRupee, ShieldCheck, FileText, Lightbulb, Info, CheckCircle, AlertTriangle, XCircle, RefreshCw, Trash2 } from 'lucide-react';
 import Gstr7Timeline from './Gstr7Timeline';
-import ReturnComplianceGrid from './ReturnComplianceGrid';
 import { getGstr7Display } from '../utils/gstr7Display';
 import { apiClient } from '../api/apiClient';
 
@@ -489,11 +488,6 @@ const GstCard = ({ gst, onClick, isNew, isFirstFetch, index, thresholds, isStand
                     <Gstr7Timeline gstin={gst.gstin} onClose={() => setShowTimeline(false)} />
                 </div>
             )}
-
-            {/* ── 12-MONTH RETURN COMPLIANCE GRID ── */}
-            <div style={{ padding: '0 0.85rem 0.75rem' }} onClick={(e) => e.stopPropagation()}>
-                <ReturnComplianceGrid gst={gst} compact={true} />
-            </div>
 
             {/* ── FOOTER ── */}
             {riskInsight && (
