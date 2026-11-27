@@ -622,6 +622,50 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   // Modal state
   const [selectedGst, setSelectedGst] = useState(null);
 
+  // Toast Notification state
+  const [toast, setToast] = useState(null); // { message, type: 'success' | 'error' | 'info' }
+
+  const showToast = useCallback((message, type = "success", duration = 4500) => {
+    setToast({ message, type });
+    if (duration > 0) {
+      setTimeout(() => {
+        setToast((curr) => (curr?.message === message ? null : curr));
+      }, duration);
+    }
+  }, []);
+
+  const handleGstInputChange = (val) => {
+    const upper = val.toUpperCase();
+    setNewGstInput(upper);
+    setFetchError("");
+    const trimmed = upper.trim();
+    if (trimmed.length === 15) {
+      const match = gstList.find(
+        (g) => g.gstin && g.gstin.trim().toUpperCase() === trimmed
+      );
+      if (match) {
+        setExistingGstMatch(match);
+        return;
+      }
+    }
+    setExistingGstMatch(null);
+  };
+
+  const handleOpenExistingFromModal = (match) => {
+    const target = match || existingGstMatch;
+    if (!target) return;
+    setShowFetchModal(false);
+    setExistingGstMatch(null);
+    setNewGstInput("");
+    const tVal = parseTurnoverToCrore(target.aggregateTurnover);
+    if (turnoverFilter === "below3" && tVal !== null && tVal > 3) {
+      setTurnoverFilter("all");
+    }
+    setSearchTerm(target.gstin);
+    handleOpenVendorModal(target);
+    showToast(`Showing details for ${target.tradeName || target.legalName || target.gstin}`, "info", 4000);
+  };
+
   const handleOpenVendorModal = (gst) => {
     if (gst) {
       addRecentSearch(gst.gstin, gst.tradeName || gst.legalName);
@@ -701,7 +745,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     const invalidGstins = gstins.filter((g) => !gstRegex.test(g));
 
     if (invalidGstins.length > 0) {
-      setFetchError(`Invalid GSTIN format: ${invalidGstins.join(", ")}`);
+      const msg = `Invalid GSTIN format: ${invalidGstins.join(", ")}`;
+      setFetchError(msg);
+      showToast(msg, "error", 4500);
       return;
     }
 
@@ -712,6 +758,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       );
       if (existing) {
         setExistingGstMatch(existing);
+        showToast(`ℹ️ GSTIN ${existing.gstin} already exists in database.`, "info", 4500);
         return; // Halt: already exists in system
       }
     } else {
@@ -720,11 +767,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       );
       if (match && gstins.length === 1) {
         setExistingGstMatch(match);
+        showToast(`ℹ️ GSTIN ${match.gstin} already exists in database.`, "info", 4500);
         return;
       }
     }
 
     setIsFetchingNew(true);
+    showToast(`Fetching live GST details for ${gstins.join(", ")}...`, "info", 0);
     try {
       await apiClient.fetchGstDetails(gstins);
       const newSet = new Set(recentlyAdded);
@@ -732,9 +781,13 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       setRecentlyAdded(newSet);
       setNewGstInput("");
       setShowFetchModal(false);
+      setExistingGstMatch(null);
       await fetchDashboardData();
+      showToast(`✅ Successfully fetched & saved GST details for ${gstins.join(", ")}!`, "success", 5000);
     } catch (err) {
-      setFetchError(err.message || "Failed to fetch GST details from API.");
+      const errMsg = err.message || "Failed to fetch GST details from API.";
+      setFetchError(errMsg);
+      showToast(`❌ ${errMsg}`, "error", 6000);
     } finally {
       setIsFetchingNew(false);
     }
@@ -1144,6 +1197,66 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
 
   return (
     <div>
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: "24px",
+            right: "24px",
+            zIndex: 999999,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.85rem 1.25rem",
+            borderRadius: "10px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+            backgroundColor:
+              toast.type === "error"
+                ? "#fef2f2"
+                : toast.type === "info"
+                ? "#eff6ff"
+                : "#f0fdf4",
+            border:
+              toast.type === "error"
+                ? "1px solid #fecaca"
+                : toast.type === "info"
+                ? "1px solid #bfdbfe"
+                : "1px solid #bbf7d0",
+            color:
+              toast.type === "error"
+                ? "#991b1b"
+                : toast.type === "info"
+                ? "#1e40af"
+                : "#166534",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+            maxWidth: "440px",
+          }}
+        >
+          {toast.type === "error" ? (
+            <AlertCircle size={20} color="#dc2626" style={{ flexShrink: 0 }} />
+          ) : toast.type === "info" ? (
+            <AlertCircle size={20} color="#2563eb" style={{ flexShrink: 0 }} />
+          ) : (
+            <Check size={20} color="#16a34a" style={{ flexShrink: 0 }} />
+          )}
+          <span style={{ flex: 1, lineHeight: "1.4" }}>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "inherit",
+              padding: "0.2rem",
+              opacity: 0.7,
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
       {error && (
         <div
           className="card"
@@ -2811,13 +2924,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                         alignItems: "center",
                         gap: "0.4rem",
                       }}
-                      onClick={() => {
-                        const target = existingGstMatch;
-                        setShowFetchModal(false);
-                        setExistingGstMatch(null);
-                        setNewGstInput("");
-                        handleOpenVendorModal(target);
-                      }}
+                      onClick={() => handleOpenExistingFromModal(existingGstMatch)}
                     >
                       <Eye size={16} /> Show Details
                     </button>
@@ -2867,10 +2974,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                     className="form-control"
                     placeholder="e.g. 06ACUPK1294L2ZZ"
                     value={newGstInput}
-                    onChange={(e) => {
-                      setNewGstInput(e.target.value.toUpperCase());
-                      setFetchError("");
-                    }}
+                    onChange={(e) => handleGstInputChange(e.target.value)}
                     autoFocus
                   />
                   <small
@@ -2902,20 +3006,31 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
                   >
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={isFetchingNew || !newGstInput.trim()}
-                  >
-                    {isFetchingNew ? (
-                      <span
-                        className="spinner"
-                        style={{ width: "16px", height: "16px" }}
-                      ></span>
-                    ) : (
-                      "Fetch & Save"
-                    )}
-                  </button>
+                  {existingGstMatch ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => handleOpenExistingFromModal(existingGstMatch)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+                    >
+                      <Eye size={16} /> Show Existing Details
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={isFetchingNew || !newGstInput.trim()}
+                    >
+                      {isFetchingNew ? (
+                        <span
+                          className="spinner"
+                          style={{ width: "16px", height: "16px" }}
+                        ></span>
+                      ) : (
+                        "Fetch & Save"
+                      )}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>
