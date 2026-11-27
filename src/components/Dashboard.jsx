@@ -504,6 +504,41 @@ const NewVendorsModal = ({ onClose, onSelectGstin, onOpenGstr7 }) => {
   );
 };
 
+/**
+ * Parse aggregate_turnover string → numeric value in Crore.
+ * Returns null for unparseable / NA values.
+ */
+const parseTurnoverToCrore = (raw) => {
+  if (!raw || raw.trim() === '' || raw.trim().toUpperCase() === 'NA') return null;
+  const s = raw.trim().toLowerCase();
+
+  // 'below X cr' → X
+  const belowCr = s.match(/below\s+([\d.]+)\s*cr/);
+  if (belowCr) return parseFloat(belowCr[1]);
+
+  // 'X cr and above' / '500 cr. and above' → X (very large)
+  const aboveCr = s.match(/([\d.]+)\s*cr.*above/);
+  if (aboveCr) return parseFloat(aboveCr[1]);
+
+  // Range like '1.5 cr. to 5 cr.' or 'rs. 5 cr. to 25 cr.' → take upper bound
+  const crRange = s.match(/([\d.]+)\s*cr[^\d]*to\s*([\d.]+)\s*cr/);
+  if (crRange) return parseFloat(crRange[2]);
+
+  // '0 to 40 lakhs' / 'rs. 0 to 40 lakhs' → upper in lakhs ÷ 100
+  const lakhsRange = s.match(/to\s*([\d.]+)\s*lakh/);
+  if (lakhsRange) return parseFloat(lakhsRange[1]) / 100;
+
+  // '40 lakhs to 1.5 cr.' → upper bound in cr
+  const lakhToCr = s.match(/lakh.*to\s*([\d.]+)\s*cr/);
+  if (lakhToCr) return parseFloat(lakhToCr[1]);
+
+  // Single plain number → already in crore
+  const plain = s.match(/^[\d.]+$/);
+  if (plain) return parseFloat(s);
+
+  return null;
+};
+
 const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const navigate = useNavigate();
   const [gstList, setGstList] = useState([]);
@@ -782,8 +817,43 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       setNewGstInput("");
       setShowFetchModal(false);
       setExistingGstMatch(null);
-      await fetchDashboardData();
-      showToast(`✅ Successfully fetched & saved GST details for ${gstins.join(", ")}!`, "success", 5000);
+
+      // Fetch fresh data immediately
+      const [freshData, config] = await Promise.all([
+        apiClient.getDetails(),
+        apiClient.getRuleConfig(),
+      ]);
+      setGstList(freshData);
+      const configMap = {};
+      config.forEach((item) => (configMap[item.configKey] = item.configValue));
+      setThresholds(configMap);
+
+      if (gstins.length === 1) {
+        const targetGstin = gstins[0];
+        const saved = freshData.find((g) => g.gstin === targetGstin);
+        if (saved) {
+          if (saved.apiError) {
+            showToast(
+              `⚠️ Record created, but GST API returned error/no data (${saved.source || "Upstream Error"}).`,
+              "error",
+              7000,
+            );
+          } else {
+            const name = saved.tradeName || saved.legalName || saved.gstin;
+            showToast(`✅ Successfully fetched: ${name} (${saved.gstin})`, "success", 5000);
+          }
+          // Automatically clear filters and open company modal immediately on screen
+          setTurnoverFilter("all");
+          setSourceFilter("all");
+          setScoreFilter("all");
+          setSearchTerm(targetGstin);
+          handleOpenVendorModal(saved);
+        } else {
+          showToast(`✅ Processed GSTIN: ${targetGstin}`, "success", 4000);
+        }
+      } else {
+        showToast(`✅ Processed ${gstins.length} GSTINs.`, "success", 4000);
+      }
     } catch (err) {
       const errMsg = err.message || "Failed to fetch GST details from API.";
       setFetchError(errMsg);
@@ -949,41 +1019,6 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     } finally {
       setIsExporting(false);
     }
-  };
-
-  /**
-   * Parse aggregate_turnover string → numeric value in Crore.
-   * Returns null for unparseable / NA values.
-   */
-  const parseTurnoverToCrore = (raw) => {
-    if (!raw || raw.trim() === '' || raw.trim().toUpperCase() === 'NA') return null;
-    const s = raw.trim().toLowerCase();
-
-    // 'below X cr' → X
-    const belowCr = s.match(/below\s+([\d.]+)\s*cr/);
-    if (belowCr) return parseFloat(belowCr[1]);
-
-    // 'X cr and above' / '500 cr. and above' → X (very large)
-    const aboveCr = s.match(/([\d.]+)\s*cr.*above/);
-    if (aboveCr) return parseFloat(aboveCr[1]);
-
-    // Range like '1.5 cr. to 5 cr.' or 'rs. 5 cr. to 25 cr.' → take upper bound
-    const crRange = s.match(/([\d.]+)\s*cr[^\d]*to\s*([\d.]+)\s*cr/);
-    if (crRange) return parseFloat(crRange[2]);
-
-    // '0 to 40 lakhs' / 'rs. 0 to 40 lakhs' → upper in lakhs ÷ 100
-    const lakhsRange = s.match(/to\s*([\d.]+)\s*lakh/);
-    if (lakhsRange) return parseFloat(lakhsRange[1]) / 100;
-
-    // '40 lakhs to 1.5 cr.' → upper bound in cr
-    const lakhToCr = s.match(/lakh.*to\s*([\d.]+)\s*cr/);
-    if (lakhToCr) return parseFloat(lakhToCr[1]);
-
-    // Single plain number → already in crore
-    const plain = s.match(/^[\d.]+$/);
-    if (plain) return parseFloat(s);
-
-    return null;
   };
 
   const processedList = useMemo(() => {
