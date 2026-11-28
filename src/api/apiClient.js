@@ -8,6 +8,10 @@ const API_INVOICE_URL = `${_BACKEND}/api/admin/invoices`;
 
 let _cachedDetails = null;
 
+export function clearDetailsCache() {
+    _cachedDetails = null;
+}
+
 // ── Client Logo Removal Persistence Helpers ─────────────────────────────
 export function getRemovedLogos() {
     try {
@@ -49,11 +53,22 @@ export function isLogoRemoved(gstin) {
 }
 
 export const apiClient = {
-    async getDetails() {
-        if (_cachedDetails && Array.isArray(_cachedDetails) && _cachedDetails.length > 0) {
+    clearCache() {
+        _cachedDetails = null;
+    },
+
+    async getDetails(force = false) {
+        if (!force && _cachedDetails && Array.isArray(_cachedDetails) && _cachedDetails.length > 0) {
             return _cachedDetails;
         }
-        const response = await fetch(`${API_BASE_URL}/details`);
+        const cacheBuster = `?_t=${Date.now()}`;
+        const response = await fetch(`${API_BASE_URL}/details${cacheBuster}`, {
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
         if (!response.ok) throw new Error('Failed to fetch details');
         const data = await response.json();
         _cachedDetails = data;
@@ -67,32 +82,39 @@ export const apiClient = {
     },
 
     async calculateScore(gstin) {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/calculate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gstin })
         });
         if (!response.ok) throw new Error('Failed to calculate score');
+        _cachedDetails = null;
         return response.json();
     },
 
     async recalculateDetail(gstin) {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/recalculate/${gstin}`, {
             method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to recalculate score');
+        _cachedDetails = null;
         return response.json();
     },
 
     async recalculateAll() {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/recalculate-all`, {
             method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to recalculate all scores');
+        _cachedDetails = null;
         return response.text();
     },
 
     async updateDetails(gstin, data) {
+        _cachedDetails = null;
         const savedUser = localStorage.getItem('grc_user');
         const userName = savedUser ? JSON.parse(savedUser).name : 'Unknown';
 
@@ -102,34 +124,41 @@ export const apiClient = {
             body: JSON.stringify({ ...data, updatedBy: userName })
         });
         if (!response.ok) throw new Error('Failed to update details');
+        _cachedDetails = null;
         return response.json();
     },
 
     async overrideScore(gstin, newScore) {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/score/${gstin}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ newScore })
         });
         if (!response.ok) throw new Error('Failed to override score');
+        _cachedDetails = null;
         return response.json();
     },
 
     async fetchGstDetails(gstins) {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/fetch`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gstins })
         });
         if (!response.ok) throw new Error('Failed to fetch new GST details');
+        _cachedDetails = null;
         return response.text();
     },
 
     async deleteGstDetail(gstin) {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/details/${gstin}`, {
             method: 'DELETE'
         });
         if (!response.ok) throw new Error('Failed to delete GST detail');
+        _cachedDetails = null;
         return response.text();
     },
 
@@ -254,6 +283,7 @@ export const apiClient = {
     },
 
     async refreshGstFromApi(gstins = [], updatedBy = null) {
+        _cachedDetails = null;
         const response = await fetch(`${API_BASE_URL}/admin/refresh`, {
             method: 'POST',
             headers: {
@@ -266,6 +296,7 @@ export const apiClient = {
             const err = await response.text();
             throw new Error(err || 'Failed to refresh GST data from API');
         }
+        _cachedDetails = null;
         return response.json();
     },
 

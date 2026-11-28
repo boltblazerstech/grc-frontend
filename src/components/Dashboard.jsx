@@ -729,8 +729,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      if (apiClient.clearCache) apiClient.clearCache();
       const [data, config] = await Promise.all([
-        apiClient.getDetails(),
+        apiClient.getDetails(true),
         apiClient.getRuleConfig(),
       ]);
       const scored = data.filter(g => g.grcScore !== null && g.grcScore !== undefined);
@@ -810,7 +811,10 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
     setIsFetchingNew(true);
     showToast(`Fetching live GST details for ${gstins.join(", ")}...`, "info", 0);
     try {
+      if (apiClient.clearCache) apiClient.clearCache();
       await apiClient.fetchGstDetails(gstins);
+      if (apiClient.clearCache) apiClient.clearCache();
+
       const newSet = new Set(recentlyAdded);
       gstins.forEach((g) => newSet.add(g));
       setRecentlyAdded(newSet);
@@ -818,9 +822,9 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       setShowFetchModal(false);
       setExistingGstMatch(null);
 
-      // Fetch fresh data immediately
+      // Fetch fresh data immediately with cache busting
       const [freshData, config] = await Promise.all([
-        apiClient.getDetails(),
+        apiClient.getDetails(true),
         apiClient.getRuleConfig(),
       ]);
       setGstList(freshData);
@@ -829,20 +833,33 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       setThresholds(configMap);
 
       if (gstins.length === 1) {
-        const targetGstin = gstins[0];
-        const saved = freshData.find((g) => g.gstin === targetGstin);
+        const targetGstin = gstins[0].trim().toUpperCase();
+        let saved = freshData.find((g) => g.gstin && g.gstin.trim().toUpperCase() === targetGstin);
+        if (!saved) {
+          try {
+            saved = await apiClient.getDetailByGstin(targetGstin);
+            if (saved && saved.gstin) {
+              setGstList((prev) => [
+                saved,
+                ...prev.filter((g) => g.gstin?.trim().toUpperCase() !== targetGstin),
+              ]);
+            }
+          } catch (e) {
+            console.warn("Direct lookup fallback error:", e);
+          }
+        }
         if (saved) {
           if (saved.apiError) {
             showToast(
               `⚠️ Record created, but GST API returned error/no data (${saved.source || "Upstream Error"}).`,
-              "error",
+              "warning",
               7000,
             );
           } else {
             const name = saved.tradeName || saved.legalName || saved.gstin;
             showToast(`✅ Successfully fetched: ${name} (${saved.gstin})`, "success", 5000);
           }
-          // Automatically clear filters and open company modal immediately on screen
+          // Automatically clear filters and set search term to targetGstin so it's immediately highlighted and visible!
           setTurnoverFilter("all");
           setSourceFilter("all");
           setScoreFilter("all");
@@ -850,6 +867,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
           handleOpenVendorModal(saved);
         } else {
           showToast(`✅ Processed GSTIN: ${targetGstin}`, "success", 4000);
+          setSearchTerm(targetGstin);
         }
       } else {
         showToast(`✅ Processed ${gstins.length} GSTINs.`, "success", 4000);
@@ -864,17 +882,34 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   };
 
   const handleUpdateItemInList = (updatedItem) => {
-    setGstList((prev) =>
-      prev.map((item) =>
-        item.gstin === updatedItem.gstin ? updatedItem : item,
-      ),
-    );
+    if (!updatedItem || !updatedItem.gstin) return;
+    const cleanGstin = updatedItem.gstin.trim().toUpperCase();
+    if (apiClient.clearCache) apiClient.clearCache();
+
+    const enriched = {
+      ...updatedItem,
+      scoreCalculatedAt: updatedItem.scoreCalculatedAt || new Date().toISOString(),
+    };
+
+    setGstList((prev) => {
+      const idx = prev.findIndex(
+        (item) => item.gstin && item.gstin.trim().toUpperCase() === cleanGstin
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...enriched, gstin: copy[idx].gstin };
+        return copy;
+      } else {
+        return [enriched, ...prev];
+      }
+    });
+
     // If modal should be opened or if it is already open for this item, update it
     if (
       updatedItem._openModal ||
-      (selectedGst && selectedGst.gstin === updatedItem.gstin)
+      (selectedGst && selectedGst.gstin && selectedGst.gstin.trim().toUpperCase() === cleanGstin)
     ) {
-      const { _openModal, ...cleanItem } = updatedItem;
+      const { _openModal, ...cleanItem } = enriched;
       setSelectedGst(cleanItem);
     }
   };
@@ -1037,11 +1072,17 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       const term = searchTerm.trim().toLowerCase();
       list = list.filter((g) => {
         const pan = g.panNumber || (g.gstin ? g.gstin.substring(2, 12) : "");
+        const trade = (g.tradeName || "").toLowerCase();
+        const legal = (g.legalName || "").toLowerCase();
+        const gstinStr = (g.gstin || "").toLowerCase();
+        const panStr = pan.toLowerCase();
+        const address = (g.address || "").toLowerCase();
         return (
-          (g.gstin && g.gstin.toLowerCase().includes(term)) ||
-          (g.tradeName && g.tradeName.toLowerCase().includes(term)) ||
-          (g.legalName && g.legalName.toLowerCase().includes(term)) ||
-          pan.toLowerCase().includes(term)
+          gstinStr.includes(term) ||
+          trade.includes(term) ||
+          legal.includes(term) ||
+          panStr.includes(term) ||
+          address.includes(term)
         );
       });
 
@@ -1188,6 +1229,7 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
       processedList.filter(
         (g) => {
           if (searchTerm) return true; // If actively searching, show all matched items, even pending/error ones
+          if (g.tradeName || g.legalName) return true; // If company details exist, always display!
           return g.updatedBy !== "Dummy" && !(g.apiError === true && g.dataSource !== "Manual");
         }
       ),
