@@ -1024,17 +1024,33 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
   const processedList = useMemo(() => {
     let list = [...gstList];
 
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      list = list.filter(
-        (g) => {
-          const pan = g.panNumber || (g.gstin ? g.gstin.substring(2, 12) : "");
-          return g.gstin.toLowerCase().includes(term) ||
-                 (g.tradeName && g.tradeName.toLowerCase().includes(term)) ||
-                 (g.legalName && g.legalName.toLowerCase().includes(term)) ||
-                 pan.toLowerCase().includes(term);
-        }
-      );
+    const getLatestTimestamp = (g) => {
+      const raw = g.createdAt || g.lastApiSync || g.scoreCalculatedAt || g.gstr7LastUpdated;
+      if (!raw) return 0;
+      const t = new Date(raw).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+
+    // If user is actively searching, search takes full priority across all records
+    // without being blocked by toolbar filters (Turnover, Watchlist, Source, etc.)
+    if (searchTerm && searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      list = list.filter((g) => {
+        const pan = g.panNumber || (g.gstin ? g.gstin.substring(2, 12) : "");
+        return (
+          (g.gstin && g.gstin.toLowerCase().includes(term)) ||
+          (g.tradeName && g.tradeName.toLowerCase().includes(term)) ||
+          (g.legalName && g.legalName.toLowerCase().includes(term)) ||
+          pan.toLowerCase().includes(term)
+        );
+      });
+
+      return list.sort((a, b) => {
+        const timeA = getLatestTimestamp(a);
+        const timeB = getLatestTimestamp(b);
+        if (timeA && timeB && timeA !== timeB) return timeB - timeA;
+        return a.gstin.localeCompare(b.gstin);
+      });
     }
 
     if (scoreFilter !== "all") {
@@ -1060,13 +1076,6 @@ const Dashboard = ({ forceRefreshFlag, currentUser, onOpenGstr7 }) => {
         return true;
       });
     }
-
-    const getLatestTimestamp = (g) => {
-      const raw = g.createdAt || g.lastApiSync || g.scoreCalculatedAt || g.gstr7LastUpdated;
-      if (!raw) return 0;
-      const t = new Date(raw).getTime();
-      return isNaN(t) ? 0 : t;
-    };
 
     if (turnoverFilter === "below3") {
       list = list.filter((g) => {
